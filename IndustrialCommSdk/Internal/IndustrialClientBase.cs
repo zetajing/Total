@@ -7,17 +7,32 @@ using IndustrialCommSdk.Diagnostics;
 
 namespace IndustrialCommSdk.Internal
 {
+    /// <summary>工业客户端公共基类，统一处理操作串行化、健康状态记录和轮询订阅调度。</summary>
     public abstract class IndustrialClientBase : IIndustrialClient
     {
+        /// <summary>用于串行化所有异步操作的信号量，确保同一时刻只有一个核心操作在执行。</summary>
         private readonly SemaphoreSlim _operationLock = new SemaphoreSlim(1, 1);
+        /// <summary>轮询调度器实例，负责管理订阅的轮询生命周期。</summary>
         private readonly IPollingScheduler _pollingScheduler;
+        /// <summary>日志记录器实例，用于记录操作日志和异常信息。</summary>
         private readonly IIndustrialLogger _logger;
+        /// <summary>最近一次成功操作的世界协调时（UTC），用于健康状态快照。</summary>
         private DateTimeOffset? _lastSuccessUtc;
+        /// <summary>连续失败次数，用于健康状态监控。</summary>
         private int _consecutiveFailures;
+        /// <summary>最近一次失败的错误消息。</summary>
         private string _lastError;
+        /// <summary>当前连接状态。</summary>
         private ConnectionStatus _status;
+        /// <summary>指示当前实例是否已释放。</summary>
         private bool _disposed;
 
+        /// <summary>使用指定的设备标识、协议类型、轮询调度器和日志记录器初始化工业客户端基类。</summary>
+        /// <param name="deviceId">设备标识。</param>
+        /// <param name="kind">协议类型。</param>
+        /// <param name="pollingScheduler">轮询调度器实例。</param>
+        /// <param name="logger">日志记录器实例；若为 null 则使用空日志记录器。</param>
+        /// <exception cref="ArgumentNullException"><paramref name="deviceId"/> 或 <paramref name="pollingScheduler"/> 为 null。</exception>
         protected IndustrialClientBase(string deviceId, ProtocolKind kind, IPollingScheduler pollingScheduler, IIndustrialLogger logger)
         {
             DeviceId = deviceId ?? throw new ArgumentNullException(nameof(deviceId));
@@ -27,11 +42,20 @@ namespace IndustrialCommSdk.Internal
             _status = ConnectionStatus.Disconnected;
         }
 
+        /// <summary>获取设备标识。</summary>
         public string DeviceId { get; private set; }
+        /// <summary>获取协议类型。</summary>
         public ProtocolKind Kind { get; private set; }
+        /// <summary>获取一个值，指示当前是否已连接到设备。</summary>
         public abstract bool IsConnected { get; }
+        /// <summary>获取日志记录器实例。</summary>
         protected IIndustrialLogger Logger { get { return _logger; } }
 
+        /// <summary>异步连接到设备。</summary>
+        /// <param name="cancellationToken">用于取消操作的取消令牌。</param>
+        /// <returns>表示异步操作的任务。</returns>
+        /// <exception cref="ObjectDisposedException">实例已被释放。</exception>
+        /// <exception cref="OperationCanceledException">操作已被取消。</exception>
         public async Task ConnectAsync(CancellationToken cancellationToken)
         {
             await _operationLock.WaitAsync(cancellationToken).ConfigureAwait(false);
@@ -56,6 +80,10 @@ namespace IndustrialCommSdk.Internal
             }
         }
 
+        /// <summary>异步断开与设备的连接。</summary>
+        /// <param name="cancellationToken">用于取消操作的取消令牌。</param>
+        /// <returns>表示异步操作的任务。</returns>
+        /// <exception cref="OperationCanceledException">操作已被取消。</exception>
         public async Task DisconnectAsync(CancellationToken cancellationToken)
         {
             await _operationLock.WaitAsync(cancellationToken).ConfigureAwait(false);
@@ -71,6 +99,11 @@ namespace IndustrialCommSdk.Internal
             }
         }
 
+        /// <summary>从设备异步读取一个数据点。</summary>
+        /// <param name="request">读请求，包含地址和数据类型等信息。</param>
+        /// <param name="cancellationToken">用于取消操作的取消令牌。</param>
+        /// <returns>包含读取结果的数据值；读取失败时返回质量状态为 Bad 的数据值。</returns>
+        /// <exception cref="OperationCanceledException">操作已被取消。</exception>
         public async Task<DataValue> ReadAsync(ReadRequest request, CancellationToken cancellationToken)
         {
             await _operationLock.WaitAsync(cancellationToken).ConfigureAwait(false);
@@ -91,6 +124,11 @@ namespace IndustrialCommSdk.Internal
             }
         }
 
+        /// <summary>从设备异步批量读取多个数据点。</summary>
+        /// <param name="requests">读请求集合，每个请求包含地址和数据类型等信息。</param>
+        /// <param name="cancellationToken">用于取消操作的取消令牌。</param>
+        /// <returns>批量读取结果，包含每个请求对应的数据值；单个请求失败时对应数据值质量为 Bad。</returns>
+        /// <exception cref="OperationCanceledException">操作已被取消。</exception>
         public async Task<BatchReadResult> ReadManyAsync(IReadOnlyCollection<ReadRequest> requests, CancellationToken cancellationToken)
         {
             await _operationLock.WaitAsync(cancellationToken).ConfigureAwait(false);
@@ -114,6 +152,11 @@ namespace IndustrialCommSdk.Internal
             }
         }
 
+        /// <summary>向设备异步写入一个数据点。</summary>
+        /// <param name="request">写请求，包含地址和要写入的值等信息。</param>
+        /// <param name="cancellationToken">用于取消操作的取消令牌。</param>
+        /// <returns>表示异步操作的任务。</returns>
+        /// <exception cref="OperationCanceledException">操作已被取消。</exception>
         public async Task WriteAsync(WriteRequest request, CancellationToken cancellationToken)
         {
             await _operationLock.WaitAsync(cancellationToken).ConfigureAwait(false);
@@ -133,6 +176,11 @@ namespace IndustrialCommSdk.Internal
             }
         }
 
+        /// <summary>向设备异步批量写入多个数据点。</summary>
+        /// <param name="requests">写请求集合，每个请求包含地址和要写入的值等信息。</param>
+        /// <param name="cancellationToken">用于取消操作的取消令牌。</param>
+        /// <returns>表示异步操作的任务。</returns>
+        /// <exception cref="OperationCanceledException">操作已被取消。</exception>
         public async Task WriteManyAsync(IReadOnlyCollection<WriteRequest> requests, CancellationToken cancellationToken)
         {
             await _operationLock.WaitAsync(cancellationToken).ConfigureAwait(false);
@@ -152,26 +200,57 @@ namespace IndustrialCommSdk.Internal
             }
         }
 
+        /// <summary>订阅设备数据变化通知。</summary>
+        /// <param name="request">订阅请求，包含地址等订阅参数。</param>
+        /// <param name="handler">数据变化事件处理程序。</param>
+        /// <param name="cancellationToken">用于取消操作的取消令牌。</param>
+        /// <returns>表示异步操作的任务，任务结果为订阅标识。</returns>
+        /// <exception cref="OperationCanceledException">操作已被取消。</exception>
         public Task<string> SubscribeAsync(SubscriptionRequest request, EventHandler<SubscriptionEvent> handler, CancellationToken cancellationToken)
         {
             return _pollingScheduler.SubscribeAsync(this, request, handler, cancellationToken);
         }
 
+        /// <summary>取消指定的数据变化订阅。</summary>
+        /// <param name="subscriptionId">要取消的订阅标识。</param>
+        /// <param name="cancellationToken">用于取消操作的取消令牌。</param>
+        /// <returns>表示异步操作的任务。</returns>
+        /// <exception cref="OperationCanceledException">操作已被取消。</exception>
         public Task UnsubscribeAsync(string subscriptionId, CancellationToken cancellationToken)
         {
             return _pollingScheduler.UnsubscribeAsync(subscriptionId, cancellationToken);
         }
 
+        /// <summary>获取当前客户端的健康状态快照。</summary>
+        /// <returns>包含连接状态、最后成功时间、连续失败次数和最后错误消息的健康快照。</returns>
         public HealthSnapshot GetHealth()
         {
             return new HealthSnapshot(_status, _lastSuccessUtc, _consecutiveFailures, _lastError);
         }
 
+        /// <summary>由派生类实现的异步连接核心逻辑。</summary>
+        /// <param name="cancellationToken">用于取消操作的取消令牌。</param>
+        /// <returns>表示异步操作的任务。</returns>
         protected abstract Task ConnectCoreAsync(CancellationToken cancellationToken);
+        /// <summary>由派生类实现的异步断开连接核心逻辑。</summary>
+        /// <param name="cancellationToken">用于取消操作的取消令牌。</param>
+        /// <returns>表示异步操作的任务。</returns>
         protected abstract Task DisconnectCoreAsync(CancellationToken cancellationToken);
+        /// <summary>由派生类实现的异步读取核心逻辑。</summary>
+        /// <param name="request">读请求，包含地址和数据类型等信息。</param>
+        /// <param name="cancellationToken">用于取消操作的取消令牌。</param>
+        /// <returns>读取到的数据值。</returns>
         protected abstract Task<DataValue> ReadCoreAsync(ReadRequest request, CancellationToken cancellationToken);
+        /// <summary>由派生类实现的异步写入核心逻辑。</summary>
+        /// <param name="request">写请求，包含地址和要写入的值等信息。</param>
+        /// <param name="cancellationToken">用于取消操作的取消令牌。</param>
+        /// <returns>表示异步操作的任务。</returns>
         protected abstract Task WriteCoreAsync(WriteRequest request, CancellationToken cancellationToken);
 
+        /// <summary>批量读取多个数据点的核心逻辑。默认实现为逐一调用 <see cref="ReadCoreAsync"/>。</summary>
+        /// <param name="requests">读请求集合。</param>
+        /// <param name="cancellationToken">用于取消操作的取消令牌。</param>
+        /// <returns>批量读取结果。</returns>
         protected virtual async Task<BatchReadResult> ReadManyCoreAsync(
             IReadOnlyCollection<ReadRequest> requests, CancellationToken cancellationToken)
         {
@@ -181,6 +260,10 @@ namespace IndustrialCommSdk.Internal
             return new BatchReadResult(values);
         }
 
+        /// <summary>批量写入多个数据点的核心逻辑。默认实现为逐一调用 <see cref="WriteCoreAsync"/>。</summary>
+        /// <param name="requests">写请求集合。</param>
+        /// <param name="cancellationToken">用于取消操作的取消令牌。</param>
+        /// <returns>表示异步操作的任务。</returns>
         protected virtual async Task WriteManyCoreAsync(
             IReadOnlyCollection<WriteRequest> requests, CancellationToken cancellationToken)
         {
@@ -188,6 +271,7 @@ namespace IndustrialCommSdk.Internal
                 await WriteCoreAsync(request, cancellationToken).ConfigureAwait(false);
         }
 
+        /// <summary>记录一次成功操作：更新最后成功时间、重置连续失败计数和错误消息，并将状态设为已连接。</summary>
         protected void RecordSuccess()
         {
             _lastSuccessUtc = DateTimeOffset.UtcNow;
@@ -196,6 +280,8 @@ namespace IndustrialCommSdk.Internal
             _status = ConnectionStatus.Connected;
         }
 
+        /// <summary>记录一次失败操作：递增连续失败计数、记录错误消息、将状态设为故障，并通过日志记录器输出错误。</summary>
+        /// <param name="ex">操作的异常信息；若为 null 则仅递增失败计数。</param>
         protected void RecordFailure(Exception ex)
         {
             _consecutiveFailures++;
@@ -204,6 +290,8 @@ namespace IndustrialCommSdk.Internal
             _logger.Error("Operation failed.", ex);
         }
 
+        /// <summary>检查实例是否已被释放，若是则抛出 <see cref="ObjectDisposedException"/>。</summary>
+        /// <exception cref="ObjectDisposedException">当前实例已被释放。</exception>
         protected void ThrowIfDisposed()
         {
             if (_disposed)
@@ -212,6 +300,7 @@ namespace IndustrialCommSdk.Internal
             }
         }
 
+        /// <summary>执行托管资源的释放操作。可被多次调用，只有首次调用执行实际释放逻辑。</summary>
         public void Dispose()
         {
             if (_disposed)
@@ -225,6 +314,7 @@ namespace IndustrialCommSdk.Internal
             DisposeCore();
         }
 
+        /// <summary>由派生类实现的额外的资源释放逻辑。基类实现为空。</summary>
         protected virtual void DisposeCore()
         {
         }

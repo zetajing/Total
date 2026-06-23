@@ -4,7 +4,7 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d"
-        Title="工业通讯演示"
+        Title="通讯"
         Width="1280"
         Height="860"
         MinWidth="1180"
@@ -12,13 +12,18 @@
         WindowStartupLocation="CenterScreen"
         Background="#F3F6FB">
     <Grid Margin="16">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="28*"/>
+            <ColumnDefinition Width="35*"/>
+            <ColumnDefinition Width="1185*"/>
+        </Grid.ColumnDefinitions>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
             <RowDefinition Height="180" />
         </Grid.RowDefinitions>
 
-        <Border HorizontalAlignment="Right" Padding="12,8" CornerRadius="12" Background="#183A5C">
+        <Border HorizontalAlignment="Left" Padding="12,8" CornerRadius="12" Background="#183A5C" Grid.Column="2" Margin="1101,0,0,599" Grid.RowSpan="2">
             <StackPanel Orientation="Horizontal">
                 <TextBlock Margin="0,0,8,0" VerticalAlignment="Center" FontSize="12" Foreground="#A8C2DB" Text="状态" />
                 <TextBlock x:Name="HeaderStatusTextBlock"
@@ -30,7 +35,7 @@
             </StackPanel>
         </Border>
 
-        <Border Grid.Row="1" Margin="0,12,0,12" Padding="12" CornerRadius="18" Background="White">
+        <Border Grid.Row="1" Margin="0,12,0,12" Padding="12" CornerRadius="18" Background="White" Grid.ColumnSpan="3">
             <TabControl x:Name="ProtocolTabControl">
                 <TabItem Header="Modbus TCP">
                     <ScrollViewer VerticalScrollBarVisibility="Auto">
@@ -191,7 +196,7 @@
                     </ScrollViewer>
                 </TabItem>
 
-                <TabItem Header="Socket TCP">
+                <TabItem Header="Socket TCP" Height="19" VerticalAlignment="Top">
                     <ScrollViewer VerticalScrollBarVisibility="Auto">
                         <Grid Margin="10">
                             <Grid.RowDefinitions>
@@ -475,7 +480,7 @@
             </TabControl>
         </Border>
 
-        <Border Grid.Row="2" Padding="16" CornerRadius="18" Background="White">
+        <Border Grid.Row="2" Padding="16" CornerRadius="18" Background="White" Grid.ColumnSpan="3">
             <Grid>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
