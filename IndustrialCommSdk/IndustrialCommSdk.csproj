@@ -1,0 +1,15 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net472</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>IndustrialCommSdk</RootNamespace>
+    <AssemblyName>IndustrialCommSdk</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="NModbus4" Version="2.1.0" />
+    <PackageReference Include="S7netplus" Version="0.20.0" />
+  </ItemGroup>
+
+</Project>

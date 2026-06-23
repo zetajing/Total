@@ -1,0 +1,506 @@
+<Window x:Class="IndustrialCommDemo.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d"
+        Title="工业通讯演示"
+        Width="1280"
+        Height="860"
+        MinWidth="1180"
+        MinHeight="760"
+        WindowStartupLocation="CenterScreen"
+        Background="#F3F6FB">
+    <Grid Margin="16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="180" />
+        </Grid.RowDefinitions>
+
+        <Border HorizontalAlignment="Right" Padding="12,8" CornerRadius="12" Background="#183A5C">
+            <StackPanel Orientation="Horizontal">
+                <TextBlock Margin="0,0,8,0" VerticalAlignment="Center" FontSize="12" Foreground="#A8C2DB" Text="状态" />
+                <TextBlock x:Name="HeaderStatusTextBlock"
+                           VerticalAlignment="Center"
+                           FontSize="14"
+                           FontWeight="SemiBold"
+                           Foreground="#86EFAC"
+                           Text="就绪" />
+            </StackPanel>
+        </Border>
+
+        <Border Grid.Row="1" Margin="0,12,0,12" Padding="12" CornerRadius="18" Background="White">
+            <TabControl x:Name="ProtocolTabControl">
+                <TabItem Header="Modbus TCP">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <Grid Margin="10">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="0.9*" />
+                                <ColumnDefinition Width="1.4*" />
+                            </Grid.ColumnDefinitions>
+
+                            <GroupBox Header="连接" Grid.Row="0" Grid.Column="0" Margin="0,0,12,12">
+                                <Grid Margin="12">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="140" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                    </Grid.RowDefinitions>
+                                    <TextBlock Grid.Row="0" Grid.Column="0" Margin="0,8" VerticalAlignment="Center" Text="设备 ID" />
+                                    <TextBox x:Name="ModbusDeviceIdTextBox" Grid.Row="0" Grid.Column="1" Margin="0,6,0,6" Text="modbus-1" />
+                                    <TextBlock Grid.Row="1" Grid.Column="0" Margin="0,8" VerticalAlignment="Center" Text="主机" />
+                                    <TextBox x:Name="ModbusHostTextBox" Grid.Row="1" Grid.Column="1" Margin="0,6,0,6" Text="127.0.0.1" />
+                                    <TextBlock Grid.Row="2" Grid.Column="0" Margin="0,8" VerticalAlignment="Center" Text="端口" />
+                                    <TextBox x:Name="ModbusPortTextBox" Grid.Row="2" Grid.Column="1" Margin="0,6,0,6" Text="502" />
+                                    <TextBlock Grid.Row="3" Grid.Column="0" Margin="0,8" VerticalAlignment="Center" Text="从站 ID" />
+                                    <TextBox x:Name="ModbusSlaveIdTextBox" Grid.Row="3" Grid.Column="1" Margin="0,6,0,6" Text="1" />
+                                    <TextBlock Grid.Row="4" Grid.Column="0" Margin="0,8" VerticalAlignment="Center" Text="PLC 型号" />
+                                    <ComboBox x:Name="ModbusModelComboBox"
+                                              Grid.Row="4"
+                                              Grid.Column="1"
+                                              Margin="0,6,0,6"
+                                              SelectedIndex="0"
+                                              SelectionChanged="ModbusModelComboBox_SelectionChanged">
+                                        <ComboBoxItem Content="汇川 EasyPLC" />
+                                    </ComboBox>
+                                    <TextBlock Grid.Row="5" Grid.Column="0" Margin="0,8" VerticalAlignment="Top" Text="示例" />
+                                    <TextBlock x:Name="ModbusExampleAddressTextBlock"
+                                               Grid.Row="5"
+                                               Grid.Column="1"
+                                               Margin="0,8,0,0"
+                                               TextWrapping="Wrap"
+                                               Foreground="#5B6F82"
+                                               Text="D100, R200, M0, S10, B5, X17, Y20" />
+                                    <StackPanel Grid.Row="6" Grid.ColumnSpan="2" Orientation="Horizontal" Margin="0,16,0,0">
+                                        <Button Width="120" Margin="0,0,12,0" Padding="10" Background="#1D4ED8" Foreground="White" BorderThickness="0" Click="ModbusConnectButton_Click" Content="连接" />
+                                        <Button Width="120" Margin="0,0,12,0" Padding="10" Background="#334155" Foreground="White" BorderThickness="0" Click="ModbusDisconnectButton_Click" Content="断开" />
+                                        <TextBlock Margin="8,0,0,0" VerticalAlignment="Center" FontWeight="SemiBold" Text="状态：" />
+                                        <TextBlock x:Name="ModbusStatusTextBlock" Margin="8,0,0,0" VerticalAlignment="Center" Foreground="#0F766E" Text="未连接" />
+                                    </StackPanel>
+                                </Grid>
+                            </GroupBox>
+
+                            <GroupBox Header="操作" Grid.Row="0" Grid.Column="1" Margin="0,0,0,12">
+                                <Grid Margin="12">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="150" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                    </Grid.RowDefinitions>
+                                    <TextBlock Grid.Row="0" Grid.Column="0" Margin="0,8" VerticalAlignment="Center" Text="地址" />
+                                    <StackPanel Grid.Row="0" Grid.Column="1">
+                                        <TextBox x:Name="ModbusAddressTextBox" Margin="0,6,0,6" Text="D100" TextChanged="ModbusAddressTextBox_TextChanged" />
+                                        <ComboBox x:Name="ModbusAddressHistoryComboBox"
+                                                  Margin="0,0,0,6"
+                                                  SelectionChanged="ModbusAddressHistoryComboBox_SelectionChanged" />
+                                        <TextBlock x:Name="ModbusAddressHintTextBlock"
+                                                   Margin="0,0,0,2"
+                                                   FontSize="12"
+                                                   Foreground="#64748B"
+                                                   Text="支持逗号、分号、换行输入多个地址。" />
+                                    </StackPanel>
+                                    <TextBlock Grid.Row="1" Grid.Column="0" Margin="0,8" VerticalAlignment="Center" Text="数据类型" />
+                                    <ComboBox x:Name="ModbusDataTypeComboBox" Grid.Row="1" Grid.Column="1" Margin="0,6,0,6" SelectedIndex="2" SelectionChanged="ModbusDataTypeComboBox_SelectionChanged">
+                                        <ComboBoxItem Content="Bool" />
+                                        <ComboBoxItem Content="Int16" />
+                                        <ComboBoxItem Content="UInt16" />
+                                        <ComboBoxItem Content="Int32" />
+                                        <ComboBoxItem Content="UInt32" />
+                                        <ComboBoxItem Content="Float" />
+                                        <ComboBoxItem Content="Double" />
+                                        <ComboBoxItem Content="String" />
+                                        <ComboBoxItem Content="ByteArray" />
+                                    </ComboBox>
+                                    <TextBlock Grid.Row="2" Grid.Column="0" Margin="0,8" VerticalAlignment="Center" Text="长度" />
+                                    <TextBox x:Name="ModbusLengthTextBox" Grid.Row="2" Grid.Column="1" Margin="0,6,0,6" Text="1" />
+                                    <TextBlock Grid.Row="3" Grid.Column="0" Margin="0,8" VerticalAlignment="Center" Text="写入值" />
+                                    <StackPanel Grid.Row="3" Grid.Column="1">
+                                        <TextBox x:Name="ModbusWriteValueTextBox" Margin="0,6,0,6" Text="123" TextChanged="ModbusWriteValueTextBox_TextChanged" />
+                                        <TextBlock x:Name="ModbusWriteHintTextBlock"
+                                                   Margin="0,0,0,2"
+                                                   FontSize="12"
+                                                   Foreground="#64748B"
+                                                   Text="多地址写入时，可填写 1 个值广播，或填写与地址数相同的多个值。" />
+                                    </StackPanel>
+                                    <TextBlock Grid.Row="4" Grid.Column="0" Margin="0,8" VerticalAlignment="Center" Text="轮询间隔（毫秒）" />
+                                    <TextBox x:Name="ModbusPollIntervalTextBox" Grid.Row="4" Grid.Column="1" Margin="0,6,0,6" Text="1000" />
+                                    <UniformGrid Grid.Row="5" Grid.ColumnSpan="2" Margin="0,14,0,0" Columns="4">
+                                        <Button Margin="0,0,8,8" Padding="10" Background="#0891B2" Foreground="White" BorderThickness="0" Click="ModbusReadButton_Click" Content="读取" />
+                                        <Button Margin="0,0,8,8" Padding="10" Background="#059669" Foreground="White" BorderThickness="0" Click="ModbusWriteButton_Click" Content="写入" />
+                                        <Button Margin="0,0,8,8" Padding="10" Background="#7C3AED" Foreground="White" BorderThickness="0" Click="ModbusSubscribeButton_Click" Content="订阅" />
+                                        <Button Margin="0,0,0,8" Padding="10" Background="#9F1239" Foreground="White" BorderThickness="0" Click="ModbusUnsubscribeButton_Click" Content="停止" />
+                                    </UniformGrid>
+                                    <TextBlock Grid.Row="6" Grid.ColumnSpan="2" Margin="0,4,0,0" TextWrapping="Wrap" Foreground="#64748B" Text="X/Y/M/S/B 强制为 Bool 类型。D/R 使用寄存器类型并自动根据 16位、32位、字符串和字节数组建议长度。地址框支持逗号、分号、换行，多地址点击“读取”会自动走批量读取。" />
+                                    <Border Grid.Row="7" Grid.ColumnSpan="2" Margin="0,12,0,0" Padding="12" CornerRadius="12" Background="#F8FAFC" BorderBrush="#D8E2EE" BorderThickness="1">
+                                        <StackPanel>
+                                            <TextBlock FontWeight="SemiBold" Foreground="#17324D" Text="结果" />
+                                            <TextBlock x:Name="ModbusResultTextBlock" Margin="0,8,0,0" TextWrapping="Wrap" Foreground="#334155" Text="等待中..." />
+                                            <TextBlock Margin="0,14,0,6" FontWeight="SemiBold" Foreground="#17324D" Text="读取 / 订阅结果" />
+                                            <DataGrid x:Name="ModbusSubscriptionDataGrid"
+                                                      AutoGenerateColumns="False"
+                                                      CanUserAddRows="False"
+                                                      CanUserDeleteRows="False"
+                                                      IsReadOnly="True"
+                                                      HeadersVisibility="Column"
+                                                      GridLinesVisibility="Horizontal"
+                                                      RowHeaderWidth="0"
+                                                      MinHeight="220">
+                                                <DataGrid.Columns>
+                                                    <DataGridTextColumn Header="地址" Binding="{Binding Address}" Width="110" />
+                                                    <DataGridTextColumn Header="类型" Binding="{Binding DataType}" Width="90" />
+                                                    <DataGridTextColumn Header="值" Binding="{Binding ValueText}" Width="*" />
+                                                    <DataGridTextColumn Header="质量" Binding="{Binding QualityText}" Width="110" />
+                                                    <DataGridTextColumn Header="时间" Binding="{Binding TimestampText}" Width="150" />
+                                                    <DataGridTextColumn Header="错误" Binding="{Binding ErrorMessage}" Width="180" />
+                                                </DataGrid.Columns>
+                                            </DataGrid>
+                                        </StackPanel>
+                                    </Border>
+                                </Grid>
+                            </GroupBox>
+
+                            <GroupBox Header="说明" Grid.Row="1" Grid.ColumnSpan="2">
+                                <TextBlock Margin="12"
+                                           TextWrapping="Wrap"
+                                           Foreground="#475569"
+                                           Text="本页面专用于 Modbus TCP 协议。控件专注于 PLC 寻址、数据转换和轮询。" />
+                            </GroupBox>
+                        </Grid>
+                    </ScrollViewer>
+                </TabItem>
+
+                <TabItem Header="Socket TCP">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <Grid Margin="10">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+
+                            <GroupBox Header="TCP 服务端" Grid.Row="0" Grid.Column="0" Margin="0,0,12,12">
+                                <Grid Margin="12">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="150" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                    </Grid.RowDefinitions>
+                                    <TextBlock Grid.Row="0" Grid.Column="0" Margin="0,8" VerticalAlignment="Center" Text="监听 IP" />
+                                    <TextBox x:Name="SocketServerIpTextBox" Grid.Row="0" Grid.Column="1" Margin="0,6,0,6" Text="0.0.0.0" />
+                                    <TextBlock Grid.Row="1" Grid.Column="0" Margin="0,8" VerticalAlignment="Center" Text="端口" />
+                                    <TextBox x:Name="SocketServerPortTextBox" Grid.Row="1" Grid.Column="1" Margin="0,6,0,6" Text="9000" />
+                                    <TextBlock Grid.Row="2" Grid.Column="0" Margin="0,8" VerticalAlignment="Center" Text="状态" />
+                                    <TextBlock x:Name="SocketServerStatusTextBlock" Grid.Row="2" Grid.Column="1" Margin="0,8,0,0" Foreground="#0F766E" Text="已停止" />
+                                    <TextBlock Grid.Row="3" Grid.Column="0" Margin="0,8" VerticalAlignment="Center" Text="会话数" />
+                                    <TextBlock x:Name="SocketServerSessionsTextBlock" Grid.Row="3" Grid.Column="1" Margin="0,8,0,0" Text="0" />
+                                    <CheckBox x:Name="SocketServerEchoCheckBox" Grid.Row="4" Grid.ColumnSpan="2" Margin="0,10,0,0" IsChecked="True" Content="将接收到的文本回显给客户端" />
+                                    <UniformGrid Grid.Row="5" Grid.ColumnSpan="2" Margin="0,14,0,0" Columns="2">
+                                        <Button Margin="0,0,8,0" Padding="10" Background="#1D4ED8" Foreground="White" BorderThickness="0" Click="SocketStartServerButton_Click" Content="启动服务端" />
+                                        <Button Margin="8,0,0,0" Padding="10" Background="#334155" Foreground="White" BorderThickness="0" Click="SocketStopServerButton_Click" Content="停止服务端" />
+                                    </UniformGrid>
+                                </Grid>
+                            </GroupBox>
+
+                            <GroupBox Header="TCP 客户端" Grid.Row="0" Grid.Column="1" Margin="0,0,0,12">
+                                <Grid Margin="12">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="150" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                    </Grid.RowDefinitions>
+                                    <TextBlock Grid.Row="0" Grid.Column="0" Margin="0,8" VerticalAlignment="Center" Text="服务端主机" />
+                                    <TextBox x:Name="SocketClientHostTextBox" Grid.Row="0" Grid.Column="1" Margin="0,6,0,6" Text="127.0.0.1" />
+                                    <TextBlock Grid.Row="1" Grid.Column="0" Margin="0,8" VerticalAlignment="Center" Text="服务端端口" />
+                                    <TextBox x:Name="SocketClientPortTextBox" Grid.Row="1" Grid.Column="1" Margin="0,6,0,6" Text="9000" />
+                                    <TextBlock Grid.Row="2" Grid.Column="0" Margin="0,8" VerticalAlignment="Center" Text="状态" />
+                                    <TextBlock x:Name="SocketClientStatusTextBlock" Grid.Row="2" Grid.Column="1" Margin="0,8,0,0" Foreground="#0F766E" Text="未连接" />
+                                    <TextBlock Grid.Row="3" Grid.Column="0" Margin="0,8" VerticalAlignment="Center" Text="最近接收" />
+                                    <TextBlock x:Name="SocketClientLastReceivedTextBlock" Grid.Row="3" Grid.Column="1" Margin="0,8,0,0" TextWrapping="Wrap" Text="（无）" />
+                                    <UniformGrid Grid.Row="4" Grid.ColumnSpan="2" Margin="0,14,0,0" Columns="2">
+                                        <Button Margin="0,0,8,0" Padding="10" Background="#0891B2" Foreground="White" BorderThickness="0" Click="SocketConnectClientButton_Click" Content="连接客户端" />
+                                        <Button Margin="8,0,0,0" Padding="10" Background="#334155" Foreground="White" BorderThickness="0" Click="SocketDisconnectClientButton_Click" Content="断开客户端" />
+                                    </UniformGrid>
+                                </Grid>
+                            </GroupBox>
+
+                            <GroupBox Header="消息流" Grid.Row="1" Grid.ColumnSpan="2">
+                                <Grid Margin="12">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                    </Grid.RowDefinitions>
+                                    <TextBlock Grid.Row="0" Grid.Column="0" Margin="0,0,12,4" FontWeight="SemiBold" Text="服务端发送" />
+                                    <TextBlock Grid.Row="0" Grid.Column="1" Margin="0,0,0,4" FontWeight="SemiBold" Text="客户端发送" />
+                                    <TextBox x:Name="SocketServerMessageTextBox" Grid.Row="1" Grid.Column="0" Margin="0,0,12,8" MinHeight="90" TextWrapping="Wrap" AcceptsReturn="True" Text="服务端广播" />
+                                    <TextBox x:Name="SocketClientMessageTextBox" Grid.Row="1" Grid.Column="1" Margin="0,0,0,8" MinHeight="90" TextWrapping="Wrap" AcceptsReturn="True" Text="客户端消息" />
+                                    <Grid Grid.Row="2" Grid.ColumnSpan="2">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <Button Grid.Column="0" Margin="0,0,12,0" Padding="10" Background="#059669" Foreground="White" BorderThickness="0" Click="SocketSendFromServerButton_Click" Content="服务端广播" />
+                                        <Button Grid.Column="1" Margin="0,0,0,0" Padding="10" Background="#7C3AED" Foreground="White" BorderThickness="0" Click="SocketSendFromClientButton_Click" Content="客户端发送" />
+                                    </Grid>
+                                </Grid>
+                            </GroupBox>
+                        </Grid>
+                    </ScrollViewer>
+                </TabItem>
+
+                <TabItem Header="Siemens S7">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <Grid Margin="10">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="1.05*" />
+                                <ColumnDefinition Width="1.25*" />
+                            </Grid.ColumnDefinitions>
+
+                            <GroupBox Header="连接" Grid.Column="0" Margin="0,0,12,0">
+                                <Grid Margin="12">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="140" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                    </Grid.RowDefinitions>
+                                    <TextBlock Grid.Row="0" Grid.Column="0" Margin="0,8" VerticalAlignment="Center" Text="设备 ID" />
+                                    <TextBox x:Name="S7DeviceIdTextBox" Grid.Row="0" Grid.Column="1" Margin="0,6,0,6" Text="s7-1" />
+                                    <TextBlock Grid.Row="1" Grid.Column="0" Margin="0,8" VerticalAlignment="Center" Text="主机" />
+                                    <TextBox x:Name="S7HostTextBox" Grid.Row="1" Grid.Column="1" Margin="0,6,0,6" Text="127.0.0.1" />
+                                    <TextBlock Grid.Row="2" Grid.Column="0" Margin="0,8" VerticalAlignment="Center" Text="机架" />
+                                    <TextBox x:Name="S7RackTextBox" Grid.Row="2" Grid.Column="1" Margin="0,6,0,6" Text="0" />
+                                    <TextBlock Grid.Row="3" Grid.Column="0" Margin="0,8" VerticalAlignment="Center" Text="槽位" />
+                                    <TextBox x:Name="S7SlotTextBox" Grid.Row="3" Grid.Column="1" Margin="0,6,0,6" Text="1" />
+                                    <TextBlock Grid.Row="4" Grid.Column="0" Margin="0,8" VerticalAlignment="Top" Text="示例" />
+                                    <TextBlock Grid.Row="4" Grid.Column="1" Margin="0,8,0,0" TextWrapping="Wrap" Foreground="#5B6F82" Text="DB1.DBX0.1, DB1.DBW0, M10.0, I0.0, Q0.0" />
+                                    <StackPanel Grid.Row="5" Grid.ColumnSpan="2" Orientation="Horizontal" Margin="0,16,0,0">
+                                        <Button Width="120" Margin="0,0,12,0" Padding="10" Background="#1D4ED8" Foreground="White" BorderThickness="0" Click="S7ConnectButton_Click" Content="连接" />
+                                        <Button Width="120" Margin="0,0,12,0" Padding="10" Background="#334155" Foreground="White" BorderThickness="0" Click="S7DisconnectButton_Click" Content="断开" />
+                                        <TextBlock Margin="8,0,0,0" VerticalAlignment="Center" FontWeight="SemiBold" Text="状态：" />
+                                        <TextBlock x:Name="S7StatusTextBlock" Margin="8,0,0,0" VerticalAlignment="Center" Foreground="#0F766E" Text="未连接" />
+                                    </StackPanel>
+                                </Grid>
+                            </GroupBox>
+
+                            <GroupBox Header="操作" Grid.Column="1">
+                                <Grid Margin="12">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="150" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                    </Grid.RowDefinitions>
+                                    <TextBlock Grid.Row="0" Grid.Column="0" Margin="0,8" VerticalAlignment="Center" Text="地址" />
+                                    <StackPanel Grid.Row="0" Grid.Column="1">
+                                        <TextBox x:Name="S7AddressTextBox" Margin="0,6,0,6" Text="DB1.DBW0" />
+                                        <ComboBox x:Name="S7AddressHistoryComboBox"
+                                                  Margin="0,0,0,6"
+                                                  SelectionChanged="S7AddressHistoryComboBox_SelectionChanged" />
+                                    </StackPanel>
+                                    <TextBlock Grid.Row="1" Grid.Column="0" Margin="0,8" VerticalAlignment="Center" Text="数据类型" />
+                                    <ComboBox x:Name="S7DataTypeComboBox" Grid.Row="1" Grid.Column="1" Margin="0,6,0,6" SelectedIndex="1">
+                                        <ComboBoxItem Content="Bool" />
+                                        <ComboBoxItem Content="Int16" />
+                                        <ComboBoxItem Content="UInt16" />
+                                        <ComboBoxItem Content="Int32" />
+                                        <ComboBoxItem Content="UInt32" />
+                                        <ComboBoxItem Content="Float" />
+                                        <ComboBoxItem Content="Double" />
+                                        <ComboBoxItem Content="String" />
+                                    </ComboBox>
+                                    <TextBlock Grid.Row="2" Grid.Column="0" Margin="0,8" VerticalAlignment="Center" Text="长度" />
+                                    <TextBox x:Name="S7LengthTextBox" Grid.Row="2" Grid.Column="1" Margin="0,6,0,6" Text="1" />
+                                    <TextBlock Grid.Row="3" Grid.Column="0" Margin="0,8" VerticalAlignment="Center" Text="写入值" />
+                                    <TextBox x:Name="S7WriteValueTextBox" Grid.Row="3" Grid.Column="1" Margin="0,6,0,6" Text="123" />
+                                    <UniformGrid Grid.Row="4" Grid.ColumnSpan="2" Margin="0,14,0,0" Columns="2">
+                                        <Button Margin="0,0,8,8" Padding="10" Background="#0891B2" Foreground="White" BorderThickness="0" Click="S7ReadButton_Click" Content="读取" />
+                                        <Button Margin="8,0,0,8" Padding="10" Background="#059669" Foreground="White" BorderThickness="0" Click="S7WriteButton_Click" Content="写入" />
+                                    </UniformGrid>
+                                    <Border Grid.Row="5" Grid.ColumnSpan="2" Margin="0,12,0,0" Padding="12" CornerRadius="12" Background="#F8FAFC" BorderBrush="#D8E2EE" BorderThickness="1">
+                                        <StackPanel>
+                                            <TextBlock FontWeight="SemiBold" Foreground="#17324D" Text="结果" />
+                                            <TextBlock x:Name="S7ResultTextBlock" Margin="0,8,0,0" TextWrapping="Wrap" Foreground="#334155" Text="等待中..." />
+                                        </StackPanel>
+                                    </Border>
+                                </Grid>
+                            </GroupBox>
+                        </Grid>
+                    </ScrollViewer>
+                </TabItem>
+
+                <TabItem Header="Mitsubishi MC">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <Grid Margin="10">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="1.05*" />
+                                <ColumnDefinition Width="1.25*" />
+                            </Grid.ColumnDefinitions>
+
+                            <GroupBox Header="连接" Grid.Column="0" Margin="0,0,12,0">
+                                <Grid Margin="12">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="140" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                    </Grid.RowDefinitions>
+                                    <TextBlock Grid.Row="0" Grid.Column="0" Margin="0,8" VerticalAlignment="Center" Text="设备 ID" />
+                                    <TextBox x:Name="McDeviceIdTextBox" Grid.Row="0" Grid.Column="1" Margin="0,6,0,6" Text="mc-1" />
+                                    <TextBlock Grid.Row="1" Grid.Column="0" Margin="0,8" VerticalAlignment="Center" Text="主机" />
+                                    <TextBox x:Name="McHostTextBox" Grid.Row="1" Grid.Column="1" Margin="0,6,0,6" Text="127.0.0.1" />
+                                    <TextBlock Grid.Row="2" Grid.Column="0" Margin="0,8" VerticalAlignment="Center" Text="端口" />
+                                    <TextBox x:Name="McPortTextBox" Grid.Row="2" Grid.Column="1" Margin="0,6,0,6" Text="5000" />
+                                    <TextBlock Grid.Row="3" Grid.Column="0" Margin="0,8" VerticalAlignment="Top" Text="示例" />
+                                    <TextBlock Grid.Row="3" Grid.Column="1" Margin="0,8,0,0" TextWrapping="Wrap" Foreground="#5B6F82" Text="D100, M0, X1F, Y20" />
+                                    <StackPanel Grid.Row="4" Grid.ColumnSpan="2" Orientation="Horizontal" Margin="0,16,0,0">
+                                        <Button Width="120" Margin="0,0,12,0" Padding="10" Background="#1D4ED8" Foreground="White" BorderThickness="0" Click="McConnectButton_Click" Content="连接" />
+                                        <Button Width="120" Margin="0,0,12,0" Padding="10" Background="#334155" Foreground="White" BorderThickness="0" Click="McDisconnectButton_Click" Content="断开" />
+                                        <TextBlock Margin="8,0,0,0" VerticalAlignment="Center" FontWeight="SemiBold" Text="状态：" />
+                                        <TextBlock x:Name="McStatusTextBlock" Margin="8,0,0,0" VerticalAlignment="Center" Foreground="#0F766E" Text="未连接" />
+                                    </StackPanel>
+                                </Grid>
+                            </GroupBox>
+
+                            <GroupBox Header="操作" Grid.Column="1">
+                                <Grid Margin="12">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="150" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                    </Grid.RowDefinitions>
+                                    <TextBlock Grid.Row="0" Grid.Column="0" Margin="0,8" VerticalAlignment="Center" Text="地址" />
+                                    <StackPanel Grid.Row="0" Grid.Column="1">
+                                        <TextBox x:Name="McAddressTextBox" Margin="0,6,0,6" Text="D100" />
+                                        <ComboBox x:Name="McAddressHistoryComboBox"
+                                                  Margin="0,0,0,6"
+                                                  SelectionChanged="McAddressHistoryComboBox_SelectionChanged" />
+                                    </StackPanel>
+                                    <TextBlock Grid.Row="1" Grid.Column="0" Margin="0,8" VerticalAlignment="Center" Text="数据类型" />
+                                    <ComboBox x:Name="McDataTypeComboBox" Grid.Row="1" Grid.Column="1" Margin="0,6,0,6" SelectedIndex="1">
+                                        <ComboBoxItem Content="Bool" />
+                                        <ComboBoxItem Content="Int16" />
+                                        <ComboBoxItem Content="UInt16" />
+                                        <ComboBoxItem Content="Int32" />
+                                        <ComboBoxItem Content="UInt32" />
+                                        <ComboBoxItem Content="Float" />
+                                        <ComboBoxItem Content="Double" />
+                                        <ComboBoxItem Content="String" />
+                                    </ComboBox>
+                                    <TextBlock Grid.Row="2" Grid.Column="0" Margin="0,8" VerticalAlignment="Center" Text="长度" />
+                                    <TextBox x:Name="McLengthTextBox" Grid.Row="2" Grid.Column="1" Margin="0,6,0,6" Text="1" />
+                                    <TextBlock Grid.Row="3" Grid.Column="0" Margin="0,8" VerticalAlignment="Center" Text="写入值" />
+                                    <TextBox x:Name="McWriteValueTextBox" Grid.Row="3" Grid.Column="1" Margin="0,6,0,6" Text="123" />
+                                    <UniformGrid Grid.Row="4" Grid.ColumnSpan="2" Margin="0,14,0,0" Columns="2">
+                                        <Button Margin="0,0,8,8" Padding="10" Background="#0891B2" Foreground="White" BorderThickness="0" Click="McReadButton_Click" Content="读取" />
+                                        <Button Margin="8,0,0,8" Padding="10" Background="#059669" Foreground="White" BorderThickness="0" Click="McWriteButton_Click" Content="写入" />
+                                    </UniformGrid>
+                                    <Border Grid.Row="5" Grid.ColumnSpan="2" Margin="0,12,0,0" Padding="12" CornerRadius="12" Background="#F8FAFC" BorderBrush="#D8E2EE" BorderThickness="1">
+                                        <StackPanel>
+                                            <TextBlock FontWeight="SemiBold" Foreground="#17324D" Text="结果" />
+                                            <TextBlock x:Name="McResultTextBlock" Margin="0,8,0,0" TextWrapping="Wrap" Foreground="#334155" Text="等待中..." />
+                                        </StackPanel>
+                                    </Border>
+                                </Grid>
+                            </GroupBox>
+                        </Grid>
+                    </ScrollViewer>
+                </TabItem>
+            </TabControl>
+        </Border>
+
+        <Border Grid.Row="2" Padding="16" CornerRadius="18" Background="White">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="110" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock FontSize="20" FontWeight="SemiBold" Foreground="#17324D" Text="运行日志" />
+                    <Button Grid.Column="1" Padding="8" Background="#E2E8F0" BorderBrush="#CBD5E1" Click="ClearLogButton_Click" Content="清空日志" />
+                </Grid>
+                <TextBox x:Name="LogTextBox"
+                         Grid.Row="1"
+                         Margin="0,14,0,0"
+                         IsReadOnly="True"
+                         TextWrapping="Wrap"
+                         VerticalScrollBarVisibility="Auto"
+                         AcceptsReturn="True"
+                         FontFamily="Consolas"
+                         Background="#0F172A"
+                         Foreground="#D4E4FF"
+                         BorderThickness="0" />
+            </Grid>
+        </Border>
+    </Grid>
+</Window>

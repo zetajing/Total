@@ -1,0 +1,15 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net472</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <UseWPF>true</UseWPF>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\IndustrialCommSdk\IndustrialCommSdk.csproj" />
+    <ProjectReference Include="..\LogHelper\LogHelper.csproj" />
+  </ItemGroup>
+
+</Project>
