@@ -71,6 +71,48 @@ namespace IndustrialCommSdk.Tests
             Assert.That(result.BitOffset, Is.EqualTo(1));
         }
 
+        [Test]
+        public void S7Parser_Should_Accept_Bit_Zero_Address()
+        {
+            var parser = new S7AddressParser();
+            var result = (S7Address)parser.Parse("DB1.DBX0.0");
+
+            Assert.That(result.DbNumber, Is.EqualTo(1));
+            Assert.That(result.ByteOffset, Is.EqualTo(0));
+            Assert.That(result.BitOffset, Is.EqualTo(0));
+        }
+
+        [Test]
+        public void S7Parser_Should_Reject_Bit_Address_Outside_Byte_Range()
+        {
+            var parser = new S7AddressParser();
+
+            Assert.Throws<IndustrialCommSdk.Exceptions.IndustrialAddressParseException>(
+                () => parser.Parse("DB1.DBX0.8"));
+        }
+
+        /// <summary>
+        ///     验证 <see cref="S7AddressParser" /> 能兼容 TIA 常见的地址前缀格式，
+        ///     例如 "%DB200.DBD6" 或 "P#DB200.DBX20.0"。
+        /// </summary>
+        [Test]
+        public void S7Parser_Should_Normalize_Tia_Style_Prefixes()
+        {
+            var parser = new S7AddressParser();
+
+            var dwordAddress = (S7Address)parser.Parse("%DB200.DBD6");
+            var pointerAddress = (S7Address)parser.Parse("P#DB200.DBX20.0");
+
+            Assert.That(dwordAddress.Normalized, Is.EqualTo("DB200.DBD6"));
+            Assert.That(dwordAddress.DbNumber, Is.EqualTo(200));
+            Assert.That(dwordAddress.ByteOffset, Is.EqualTo(6));
+
+            Assert.That(pointerAddress.Normalized, Is.EqualTo("DB200.DBX20.0"));
+            Assert.That(pointerAddress.DbNumber, Is.EqualTo(200));
+            Assert.That(pointerAddress.ByteOffset, Is.EqualTo(20));
+            Assert.That(pointerAddress.BitOffset, Is.EqualTo(0));
+        }
+
         /// <summary>
         ///     验证 <see cref="McAddressParser" /> 能正确解析三菱 MC 协议的十六进制位地址 "X1F"。
         ///     预期：设备类型为 <see cref="McDeviceType.X" />，索引值为 0x1F，且被识别为位设备。

@@ -221,6 +221,63 @@ namespace IndustrialCommSdk.Internal
             return _pollingScheduler.UnsubscribeAsync(subscriptionId, cancellationToken);
         }
 
+        /// <summary>
+        /// 供派生类执行额外的独占异步操作。
+        /// 这类操作会复用客户端已有的串行化、释放检查和健康状态记录逻辑，
+        /// 适合协议特有但不属于通用读写抽象的扩展 API。
+        /// </summary>
+        /// <param name="operation">实际要执行的异步操作。</param>
+        /// <param name="cancellationToken">用于取消操作的取消令牌。</param>
+        /// <returns>表示异步操作的任务。</returns>
+        protected Task ExecuteExclusiveAsync(Func<CancellationToken, Task> operation, CancellationToken cancellationToken)
+        {
+            if (operation == null)
+            {
+                throw new ArgumentNullException(nameof(operation));
+            }
+
+            return ExecuteExclusiveAsync<object>(
+                async token =>
+                {
+                    await operation(token).ConfigureAwait(false);
+                    return null;
+                },
+                cancellationToken);
+        }
+
+        /// <summary>
+        /// 供派生类执行带返回值的独占异步操作。
+        /// </summary>
+        /// <typeparam name="TResult">返回值类型。</typeparam>
+        /// <param name="operation">实际要执行的异步操作。</param>
+        /// <param name="cancellationToken">用于取消操作的取消令牌。</param>
+        /// <returns>异步操作的返回值。</returns>
+        protected async Task<TResult> ExecuteExclusiveAsync<TResult>(Func<CancellationToken, Task<TResult>> operation, CancellationToken cancellationToken)
+        {
+            if (operation == null)
+            {
+                throw new ArgumentNullException(nameof(operation));
+            }
+
+            await _operationLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+            try
+            {
+                ThrowIfDisposed();
+                var result = await operation(cancellationToken).ConfigureAwait(false);
+                RecordSuccess();
+                return result;
+            }
+            catch (Exception ex)
+            {
+                RecordFailure(ex);
+                throw;
+            }
+            finally
+            {
+                _operationLock.Release();
+            }
+        }
+
         /// <summary>获取当前客户端的健康状态快照。</summary>
         /// <returns>包含连接状态、最后成功时间、连续失败次数和最后错误消息的健康快照。</returns>
         public HealthSnapshot GetHealth()

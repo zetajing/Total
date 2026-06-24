@@ -63,6 +63,7 @@ namespace IndustrialCommDemo
             LoadUiState();
             RefreshModbusDataTypeState();
             RefreshModbusInputHints();
+            RefreshS7AddressInputState();
             UpdateAllStatuses();
             RefreshAddressHistoryCombos();
             ModbusSubscriptionDataGrid.ItemsSource = _modbusSubscriptionRows;
@@ -305,6 +306,26 @@ namespace IndustrialCommDemo
             RefreshModbusInputHints();
         }
 
+        private void S7AddressTextBox_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            if (!IsLoaded)
+            {
+                return;
+            }
+
+            RefreshS7AddressInputState();
+        }
+
+        private void S7DataTypeComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (!IsLoaded)
+            {
+                return;
+            }
+
+            RefreshS7LengthSuggestion();
+        }
+
         private void ModbusAddressHistoryComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             ApplyHistorySelection(ModbusAddressHistoryComboBox, ModbusAddressTextBox);
@@ -487,7 +508,7 @@ namespace IndustrialCommDemo
             try
             {
                 var result = await _s7Client.ReadAsync(
-                    BuildReadRequest(S7DeviceIdTextBox, S7AddressTextBox, S7DataTypeComboBox, S7LengthTextBox),
+                    BuildS7ReadRequest(),
                     CancellationToken.None);
 
                 S7ResultTextBlock.Text = FormatDataValue(result);
@@ -511,7 +532,7 @@ namespace IndustrialCommDemo
 
             try
             {
-                var request = BuildWriteRequest(S7DeviceIdTextBox, S7AddressTextBox, S7DataTypeComboBox, S7LengthTextBox, S7WriteValueTextBox);
+                var request = BuildS7WriteRequest();
                 await _s7Client.WriteAsync(request, CancellationToken.None);
                 RememberRecentAddress(_uiState.S7.RecentAddresses, request.Address);
                 RefreshAddressHistory(S7AddressHistoryComboBox, _uiState.S7.RecentAddresses);
@@ -1186,6 +1207,8 @@ namespace IndustrialCommDemo
         {
             switch (dataType)
             {
+                case DataType.Byte:
+                case DataType.Char:
                 case DataType.Int16:
                 case DataType.UInt16:
                     return 1;
@@ -1286,6 +1309,33 @@ namespace IndustrialCommDemo
                 length);
         }
 
+        private ReadRequest BuildS7ReadRequest()
+        {
+            var typedAddress = ParseS7AddressInput(S7AddressTextBox.Text);
+            var dataType = typedAddress.InferredDataType ?? GetSelectedDataType(S7DataTypeComboBox);
+            var length = typedAddress.InferredLength ?? ParseUShortValue(S7LengthTextBox.Text, "长度");
+
+            return new ReadRequest(
+                RequireText(S7DeviceIdTextBox.Text, "设备 ID"),
+                typedAddress.NormalizedAddress,
+                dataType,
+                length);
+        }
+
+        private WriteRequest BuildS7WriteRequest()
+        {
+            var typedAddress = ParseS7AddressInput(S7AddressTextBox.Text);
+            var dataType = typedAddress.InferredDataType ?? GetSelectedDataType(S7DataTypeComboBox);
+            var length = typedAddress.InferredLength ?? ParseUShortValue(S7LengthTextBox.Text, "长度");
+
+            return new WriteRequest(
+                RequireText(S7DeviceIdTextBox.Text, "设备 ID"),
+                typedAddress.NormalizedAddress,
+                dataType,
+                ParseValue(S7WriteValueTextBox.Text, dataType, length),
+                length);
+        }
+
         private string GetModbusDeviceId()
         {
             return RequireText(ModbusDeviceIdTextBox.Text, "Modbus 设备 ID");
@@ -1297,6 +1347,10 @@ namespace IndustrialCommDemo
             {
                 case DataType.Bool:
                     return ParseBoolValue(text, length);
+                case DataType.Byte:
+                    return byte.Parse(text, NumberStyles.Integer, CultureInfo.InvariantCulture);
+                case DataType.Char:
+                    return string.IsNullOrEmpty(text) ? '\0' : text[0];
                 case DataType.Int16:
                     return short.Parse(text, NumberStyles.Integer, CultureInfo.InvariantCulture);
                 case DataType.UInt16:
@@ -1316,6 +1370,160 @@ namespace IndustrialCommDemo
                 default:
                     throw new InvalidOperationException("不支持的数据类型。");
             }
+        }
+
+        /// <summary>
+        /// 解析 S7 输入框中的地址文本。
+        /// 这里同时兼容两种输入习惯：
+        /// 1. 直接输入标准地址，如 DB200.DBD6。
+        /// 2. 直接粘贴 TIA/符号表里的“类型 + 地址”文本，如 DINT %DB200.DBD6、LREAL P#DB200.DBX20.0。
+        ///
+        /// 之所以要在 UI 层先做这一步，是因为像 DBD/DBB 这样的绝对地址本身并不能唯一说明业务类型：
+        /// DBD 既可能是 DINT，也可能是 DWORD 或 REAL；DBB 既可能是 BYTE，也可能是 CHAR。
+        /// </summary>
+        private static S7AddressInputInfo ParseS7AddressInput(string input)
+        {
+            var text = RequireText(input, "S7 地址");
+            var tokens = text.Split(new[] { ' ', '\t', '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+
+            string typeToken = null;
+            string addressToken = text;
+            if (tokens.Length >= 2 && TryMapS7DeclarationType(tokens[0], out _, out _))
+            {
+                typeToken = tokens[0];
+                addressToken = tokens[tokens.Length - 1];
+            }
+
+            var normalizedAddress = NormalizeS7DeclarationAddress(addressToken);
+            if (typeToken != null && TryMapS7DeclarationType(typeToken, out var declaredType, out var declaredLength))
+            {
+                return new S7AddressInputInfo(normalizedAddress, declaredType, declaredLength);
+            }
+
+            if (TryInferS7DataTypeFromAddress(normalizedAddress, out var inferredType, out var inferredLength))
+            {
+                return new S7AddressInputInfo(normalizedAddress, inferredType, inferredLength);
+            }
+
+            return new S7AddressInputInfo(normalizedAddress, null, null);
+        }
+
+        private void RefreshS7AddressInputState()
+        {
+            try
+            {
+                var typedAddress = ParseS7AddressInput(S7AddressTextBox.Text);
+                if (typedAddress.InferredDataType.HasValue)
+                {
+                    SelectDataType(S7DataTypeComboBox, typedAddress.InferredDataType.Value);
+                }
+
+                if (typedAddress.InferredLength.HasValue)
+                {
+                    S7LengthTextBox.Text = typedAddress.InferredLength.Value.ToString(CultureInfo.InvariantCulture);
+                }
+                else
+                {
+                    RefreshS7LengthSuggestion();
+                }
+            }
+            catch
+            {
+                // 输入尚未完成时不打断用户编辑，等真正读写时再报具体错误。
+            }
+        }
+
+        private void RefreshS7LengthSuggestion()
+        {
+            S7LengthTextBox.Text = "1";
+        }
+
+        private static string NormalizeS7DeclarationAddress(string addressToken)
+        {
+            var value = RequireText(addressToken, "S7 地址").Trim().ToUpperInvariant();
+            if (value.StartsWith("P#", StringComparison.Ordinal))
+            {
+                value = value.Substring(2);
+            }
+
+            if (value.StartsWith("%", StringComparison.Ordinal))
+            {
+                value = value.Substring(1);
+            }
+
+            return value;
+        }
+
+        private static bool TryInferS7DataTypeFromAddress(string normalizedAddress, out DataType dataType, out ushort length)
+        {
+            length = 1;
+            var address = (normalizedAddress ?? string.Empty).Trim().ToUpperInvariant();
+
+            if (address.Contains(".DBX") || IsBitAreaAddress(address))
+            {
+                dataType = DataType.Bool;
+                return true;
+            }
+
+            dataType = default(DataType);
+            length = 0;
+            return false;
+        }
+
+        private static bool TryMapS7DeclarationType(string typeToken, out DataType dataType, out ushort length)
+        {
+            length = 1;
+            switch ((typeToken ?? string.Empty).Trim().ToUpperInvariant())
+            {
+                case "BOOL":
+                    dataType = DataType.Bool;
+                    return true;
+                case "BYTE":
+                    dataType = DataType.Byte;
+                    return true;
+                case "CHAR":
+                    dataType = DataType.Char;
+                    return true;
+                case "INT":
+                    dataType = DataType.Int16;
+                    return true;
+                case "WORD":
+                    dataType = DataType.UInt16;
+                    return true;
+                case "DINT":
+                    dataType = DataType.Int32;
+                    return true;
+                case "DWORD":
+                    dataType = DataType.UInt32;
+                    return true;
+                case "REAL":
+                    dataType = DataType.Float;
+                    return true;
+                case "LREAL":
+                    dataType = DataType.Double;
+                    return true;
+                case "STRING":
+                    dataType = DataType.String;
+                    return true;
+                default:
+                    dataType = default(DataType);
+                    length = 0;
+                    return false;
+            }
+        }
+
+        private static bool StartsWithAny(string value, params string[] prefixes)
+        {
+            return prefixes.Any(prefix => value.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
+        }
+
+        private static bool IsBitAreaAddress(string value)
+        {
+            var upper = (value ?? string.Empty).Trim().ToUpperInvariant();
+            return (upper.StartsWith("M", StringComparison.Ordinal) ||
+                    upper.StartsWith("I", StringComparison.Ordinal) ||
+                    upper.StartsWith("Q", StringComparison.Ordinal)) &&
+                   upper.Contains(".");
         }
 
         private static object ParseBoolValue(string text, ushort length)
@@ -1754,6 +1962,21 @@ namespace IndustrialCommDemo
                 return "<null>";
             }
 
+            if (value is float single)
+            {
+                return single.ToString("R", CultureInfo.InvariantCulture);
+            }
+
+            if (value is double @double)
+            {
+                return @double.ToString("R", CultureInfo.InvariantCulture);
+            }
+
+            if (value is char)
+            {
+                return value.ToString();
+            }
+
             var bytes = value as byte[];
             if (bytes != null)
             {
@@ -1776,6 +1999,20 @@ namespace IndustrialCommDemo
             }
 
             return Convert.ToString(value, CultureInfo.InvariantCulture);
+        }
+
+        private sealed class S7AddressInputInfo
+        {
+            public S7AddressInputInfo(string normalizedAddress, DataType? inferredDataType, ushort? inferredLength)
+            {
+                NormalizedAddress = normalizedAddress;
+                InferredDataType = inferredDataType;
+                InferredLength = inferredLength;
+            }
+
+            public string NormalizedAddress { get; private set; }
+            public DataType? InferredDataType { get; private set; }
+            public ushort? InferredLength { get; private set; }
         }
 
         private void AppendLogBatch(IReadOnlyList<string> messages)

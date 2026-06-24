@@ -30,6 +30,10 @@ namespace IndustrialCommSdk.Abstractions
         Float = 6,
         /// <summary>双精度浮点数。</summary>
         Double = 7,
+        /// <summary>8 位无符号字节。</summary>
+        Byte = 10,
+        /// <summary>单个 ASCII 字符。</summary>
+        Char = 11,
         /// <summary>ASCII 字符串。</summary>
         String = 8,
         /// <summary>原始字节数组。</summary>

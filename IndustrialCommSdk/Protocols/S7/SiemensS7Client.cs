@@ -1,4 +1,5 @@
 using System;
+using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
@@ -8,6 +9,8 @@ using IndustrialCommSdk.Exceptions;
 using IndustrialCommSdk.Internal;
 using IndustrialCommSdk.Polling;
 using S7.Net;
+using PlcArea = S7.Net.DataType;
+using PlcVarType = S7.Net.VarType;
 
 namespace IndustrialCommSdk.Protocols.S7
 {
@@ -90,7 +93,7 @@ namespace IndustrialCommSdk.Protocols.S7
                 throw new IndustrialAddressParseException("Address is required.");
             }
 
-            var input = address.Trim().ToUpperInvariant();
+            var input = NormalizeAddress(address);
             var dbMatch = DbRegex.Match(input);
             if (dbMatch.Success)
             {
@@ -105,6 +108,22 @@ namespace IndustrialCommSdk.Protocols.S7
             }
 
             throw new IndustrialAddressParseException(string.Format("Unsupported S7 address: {0}", address));
+        }
+
+        private static string NormalizeAddress(string address)
+        {
+            var input = address.Trim().ToUpperInvariant();
+            if (input.StartsWith("P#", StringComparison.Ordinal))
+            {
+                input = input.Substring(2);
+            }
+
+            if (input.StartsWith("%", StringComparison.Ordinal))
+            {
+                input = input.Substring(1);
+            }
+
+            return input;
         }
 
         /// <summary>
@@ -135,7 +154,14 @@ namespace IndustrialCommSdk.Protocols.S7
             {
                 return -1;
             }
-            return int.Parse(token);
+
+            var bit = int.Parse(token);
+            if (bit < 0 || bit > 7)
+            {
+                throw new IndustrialAddressParseException("S7 bit offset must be in the range 0-7.");
+            }
+
+            return bit;
         }
     }
 
@@ -222,7 +248,7 @@ namespace IndustrialCommSdk.Protocols.S7
         {
             EnsureConnected();
             var parsed = (S7Address)_parser.Parse(request.Address);
-            var value = await _plc.ReadAsync(parsed.Normalized, cancellationToken).ConfigureAwait(false);
+            var value = await ReadValueAsync(parsed, request, cancellationToken).ConfigureAwait(false);
             return new DataValue(request.Address, request.DataType, value, null, QualityStatus.Good, DateTimeOffset.UtcNow, null);
         }
 
@@ -234,8 +260,126 @@ namespace IndustrialCommSdk.Protocols.S7
         protected override async Task WriteCoreAsync(WriteRequest request, CancellationToken cancellationToken)
         {
             EnsureConnected();
-            _parser.Parse(request.Address);
-            await _plc.WriteAsync(request.Address, request.Value, cancellationToken).ConfigureAwait(false);
+            var parsed = (S7Address)_parser.Parse(request.Address);
+            await WriteValueAsync(parsed, request, cancellationToken).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// 使用与 PLC DB 块布局一致的 C# 类读取一整段数据，并返回填充后的实例。
+        /// 适合像 <c>DB9 model = await client.ReadDbClassAsync&lt;DB9&gt;(9);</c> 这样的用法。
+        /// </summary>
+        /// <typeparam name="T">要映射的 DB 模型类型，需具备无参构造函数。</typeparam>
+        /// <param name="dbNumber">DB 块号，例如 9 表示 DB9。</param>
+        /// <param name="startByteAddress">起始字节偏移，默认从 0 开始。</param>
+        /// <param name="cancellationToken">取消令牌。</param>
+        /// <returns>填充后的模型实例。</returns>
+        public Task<T> ReadDbClassAsync<T>(int dbNumber, int startByteAddress = 0, CancellationToken cancellationToken = default(CancellationToken))
+            where T : class, new()
+        {
+            ValidateDbBlockArguments(dbNumber, startByteAddress);
+
+            return ExecuteExclusiveAsync(
+                async token =>
+                {
+                    EnsureConnected();
+                    var value = await _plc.ReadClassAsync<T>(dbNumber, startByteAddress, token).ConfigureAwait(false);
+                    if (value == null)
+                    {
+                        throw new IndustrialConnectionException(string.Format("S7 DB{0} read returned no data.", dbNumber));
+                    }
+
+                    return value;
+                },
+                cancellationToken);
+        }
+
+        /// <summary>
+        /// 使用自定义工厂创建 DB 模型实例，然后从 PLC 读取并填充其属性。
+        /// 当模型没有无参构造函数或需要预设默认值时适用。
+        /// </summary>
+        /// <typeparam name="T">要映射的 DB 模型类型。</typeparam>
+        /// <param name="factory">模型工厂方法。</param>
+        /// <param name="dbNumber">DB 块号，例如 9 表示 DB9。</param>
+        /// <param name="startByteAddress">起始字节偏移，默认从 0 开始。</param>
+        /// <param name="cancellationToken">取消令牌。</param>
+        /// <returns>填充后的模型实例。</returns>
+        public Task<T> ReadDbClassAsync<T>(Func<T> factory, int dbNumber, int startByteAddress = 0, CancellationToken cancellationToken = default(CancellationToken))
+            where T : class
+        {
+            if (factory == null)
+            {
+                throw new ArgumentNullException(nameof(factory));
+            }
+
+            ValidateDbBlockArguments(dbNumber, startByteAddress);
+
+            return ExecuteExclusiveAsync(
+                async token =>
+                {
+                    EnsureConnected();
+                    var value = await _plc.ReadClassAsync(factory, dbNumber, startByteAddress, token).ConfigureAwait(false);
+                    if (value == null)
+                    {
+                        throw new IndustrialConnectionException(string.Format("S7 DB{0} read returned no data.", dbNumber));
+                    }
+
+                    return value;
+                },
+                cancellationToken);
+        }
+
+        /// <summary>
+        /// 将 PLC 中的 DB 块内容读取到调用方已经创建好的实例中。
+        /// 这与现有 WinForms 项目里“先 new 类，再读 DB”的用法一致。
+        /// </summary>
+        /// <param name="instance">待填充的模型实例。</param>
+        /// <param name="dbNumber">DB 块号，例如 9 表示 DB9。</param>
+        /// <param name="startByteAddress">起始字节偏移，默认从 0 开始。</param>
+        /// <param name="cancellationToken">取消令牌。</param>
+        /// <returns>底层库返回的读取字节数。</returns>
+        public Task<int> ReadDbClassAsync(object instance, int dbNumber, int startByteAddress = 0, CancellationToken cancellationToken = default(CancellationToken))
+        {
+            if (instance == null)
+            {
+                throw new ArgumentNullException(nameof(instance));
+            }
+
+            ValidateDbBlockArguments(dbNumber, startByteAddress);
+
+            return ExecuteExclusiveAsync(
+                async token =>
+                {
+                    EnsureConnected();
+                    var result = await _plc.ReadClassAsync(instance, dbNumber, startByteAddress, token).ConfigureAwait(false);
+                    return result.Item1;
+                },
+                cancellationToken);
+        }
+
+        /// <summary>
+        /// 将一个与 PLC DB 布局一致的 C# 类整块写回 PLC。
+        /// </summary>
+        /// <param name="value">要写入的模型实例。</param>
+        /// <param name="dbNumber">DB 块号，例如 9 表示 DB9。</param>
+        /// <param name="startByteAddress">起始字节偏移，默认从 0 开始。</param>
+        /// <param name="cancellationToken">取消令牌。</param>
+        /// <returns>表示异步操作的任务。</returns>
+        public Task WriteDbClassAsync(object value, int dbNumber, int startByteAddress = 0, CancellationToken cancellationToken = default(CancellationToken))
+        {
+            if (value == null)
+            {
+                throw new ArgumentNullException(nameof(value));
+            }
+
+            ValidateDbBlockArguments(dbNumber, startByteAddress);
+
+            return ExecuteExclusiveAsync(
+                async token =>
+                {
+                    EnsureConnected();
+                    await _plc.WriteClassAsync(value, dbNumber, startByteAddress, token).ConfigureAwait(false);
+                },
+                cancellationToken);
         }
 
         /// <summary>
@@ -259,6 +403,163 @@ namespace IndustrialCommSdk.Protocols.S7
             if (!IsConnected)
             {
                 throw new IndustrialConnectionException("S7 client is not connected.");
+            }
+        }
+
+        private async Task<object> ReadValueAsync(S7Address address, ReadRequest request, CancellationToken cancellationToken)
+        {
+            switch (request.DataType)
+            {
+                case Abstractions.DataType.String:
+                    {
+                        var bytes = await _plc.ReadBytesAsync(ToPlcArea(address.Area), address.DbNumber, address.ByteOffset, request.Length, cancellationToken).ConfigureAwait(false);
+                        return Encoding.ASCII.GetString(bytes).TrimEnd('\0');
+                    }
+                case Abstractions.DataType.ByteArray:
+                    return await _plc.ReadBytesAsync(ToPlcArea(address.Area), address.DbNumber, address.ByteOffset, request.Length, cancellationToken).ConfigureAwait(false);
+                case Abstractions.DataType.Char:
+                    {
+                        var byteValue = await ReadTypedValueAsync(address, PlcVarType.Byte, 1, cancellationToken).ConfigureAwait(false);
+                        return Convert.ToChar(Convert.ToByte(byteValue));
+                    }
+                case Abstractions.DataType.Byte:
+                    return await ReadTypedValueAsync(address, PlcVarType.Byte, request.Length, cancellationToken).ConfigureAwait(false);
+                default:
+                    return await ReadTypedValueAsync(address, ToVarType(request.DataType), request.Length, cancellationToken).ConfigureAwait(false);
+            }
+        }
+
+        private Task<object> ReadTypedValueAsync(S7Address address, PlcVarType varType, int count, CancellationToken cancellationToken)
+        {
+            return _plc.ReadAsync(
+                ToPlcArea(address.Area),
+                address.DbNumber,
+                address.ByteOffset,
+                varType,
+                count,
+                address.BitOffset >= 0 ? (byte)address.BitOffset : (byte)0,
+                cancellationToken);
+        }
+
+        private async Task WriteValueAsync(S7Address address, WriteRequest request, CancellationToken cancellationToken)
+        {
+            switch (request.DataType)
+            {
+                case Abstractions.DataType.Bool:
+                    {
+                        if (address.BitOffset < 0)
+                        {
+                            throw new IndustrialAddressParseException(
+                                string.Format("S7 bool write requires a bit address such as DB1.DBX0.0 or M10.2. Actual address: {0}", address.Normalized));
+                        }
+
+                        // S7.Net 将通用 WriteAsync 的最后一个参数解释为可选 bitAdr，
+                        // 其中 0 同时可能代表“第 0 位”或“未指定 bit”。
+                        // 对 DBX0.0 / M0.0 这类合法位地址，走专用的 WriteBitAsync
+                        // 才能避免把 bit 0 误判成无效地址。
+                        await _plc.WriteBitAsync(
+                            ToPlcArea(address.Area),
+                            address.DbNumber,
+                            address.ByteOffset,
+                            address.BitOffset,
+                            Convert.ToBoolean(request.Value),
+                            cancellationToken).ConfigureAwait(false);
+                        return;
+                    }
+                case Abstractions.DataType.String:
+                    {
+                        var text = (request.Value ?? string.Empty).ToString();
+                        var bytes = Encoding.ASCII.GetBytes(text);
+                        await _plc.WriteBytesAsync(ToPlcArea(address.Area), address.DbNumber, address.ByteOffset, bytes, cancellationToken).ConfigureAwait(false);
+                        return;
+                    }
+                case Abstractions.DataType.ByteArray:
+                    await _plc.WriteBytesAsync(
+                        ToPlcArea(address.Area),
+                        address.DbNumber,
+                        address.ByteOffset,
+                        (byte[])request.Value,
+                        cancellationToken).ConfigureAwait(false);
+                    return;
+                case Abstractions.DataType.Char:
+                    {
+                        var character = request.Value is char
+                            ? (char)request.Value
+                            : ((request.Value ?? string.Empty).ToString().Length > 0 ? (request.Value ?? string.Empty).ToString()[0] : '\0');
+                        await _plc.WriteAsync(
+                            address.Normalized,
+                            (byte)character,
+                            cancellationToken).ConfigureAwait(false);
+                        return;
+                    }
+                default:
+                    // 对非 Bool 的标量写入，交给 S7.Net 的字符串地址重载去按 DBB/DBW/DBD 等地址类型解释。
+                    // 如果这里继续走带 bitAdr 的重载，像 DB200.DBD6 这样的 DWord 地址也会因为传入 bitAdr=0
+                    // 被底层误带进位地址校验，最终报 "bitwise locations 0-7" 之类的异常。
+                    await _plc.WriteAsync(
+                        address.Normalized,
+                        request.Value,
+                        cancellationToken).ConfigureAwait(false);
+                    return;
+            }
+        }
+
+        private static PlcArea ToPlcArea(S7Area area)
+        {
+            switch (area)
+            {
+                case S7Area.Db:
+                    return PlcArea.DataBlock;
+                case S7Area.Memory:
+                    return PlcArea.Memory;
+                case S7Area.Input:
+                    return PlcArea.Input;
+                case S7Area.Output:
+                    return PlcArea.Output;
+                default:
+                    throw new IndustrialAddressParseException("Unsupported S7 area.");
+            }
+        }
+
+        private static PlcVarType ToVarType(Abstractions.DataType dataType)
+        {
+            switch (dataType)
+            {
+                case Abstractions.DataType.Bool:
+                    return PlcVarType.Bit;
+                case Abstractions.DataType.Int16:
+                    return PlcVarType.Int;
+                case Abstractions.DataType.UInt16:
+                    return PlcVarType.Word;
+                case Abstractions.DataType.Int32:
+                    return PlcVarType.DInt;
+                case Abstractions.DataType.UInt32:
+                    return PlcVarType.DWord;
+                case Abstractions.DataType.Float:
+                    return PlcVarType.Real;
+                case Abstractions.DataType.Double:
+                    return PlcVarType.LReal;
+                case Abstractions.DataType.Byte:
+                case Abstractions.DataType.Char:
+                    return PlcVarType.Byte;
+                default:
+                    throw new InvalidOperationException(string.Format("S7 暂不支持将数据类型 {0} 映射到 VarType。", dataType));
+            }
+        }
+
+        /// <summary>
+        /// 校验 DB 块读写常用参数，避免把明显无效的地址传到下层库。
+        /// </summary>
+        private static void ValidateDbBlockArguments(int dbNumber, int startByteAddress)
+        {
+            if (dbNumber <= 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(dbNumber), "DB number must be greater than zero.");
+            }
+
+            if (startByteAddress < 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(startByteAddress), "Start byte address cannot be negative.");
             }
         }
     }

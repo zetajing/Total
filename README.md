@@ -261,6 +261,40 @@ dotnet build .\IndustrialCommDemo\IndustrialCommDemo.csproj
 - `ModbusTcpClient` 的连接超时通过 `Task.WhenAny` 配合 `CancellationToken` 控制。
 - `SiemensS7Client` 也已切换到 `S7netplus 0.20.0` 提供的异步 API：`OpenAsync / ReadAsync / WriteAsync`。
 
+### S7 DB 块增强
+
+现在 `SiemensS7Client` 额外支持两类更贴近现场使用习惯的能力：
+
+- 直接按“PLC DB 布局对应的 C# 类”整块读写
+- 在 Demo 的 `S7` 页里粘贴 `DINT %DB200.DBD6`、`LREAL P#DB200.DBX20.0` 这类文本后，自动选择对应数据类型
+
+类映射 DB 示例：
+
+```csharp
+public sealed class Db200Model
+{
+    public byte ByteValue { get; set; }
+    public int DintValue { get; set; }
+    public double LrealValue { get; set; }
+}
+
+var client = IndustrialClientFactory.CreateSiemensS7(new SiemensS7ClientOptions
+{
+    DeviceId = "s7-1",
+    Host = "192.168.0.10",
+    Rack = 0,
+    Slot = 1
+});
+
+await client.ConnectAsync(CancellationToken.None);
+
+var s7Client = (IndustrialCommSdk.Protocols.S7.SiemensS7Client)client;
+var db200 = await s7Client.ReadDbClassAsync<Db200Model>(200);
+
+db200.ByteValue = 12;
+await s7Client.WriteDbClassAsync(db200, 200);
+```
+
 ### 这轮优化的直接收益
 
 - 批量轮询时锁竞争更少

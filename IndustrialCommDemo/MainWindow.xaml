@@ -327,7 +327,7 @@
                                     <TextBlock Grid.Row="3" Grid.Column="0" Margin="0,8" VerticalAlignment="Center" Text="槽位" />
                                     <TextBox x:Name="S7SlotTextBox" Grid.Row="3" Grid.Column="1" Margin="0,6,0,6" Text="1" />
                                     <TextBlock Grid.Row="4" Grid.Column="0" Margin="0,8" VerticalAlignment="Top" Text="示例" />
-                                    <TextBlock Grid.Row="4" Grid.Column="1" Margin="0,8,0,0" TextWrapping="Wrap" Foreground="#5B6F82" Text="DB1.DBX0.1, DB1.DBW0, M10.0, I0.0, Q0.0" />
+                                    <TextBlock Grid.Row="4" Grid.Column="1" Margin="0,8,0,0" TextWrapping="Wrap" Foreground="#5B6F82" Text="DB1.DBX0.1, DINT %DB200.DBD6, REAL %DB200.DBD10, LREAL P#DB200.DBX20.0" />
                                     <StackPanel Grid.Row="5" Grid.ColumnSpan="2" Orientation="Horizontal" Margin="0,16,0,0">
                                         <Button Width="120" Margin="0,0,12,0" Padding="10" Background="#1D4ED8" Foreground="White" BorderThickness="0" Click="S7ConnectButton_Click" Content="连接" />
                                         <Button Width="120" Margin="0,0,12,0" Padding="10" Background="#334155" Foreground="White" BorderThickness="0" Click="S7DisconnectButton_Click" Content="断开" />
@@ -353,14 +353,16 @@
                                     </Grid.RowDefinitions>
                                     <TextBlock Grid.Row="0" Grid.Column="0" Margin="0,8" VerticalAlignment="Center" Text="地址" />
                                     <StackPanel Grid.Row="0" Grid.Column="1">
-                                        <TextBox x:Name="S7AddressTextBox" Margin="0,6,0,6" Text="DB1.DBW0" />
+                                        <TextBox x:Name="S7AddressTextBox" Margin="0,6,0,6" Text="DB1.DBW0" TextChanged="S7AddressTextBox_TextChanged" />
                                         <ComboBox x:Name="S7AddressHistoryComboBox"
                                                   Margin="0,0,0,6"
                                                   SelectionChanged="S7AddressHistoryComboBox_SelectionChanged" />
                                     </StackPanel>
                                     <TextBlock Grid.Row="1" Grid.Column="0" Margin="0,8" VerticalAlignment="Center" Text="数据类型" />
-                                    <ComboBox x:Name="S7DataTypeComboBox" Grid.Row="1" Grid.Column="1" Margin="0,6,0,6" SelectedIndex="1">
+                                    <ComboBox x:Name="S7DataTypeComboBox" Grid.Row="1" Grid.Column="1" Margin="0,6,0,6" SelectedIndex="1" SelectionChanged="S7DataTypeComboBox_SelectionChanged">
                                         <ComboBoxItem Content="Bool" />
+                                        <ComboBoxItem Content="Byte" />
+                                        <ComboBoxItem Content="Char" />
                                         <ComboBoxItem Content="Int16" />
                                         <ComboBoxItem Content="UInt16" />
                                         <ComboBoxItem Content="Int32" />
@@ -368,6 +370,7 @@
                                         <ComboBoxItem Content="Float" />
                                         <ComboBoxItem Content="Double" />
                                         <ComboBoxItem Content="String" />
+                                        <ComboBoxItem Content="ByteArray" />
                                     </ComboBox>
                                     <TextBlock Grid.Row="2" Grid.Column="0" Margin="0,8" VerticalAlignment="Center" Text="长度" />
                                     <TextBox x:Name="S7LengthTextBox" Grid.Row="2" Grid.Column="1" Margin="0,6,0,6" Text="1" />
