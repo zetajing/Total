@@ -246,7 +246,10 @@ dotnet build .\IndustrialCommDemo\IndustrialCommDemo.csproj
 
 ## Modbus TCP 现状
 
-当前 `Modbus TCP` 先按汇川 `EasyPLC` 落地。
+当前 `Modbus TCP` 已内置两个设备 profile：
+
+- 汇川 `EasyPLC`
+- 三菱 `Modbus TCP`
 
 ### 最近一轮优化
 
@@ -288,6 +291,16 @@ dotnet build .\IndustrialCommDemo\IndustrialCommDemo.csproj
 - 位地址：`X / Y / M / S / B`
 - 寄存器地址：`D / R`
 
+### 已支持的三菱 Modbus 地址语义
+
+- 位地址：`X / Y / M / L`
+- 寄存器地址：`D / R / W`
+
+说明：
+
+- 三菱 profile 中，`X / Y / W` 按十六进制编号解析，例如 `X10`、`Y20`、`W1A`
+- 当前三菱 profile 的 32 位寄存器顺序按“标准不交换”处理
+
 ### 当前数据类型规则
 
 - `X / Y / M / S / B` 固定按 `Bool`
@@ -299,18 +312,19 @@ dotnet build .\IndustrialCommDemo\IndustrialCommDemo.csproj
 
 ## 汇川 Profile 抽象
 
-为了后续扩展其他品牌，当前已经把汇川规则收敛为一个独立类：
+为了后续扩展其他品牌，当前已经把品牌规则收敛为独立类：
 
 - [InovanceEasyPlcModbusProfile.cs](C:/Users/75881/Documents/Total/IndustrialCommSdk/Protocols/Modbus/InovanceEasyPlcModbusProfile.cs)
+- [MitsubishiModbusTcpProfile.cs](C:/Users/75881/Documents/Total/IndustrialCommSdk/Protocols/Modbus/MitsubishiModbusTcpProfile.cs)
 
 统一接口在：
 
 - [ModbusDeviceProfile.cs](C:/Users/75881/Documents/Total/IndustrialCommSdk/Protocols/Modbus/ModbusDeviceProfile.cs)
 
-`InovanceEasyPlcModbusProfile` 当前负责：
+这些 profile 当前负责：
 
-- 汇川地址解析
-- 汇川 32/64 位寄存器顺序处理
+- 各品牌地址解析
+- 各品牌寄存器顺序处理
 - 默认示例地址和默认调试地址
 
 ## 后续增加其他品牌的方式

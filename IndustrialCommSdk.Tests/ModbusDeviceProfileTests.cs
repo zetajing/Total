@@ -59,5 +59,33 @@ namespace IndustrialCommSdk.Tests
 
             Assert.That((float)value.Value, Is.EqualTo(1.0f).Within(0.0001f));
         }
+
+        [Test]
+        public void MitsubishiProfile_Should_Parse_Hex_X_Address_As_DiscreteInput()
+        {
+            var parsed = ModbusDeviceProfiles.MitsubishiModbusTcp.ParseAddress("X10");
+
+            Assert.That(parsed.Area, Is.EqualTo(ModbusArea.DiscreteInput));
+            Assert.That(parsed.ZeroBasedAddress, Is.EqualTo(0x10));
+        }
+
+        [Test]
+        public void MitsubishiProfile_Should_Parse_Hex_W_Address_As_HoldingRegister()
+        {
+            var parsed = ModbusDeviceProfiles.MitsubishiModbusTcp.ParseAddress("W1A");
+
+            Assert.That(parsed.Area, Is.EqualTo(ModbusArea.HoldingRegister));
+            Assert.That(parsed.ZeroBasedAddress, Is.EqualTo(0x1A));
+        }
+
+        [Test]
+        public void MitsubishiProfile_Should_Keep_Register_Order_Unchanged()
+        {
+            var rawRegisters = new ushort[] { 0x1234, 0x5678 };
+
+            var normalized = ModbusDeviceProfiles.MitsubishiModbusTcp.NormalizeRegistersForRead(DataType.Int32, rawRegisters);
+
+            Assert.That(normalized, Is.EqualTo(rawRegisters));
+        }
     }
 }

@@ -36,9 +36,8 @@ namespace IndustrialCommDemo
             DataType.ByteArray,
         };
         private const int MaxRecentAddressCount = 12;
-        private readonly ModbusAddressParser _modbusAddressParser = new ModbusAddressParser(ModbusDeviceProfiles.InovanceEasyPlc);
-
-        private readonly IModbusDeviceProfile _modbusProfile = ModbusDeviceProfiles.InovanceEasyPlc;
+        private ModbusAddressParser _modbusAddressParser = new ModbusAddressParser(ModbusDeviceProfiles.InovanceEasyPlc);
+        private IModbusDeviceProfile _modbusProfile = ModbusDeviceProfiles.InovanceEasyPlc;
         private readonly AppLogger _logger;
         private readonly UiStateStore _uiStateStore;
         private DemoUiState _uiState;
@@ -922,6 +921,8 @@ namespace IndustrialCommDemo
 
         private void ApplyModbusProfile()
         {
+            _modbusProfile = GetSelectedModbusProfile();
+            _modbusAddressParser = new ModbusAddressParser(_modbusProfile);
             ModbusExampleAddressTextBlock.Text = _modbusProfile.ExampleAddresses;
 
             if (string.IsNullOrWhiteSpace(ModbusAddressTextBox.Text))
@@ -949,6 +950,7 @@ namespace IndustrialCommDemo
             _uiState.Modbus.Host = ModbusHostTextBox.Text;
             _uiState.Modbus.Port = ModbusPortTextBox.Text;
             _uiState.Modbus.SlaveId = ModbusSlaveIdTextBox.Text;
+            _uiState.Modbus.ModelKey = _modbusProfile != null ? _modbusProfile.Key : ModbusDeviceProfiles.InovanceEasyPlc.Key;
             _uiState.Modbus.Address = ModbusAddressTextBox.Text;
             _uiState.Modbus.Length = ModbusLengthTextBox.Text;
             _uiState.Modbus.WriteValue = ModbusWriteValueTextBox.Text;
@@ -987,10 +989,44 @@ namespace IndustrialCommDemo
             SetIfNotEmpty(ModbusHostTextBox, state.Host);
             SetIfNotEmpty(ModbusPortTextBox, state.Port);
             SetIfNotEmpty(ModbusSlaveIdTextBox, state.SlaveId);
+            SelectModbusModel(state.ModelKey);
             SetIfNotEmpty(ModbusAddressTextBox, state.Address);
             SetIfNotEmpty(ModbusLengthTextBox, state.Length);
             SetIfNotEmpty(ModbusWriteValueTextBox, state.WriteValue);
             SetIfNotEmpty(ModbusPollIntervalTextBox, state.PollInterval);
+        }
+
+        private IModbusDeviceProfile GetSelectedModbusProfile()
+        {
+            var selectedItem = ModbusModelComboBox.SelectedItem as ComboBoxItem;
+            var key = selectedItem != null ? selectedItem.Tag as string : null;
+            if (string.IsNullOrWhiteSpace(key))
+            {
+                return ModbusDeviceProfiles.InovanceEasyPlc;
+            }
+
+            return ModbusDeviceProfiles.All.FirstOrDefault(profile => string.Equals(profile.Key, key, StringComparison.OrdinalIgnoreCase))
+                ?? ModbusDeviceProfiles.InovanceEasyPlc;
+        }
+
+        private void SelectModbusModel(string modelKey)
+        {
+            if (string.IsNullOrWhiteSpace(modelKey))
+            {
+                ModbusModelComboBox.SelectedIndex = 0;
+                return;
+            }
+
+            foreach (var item in ModbusModelComboBox.Items.OfType<ComboBoxItem>())
+            {
+                if (string.Equals(item.Tag as string, modelKey, StringComparison.OrdinalIgnoreCase))
+                {
+                    ModbusModelComboBox.SelectedItem = item;
+                    return;
+                }
+            }
+
+            ModbusModelComboBox.SelectedIndex = 0;
         }
 
         private void ApplySocketState()

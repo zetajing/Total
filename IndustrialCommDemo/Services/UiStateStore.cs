@@ -189,9 +189,15 @@ namespace IndustrialCommDemo.Services
         public string PollInterval { get; set; }
 
         /// <summary>
-        /// 获取或设置最近使用的地址列表。
+        /// 获取或设置当前选中的 Modbus 设备模型键。
         /// </summary>
         [DataMember(Order = 9)]
+        public string ModelKey { get; set; }
+
+        /// <summary>
+        /// 获取或设置最近使用的地址列表。
+        /// </summary>
+        [DataMember(Order = 10)]
         public List<string> RecentAddresses { get; set; } = new List<string>();
     }
 

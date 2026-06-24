@@ -125,6 +125,15 @@ namespace IndustrialCommSdk.Protocols.Modbus
         public static InovanceEasyPlcModbusProfile InovanceEasyPlc { get; } = new InovanceEasyPlcModbusProfile();
 
         /// <summary>
+        /// 获取三菱 PLC 的 Modbus TCP 设备配置文件实例。
+        /// </summary>
+        /// <value>
+        /// <see cref="MitsubishiModbusTcpProfile"/> 的单例实例，
+        /// 提供三菱常见 D/R/W/M/X/Y/L 地址的 Modbus 映射规则。
+        /// </value>
+        public static MitsubishiModbusTcpProfile MitsubishiModbusTcp { get; } = new MitsubishiModbusTcpProfile();
+
+        /// <summary>
         /// 获取所有已注册的设备配置文件的只读列表。
         /// </summary>
         /// <value>
@@ -139,6 +148,7 @@ namespace IndustrialCommSdk.Protocols.Modbus
         public static IReadOnlyList<IModbusDeviceProfile> All { get; } = new IModbusDeviceProfile[]
         {
             InovanceEasyPlc,
+            MitsubishiModbusTcp,
         };
     }
 }

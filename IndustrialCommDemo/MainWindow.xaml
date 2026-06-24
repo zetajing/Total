@@ -79,7 +79,8 @@
                                               Margin="0,6,0,6"
                                               SelectedIndex="0"
                                               SelectionChanged="ModbusModelComboBox_SelectionChanged">
-                                        <ComboBoxItem Content="汇川 EasyPLC" />
+                                        <ComboBoxItem Content="汇川 EasyPLC" Tag="inovance-easyplc" />
+                                        <ComboBoxItem Content="三菱 Modbus TCP" Tag="mitsubishi-modbus-tcp" />
                                     </ComboBox>
                                     <TextBlock Grid.Row="5" Grid.Column="0" Margin="0,8" VerticalAlignment="Top" Text="示例" />
                                     <TextBlock x:Name="ModbusExampleAddressTextBlock"
