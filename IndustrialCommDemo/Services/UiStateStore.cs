@@ -93,6 +93,7 @@ namespace IndustrialCommDemo.Services
             state.Socket = state.Socket ?? new SocketUiState();
             state.S7 = state.S7 ?? new ProtocolUiState();
             state.Mc = state.Mc ?? new ProtocolUiState();
+            state.Database = state.Database ?? new DatabaseUiState();
 
             state.Modbus.RecentAddresses = state.Modbus.RecentAddresses ?? new List<string>();
             state.S7.RecentAddresses = state.S7.RecentAddresses ?? new List<string>();
@@ -131,6 +132,25 @@ namespace IndustrialCommDemo.Services
         /// </summary>
         [DataMember(Order = 4)]
         public ProtocolUiState Mc { get; set; } = new ProtocolUiState();
+
+        /// <summary>获取或设置可选的 SQL Server 历史存储配置。</summary>
+        [DataMember(Order = 5)]
+        public DatabaseUiState Database { get; set; } = new DatabaseUiState();
+    }
+
+    /// <summary>SQL Server 历史存储页面的非敏感配置。</summary>
+    [DataContract]
+    internal sealed class DatabaseUiState
+    {
+        /// <summary>
+        /// 获取或设置连接字符串。Demo 默认使用 Windows 身份验证；不要在此处保存 SQL 登录密码。
+        /// </summary>
+        [DataMember(Order = 1)]
+        public string ConnectionString { get; set; }
+
+        /// <summary>获取或设置历史表名。</summary>
+        [DataMember(Order = 2)]
+        public string TableName { get; set; }
     }
 
     /// <summary>

@@ -481,6 +481,98 @@
                         </Grid>
                     </ScrollViewer>
                 </TabItem>
+
+                <TabItem Header="数据库">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <Grid Margin="18" MaxWidth="920" HorizontalAlignment="Left">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+
+                            <Border Padding="18" CornerRadius="14" Background="#F8FAFC" BorderBrush="#D8E2EE" BorderThickness="1">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="150" />
+                                        <ColumnDefinition Width="620" />
+                                    </Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                    </Grid.RowDefinitions>
+
+                                    <TextBlock Grid.ColumnSpan="2"
+                                               Margin="0,0,0,12"
+                                               FontSize="18"
+                                               FontWeight="SemiBold"
+                                               Foreground="#17324D"
+                                               Text="SQL Server 历史数据" />
+
+                                    <TextBlock Grid.Row="1" VerticalAlignment="Center" Text="连接字符串" />
+                                    <TextBox x:Name="DatabaseConnectionStringTextBox"
+                                             Grid.Row="1"
+                                             Grid.Column="1"
+                                             Margin="0,6"
+                                             Text="Server=localhost;Database=UpperComputerDb;Integrated Security=True;Encrypt=True;TrustServerCertificate=True;" />
+
+                                    <TextBlock Grid.Row="2" VerticalAlignment="Center" Text="历史表" />
+                                    <TextBox x:Name="DatabaseTableNameTextBox"
+                                             Grid.Row="2"
+                                             Grid.Column="1"
+                                             Margin="0,6"
+                                             Text="dbo.IndustrialDataHistory" />
+
+                                    <TextBlock Grid.Row="3" VerticalAlignment="Center" Text="自动记录" />
+                                    <CheckBox x:Name="DatabaseEnabledCheckBox"
+                                              Grid.Row="3"
+                                              Grid.Column="1"
+                                              Margin="0,10"
+                                              VerticalAlignment="Center"
+                                              Focusable="False"
+                                              IsHitTestVisible="False"
+                                              Content="保存 Modbus / S7 / MC 的读取和轮询结果" />
+                                </Grid>
+                            </Border>
+
+                            <StackPanel Grid.Row="1" Margin="0,16,0,0" Orientation="Horizontal">
+                                <Button Width="150"
+                                        Padding="12,8"
+                                        Background="#2563EB"
+                                        Foreground="White"
+                                        BorderThickness="0"
+                                        Click="DatabaseStartButton_Click"
+                                        Content="测试并启用" />
+                                <Button Width="110"
+                                        Margin="10,0,0,0"
+                                        Padding="12,8"
+                                        Background="#E2E8F0"
+                                        BorderBrush="#CBD5E1"
+                                        Click="DatabaseStopButton_Click"
+                                        Content="停止记录" />
+                            </StackPanel>
+
+                            <Border Grid.Row="2" Margin="0,16,0,0" Padding="14" CornerRadius="12" Background="#EFF6FF" BorderBrush="#BFDBFE" BorderThickness="1">
+                                <StackPanel>
+                                    <TextBlock FontWeight="SemiBold" Foreground="#1E3A5F" Text="状态" />
+                                    <TextBlock x:Name="DatabaseStatusTextBlock"
+                                               Margin="0,6,0,0"
+                                               Foreground="#475569"
+                                               Text="未启用" />
+                                </StackPanel>
+                            </Border>
+
+                            <TextBlock Grid.Row="3"
+                                       Margin="0,14,0,0"
+                                       Foreground="#64748B"
+                                       TextWrapping="Wrap"
+                                       Text="数据库只负责历史记录，不参与实时控制。启用时会自动创建历史表；后台有界队列确保数据库变慢时不会阻塞 PLC 通信。" />
+                        </Grid>
+                    </ScrollViewer>
+                </TabItem>
             </TabControl>
         </Border>
 

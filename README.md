@@ -14,6 +14,7 @@
 - Modbus 连续地址合并批量读取
 - Modbus / S7 真异步读写与连接
 - 统一读写请求/返回模型
+- 可选 SQL Server 历史数据存储（后台有界队列、批量写入、失败重试）
 
 ## 解决方案结构
 
@@ -150,6 +151,55 @@ var subscriptionId = await client.SubscribeAsync(
     default);
 
 await client.UnsubscribeAsync(subscriptionId, default);
+```
+
+## SQL Server 历史数据（可选）
+
+数据库能力是旁路功能，不参与 PLC 实时控制。SDK 使用后台有界队列把通信回调与 SQL Server 写入隔离：
+
+- 数据库变慢或暂时断开时，不阻塞设备读取和轮询
+- 自动创建 `dbo.IndustrialDataHistory` 历史表
+- 按批次事务写入，短暂失败自动重试
+- 默认关闭；不配置数据库时不影响原有 SDK 用法
+
+Demo 的“数据库”页已经预填本机 Windows 身份验证连接字符串：
+
+```text
+Server=localhost;Database=UpperComputerDb;Integrated Security=True;Encrypt=True;TrustServerCertificate=True;
+```
+
+点击“测试并启用”后，Modbus / S7 / MC 的手动读取结果以及 Modbus 轮询结果会写入历史表。
+
+SDK 独立使用示例：
+
+```csharp
+using IndustrialCommSdk.Storage;
+
+var store = new SqlServerIndustrialDataStore(new SqlServerDataStoreOptions
+{
+    ConnectionString = "Server=localhost;Database=UpperComputerDb;Integrated Security=True;Encrypt=True;TrustServerCertificate=True;",
+    TableName = "dbo.IndustrialDataHistory"
+});
+
+using (var recorder = new BufferedIndustrialDataRecorder(store))
+{
+    await recorder.StartAsync(CancellationToken.None);
+
+    var value = await client.ReadAsync(
+        new ReadRequest(client.DeviceId, "D100", DataType.Int16),
+        CancellationToken.None);
+
+    recorder.TryRecord(client.Kind, client.DeviceId, new[] { value });
+    await recorder.StopAsync(CancellationToken.None); // 停止时排空队列
+}
+```
+
+查询最近记录：
+
+```sql
+SELECT TOP (100) *
+FROM dbo.IndustrialDataHistory
+ORDER BY [Timestamp] DESC;
 ```
 
 多地址订阅示例：

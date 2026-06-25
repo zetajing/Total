@@ -18,6 +18,7 @@ using IndustrialCommSdk.Abstractions;
 using IndustrialCommSdk.Protocols.Mc;
 using IndustrialCommSdk.Protocols.Modbus;
 using IndustrialCommSdk.Protocols.S7;
+using IndustrialCommSdk.Storage;
 using CpuType = S7.Net.CpuType;
 
 namespace IndustrialCommDemo
@@ -49,6 +50,8 @@ namespace IndustrialCommDemo
         private IIndustrialClient _mcClient;
         private LineBasedTcpServer _socketServer;
         private LineBasedTcpClient _socketClient;
+        private BufferedIndustrialDataRecorder _databaseRecorder;
+        private int _databaseRecordingEnabled;
 
         public MainWindow()
         {
@@ -133,6 +136,7 @@ namespace IndustrialCommDemo
                     var result = await _modbusClient.ReadAsync(requests[0], CancellationToken.None);
                     ModbusResultTextBlock.Text = FormatDataValue(result);
                     UpdateSubscriptionRows(_modbusSubscriptionRows, new[] { result });
+                    QueueDatabaseValues(_modbusClient, new[] { result });
                 }
                 else
                 {
@@ -144,6 +148,7 @@ namespace IndustrialCommDemo
                         result.Values.Count(item => item.Quality == QualityStatus.Good),
                         result.Values.Count(item => item.Quality != QualityStatus.Good));
                     UpdateSubscriptionRows(_modbusSubscriptionRows, result.Values);
+                    QueueDatabaseValues(_modbusClient, result.Values);
                 }
 
                 RememberRecentAddresses(_uiState.Modbus.RecentAddresses, requests.Select(item => item.Address));
@@ -512,6 +517,7 @@ namespace IndustrialCommDemo
                     CancellationToken.None);
 
                 S7ResultTextBlock.Text = FormatDataValue(result);
+                QueueDatabaseValues(_s7Client, new[] { result });
                 RememberRecentAddress(_uiState.S7.RecentAddresses, S7AddressTextBox.Text);
                 RefreshAddressHistory(S7AddressHistoryComboBox, _uiState.S7.RecentAddresses);
                 SetHeaderStatus("S7 读取完成", Brushes.LightGreen);
@@ -603,6 +609,7 @@ namespace IndustrialCommDemo
                     CancellationToken.None);
 
                 McResultTextBlock.Text = FormatDataValue(result);
+                QueueDatabaseValues(_mcClient, new[] { result });
                 RememberRecentAddress(_uiState.Mc.RecentAddresses, McAddressTextBox.Text);
                 RefreshAddressHistory(McAddressHistoryComboBox, _uiState.Mc.RecentAddresses);
                 SetHeaderStatus("MC 读取完成", Brushes.LightGreen);
@@ -637,6 +644,112 @@ namespace IndustrialCommDemo
             }
         }
 
+        private async void DatabaseStartButton_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                await StopDatabaseRecorderAsync();
+
+                var options = new SqlServerDataStoreOptions
+                {
+                    ConnectionString = RequireText(DatabaseConnectionStringTextBox.Text, "数据库连接字符串"),
+                    TableName = RequireText(DatabaseTableNameTextBox.Text, "历史表名"),
+                    CommandTimeoutSeconds = 15,
+                };
+                var store = new SqlServerIndustrialDataStore(options);
+                var recorder = new BufferedIndustrialDataRecorder(
+                    store,
+                    new BufferedDataRecorderOptions
+                    {
+                        BatchSize = 100,
+                        QueueCapacity = 1000,
+                        RetryCount = 2,
+                    },
+                    _logger);
+
+                try
+                {
+                    await recorder.StartAsync(CancellationToken.None);
+                }
+                catch
+                {
+                    recorder.Dispose();
+                    throw;
+                }
+
+                _databaseRecorder = recorder;
+                Interlocked.Exchange(ref _databaseRecordingEnabled, 1);
+                DatabaseEnabledCheckBox.IsChecked = true;
+                DatabaseStatusTextBlock.Text = "已连接，正在后台记录读取和轮询数据。";
+                DatabaseStatusTextBlock.Foreground = Brushes.ForestGreen;
+                SetHeaderStatus("数据库记录已启用", Brushes.LightGreen);
+                _logger.Info("SQL Server 历史数据记录已启用，数据表=" + options.TableName + "。");
+            }
+            catch (Exception ex)
+            {
+                DatabaseEnabledCheckBox.IsChecked = false;
+                Interlocked.Exchange(ref _databaseRecordingEnabled, 0);
+                DatabaseStatusTextBlock.Text = "连接失败：" + ex.Message;
+                DatabaseStatusTextBlock.Foreground = Brushes.IndianRed;
+                HandleActionError("数据库连接失败。", ex, true);
+            }
+        }
+
+        private async void DatabaseStopButton_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                await StopDatabaseRecorderAsync();
+                DatabaseEnabledCheckBox.IsChecked = false;
+                DatabaseStatusTextBlock.Text = "已停止";
+                DatabaseStatusTextBlock.Foreground = Brushes.DarkGoldenrod;
+                _logger.Info("SQL Server 历史数据记录已停止。");
+            }
+            catch (Exception ex)
+            {
+                HandleActionError("停止数据库记录失败。", ex, true);
+            }
+        }
+
+        private void QueueDatabaseValues(IIndustrialClient client, IReadOnlyCollection<DataValue> values)
+        {
+            var recorder = _databaseRecorder;
+            if (recorder == null || Volatile.Read(ref _databaseRecordingEnabled) == 0 || client == null || values == null || values.Count == 0)
+            {
+                return;
+            }
+
+            try
+            {
+                recorder.TryRecord(client.Kind, client.DeviceId, values);
+            }
+            catch (Exception ex)
+            {
+                // 写库只是旁路能力；即使数据转换或队列操作异常，也不能反向破坏通信回调。
+                _logger.Error("采集结果加入数据库队列失败。", ex);
+            }
+        }
+
+        private async Task StopDatabaseRecorderAsync()
+        {
+            var recorder = _databaseRecorder;
+            _databaseRecorder = null;
+            Interlocked.Exchange(ref _databaseRecordingEnabled, 0);
+            if (recorder == null)
+            {
+                return;
+            }
+
+            try
+            {
+                await recorder.StopAsync(CancellationToken.None);
+            }
+            finally
+            {
+                recorder.Dispose();
+            }
+        }
+
         private void ClearLogButton_Click(object sender, RoutedEventArgs e)
         {
             LogTextBox.Clear();
@@ -651,12 +764,14 @@ namespace IndustrialCommDemo
             await ResetMcClientAsync();
             await ResetSocketClientAsync();
             await ResetSocketServerAsync();
+            await StopDatabaseRecorderAsync();
             _logger.Dispose();
             base.OnClosed(e);
         }
 
         private void OnModbusSubscriptionReceived(object sender, SubscriptionEvent e)
         {
+            QueueDatabaseValues(_modbusClient, e.Values);
             RunOnUi(() =>
             {
                 ModbusResultTextBlock.Text = string.Join(Environment.NewLine, e.Values.Select(FormatDataValue).ToArray());
@@ -958,6 +1073,7 @@ namespace IndustrialCommDemo
             ApplySocketState();
             ApplyS7State();
             ApplyMcState();
+            ApplyDatabaseState();
         }
 
         private void SaveUiState()
@@ -999,6 +1115,9 @@ namespace IndustrialCommDemo
             _uiState.Mc.Address = McAddressTextBox.Text;
             _uiState.Mc.Length = McLengthTextBox.Text;
             _uiState.Mc.WriteValue = McWriteValueTextBox.Text;
+
+            _uiState.Database.ConnectionString = DatabaseConnectionStringTextBox.Text;
+            _uiState.Database.TableName = DatabaseTableNameTextBox.Text;
 
             _uiStateStore.Save(_uiState);
         }
@@ -1083,6 +1202,15 @@ namespace IndustrialCommDemo
             SetIfNotEmpty(McAddressTextBox, state.Address);
             SetIfNotEmpty(McLengthTextBox, state.Length);
             SetIfNotEmpty(McWriteValueTextBox, state.WriteValue);
+        }
+
+        private void ApplyDatabaseState()
+        {
+            var state = _uiState.Database ?? new DatabaseUiState();
+            SetIfNotEmpty(DatabaseConnectionStringTextBox, state.ConnectionString);
+            SetIfNotEmpty(DatabaseTableNameTextBox, state.TableName);
+            DatabaseEnabledCheckBox.IsChecked = false;
+            DatabaseStatusTextBlock.Text = "未启用";
         }
 
         private void RefreshAddressHistoryCombos()
