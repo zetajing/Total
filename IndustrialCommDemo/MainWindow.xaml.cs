@@ -37,12 +37,15 @@ namespace IndustrialCommDemo
             DataType.ByteArray,
         };
         private const int MaxRecentAddressCount = 12;
+        private const int MaxDatabaseHistoryRowCount = 500;
+        private const int DatabaseHistoryQueryBatchSize = 200;
         private ModbusAddressParser _modbusAddressParser = new ModbusAddressParser(ModbusDeviceProfiles.InovanceEasyPlc);
         private IModbusDeviceProfile _modbusProfile = ModbusDeviceProfiles.InovanceEasyPlc;
         private readonly AppLogger _logger;
         private readonly UiStateStore _uiStateStore;
         private DemoUiState _uiState;
         private readonly ObservableCollection<SubscriptionDisplayRow> _modbusSubscriptionRows = new ObservableCollection<SubscriptionDisplayRow>();
+        private readonly ObservableCollection<DatabaseHistoryDisplayRow> _databaseHistoryRows = new ObservableCollection<DatabaseHistoryDisplayRow>();
 
         private IIndustrialClient _modbusClient;
         private string _modbusSubscriptionId;
@@ -50,7 +53,14 @@ namespace IndustrialCommDemo
         private IIndustrialClient _mcClient;
         private LineBasedTcpServer _socketServer;
         private LineBasedTcpClient _socketClient;
+        // 数据库记录器仅在用户点击“测试并启用”且连接成功后存在。
+        // 它内部使用后台队列，不会在 PLC 读取回调中直接执行 SQL。
         private BufferedIndustrialDataRecorder _databaseRecorder;
+        private CancellationTokenSource _databaseHistoryCancellation;
+        private Task _databaseHistoryTask;
+
+        // Modbus 轮询回调可能运行在非 UI 线程，因此不能通过读取 WPF CheckBox 判断状态。
+        // 使用 Interlocked/Volatile 管理这个整数标志，可以安全地跨线程读写启用状态。
         private int _databaseRecordingEnabled;
 
         public MainWindow()
@@ -70,6 +80,7 @@ namespace IndustrialCommDemo
             UpdateAllStatuses();
             RefreshAddressHistoryCombos();
             ModbusSubscriptionDataGrid.ItemsSource = _modbusSubscriptionRows;
+            DatabaseHistoryDataGrid.ItemsSource = _databaseHistoryRows;
 
             SetHeaderStatus("就绪", Brushes.LightGreen);
             _logger.Info("工业通讯演示已就绪。");
@@ -136,6 +147,7 @@ namespace IndustrialCommDemo
                     var result = await _modbusClient.ReadAsync(requests[0], CancellationToken.None);
                     ModbusResultTextBlock.Text = FormatDataValue(result);
                     UpdateSubscriptionRows(_modbusSubscriptionRows, new[] { result });
+                    // 手动读取和轮询读取走同一条后台写库通道；数据库未启用时该方法会立即返回。
                     QueueDatabaseValues(_modbusClient, new[] { result });
                 }
                 else
@@ -644,12 +656,19 @@ namespace IndustrialCommDemo
             }
         }
 
+        /// <summary>
+        /// “测试并启用”按钮事件。
+        /// 先停止旧记录器，再验证当前连接字符串、创建历史表，最后才把记录状态切换为启用。
+        /// async void 仅用于 WPF 事件处理程序；普通 SDK 方法应返回 Task，方便调用方等待和捕获异常。
+        /// </summary>
         private async void DatabaseStartButton_Click(object sender, RoutedEventArgs e)
         {
             try
             {
+                // 用户可能修改连接字符串后再次点击按钮。先排空并释放旧实例，避免两个消费者同时写库。
                 await StopDatabaseRecorderAsync();
 
+                // UI 文本先经过非空校验，再交给 SDK 配置类继续校验表名和超时。
                 var options = new SqlServerDataStoreOptions
                 {
                     ConnectionString = RequireText(DatabaseConnectionStringTextBox.Text, "数据库连接字符串"),
@@ -669,16 +688,24 @@ namespace IndustrialCommDemo
 
                 try
                 {
+                    // StartAsync 会真实连接数据库，并以幂等方式创建历史表。
                     await recorder.StartAsync(CancellationToken.None);
                 }
                 catch
                 {
+                    // 初始化失败时记录器尚未交给字段管理，因此必须在这里主动释放。
                     recorder.Dispose();
                     throw;
                 }
 
+                // 只有上面的数据库初始化完整成功后，才发布记录器引用和启用标志。
                 _databaseRecorder = recorder;
                 Interlocked.Exchange(ref _databaseRecordingEnabled, 1);
+                _databaseHistoryRows.Clear();
+                DatabaseHistoryStatusTextBlock.Text = "正在读取最近的历史数据...";
+                DatabaseHistoryStatusTextBlock.Foreground = Brushes.SteelBlue;
+                _databaseHistoryCancellation = new CancellationTokenSource();
+                _databaseHistoryTask = RefreshDatabaseHistoryAsync(store, _databaseHistoryCancellation.Token);
                 DatabaseEnabledCheckBox.IsChecked = true;
                 DatabaseStatusTextBlock.Text = "已连接，正在后台记录读取和轮询数据。";
                 DatabaseStatusTextBlock.Foreground = Brushes.ForestGreen;
@@ -687,6 +714,7 @@ namespace IndustrialCommDemo
             }
             catch (Exception ex)
             {
+                // 数据库启用失败只更新数据库状态，不影响已经建立的 PLC 连接。
                 DatabaseEnabledCheckBox.IsChecked = false;
                 Interlocked.Exchange(ref _databaseRecordingEnabled, 0);
                 DatabaseStatusTextBlock.Text = "连接失败：" + ex.Message;
@@ -695,6 +723,9 @@ namespace IndustrialCommDemo
             }
         }
 
+        /// <summary>
+        /// “停止记录”按钮事件。停止时会等待已经进入队列的数据写完，再释放连接相关资源。
+        /// </summary>
         private async void DatabaseStopButton_Click(object sender, RoutedEventArgs e)
         {
             try
@@ -703,6 +734,11 @@ namespace IndustrialCommDemo
                 DatabaseEnabledCheckBox.IsChecked = false;
                 DatabaseStatusTextBlock.Text = "已停止";
                 DatabaseStatusTextBlock.Foreground = Brushes.DarkGoldenrod;
+                DatabaseHistoryStatusTextBlock.Text = string.Format(
+                    CultureInfo.InvariantCulture,
+                    "刷新已停止，保留当前 {0} 条",
+                    _databaseHistoryRows.Count);
+                DatabaseHistoryStatusTextBlock.Foreground = Brushes.DarkGoldenrod;
                 _logger.Info("SQL Server 历史数据记录已停止。");
             }
             catch (Exception ex)
@@ -711,8 +747,15 @@ namespace IndustrialCommDemo
             }
         }
 
+        /// <summary>
+        /// 把一次设备读取结果交给后台数据库记录器。
+        /// 此方法会被 UI 线程和 Modbus 后台轮询线程共同调用，所以只能执行线程安全、非阻塞操作。
+        /// </summary>
+        /// <param name="client">产生这批数据的工业通信客户端，用于取得协议和设备 ID。</param>
+        /// <param name="values">本次读取产生的一个或多个数据值。</param>
         private void QueueDatabaseValues(IIndustrialClient client, IReadOnlyCollection<DataValue> values)
         {
+            // 先把字段复制到局部变量，避免另一线程停止记录器后字段在多次访问之间发生变化。
             var recorder = _databaseRecorder;
             if (recorder == null || Volatile.Read(ref _databaseRecordingEnabled) == 0 || client == null || values == null || values.Count == 0)
             {
@@ -721,6 +764,7 @@ namespace IndustrialCommDemo
 
             try
             {
+                // TryRecord 只复制数据并尝试入队，不会在当前线程打开数据库连接。
                 recorder.TryRecord(client.Kind, client.DeviceId, values);
             }
             catch (Exception ex)
@@ -730,11 +774,38 @@ namespace IndustrialCommDemo
             }
         }
 
+        /// <summary>
+        /// 统一停止并释放数据库记录器。
+        /// 窗口关闭、用户点击停止以及重新连接数据库都会复用此方法，避免遗漏释放逻辑。
+        /// </summary>
         private async Task StopDatabaseRecorderAsync()
         {
+            // 先撤销共享引用和启用标志，阻止新的 PLC 回调继续入队。
             var recorder = _databaseRecorder;
             _databaseRecorder = null;
             Interlocked.Exchange(ref _databaseRecordingEnabled, 0);
+
+            // 查询循环必须先于存储对象停止，避免它在记录器释放存储后继续发起 SQL 查询。
+            var historyCancellation = _databaseHistoryCancellation;
+            var historyTask = _databaseHistoryTask;
+            _databaseHistoryCancellation = null;
+            _databaseHistoryTask = null;
+            if (historyCancellation != null)
+            {
+                historyCancellation.Cancel();
+                try
+                {
+                    if (historyTask != null)
+                    {
+                        await historyTask;
+                    }
+                }
+                finally
+                {
+                    historyCancellation.Dispose();
+                }
+            }
+
             if (recorder == null)
             {
                 return;
@@ -742,12 +813,122 @@ namespace IndustrialCommDemo
 
             try
             {
+                // StopAsync 会调用 CompleteAdding，并等待队列中已有数据全部处理完。
                 await recorder.StopAsync(CancellationToken.None);
             }
             finally
             {
+                // 即使停止过程抛出异常，仍要释放队列、取消令牌和具体数据存储。
                 recorder.Dispose();
             }
+        }
+
+        private async Task RefreshDatabaseHistoryAsync(SqlServerIndustrialDataStore store, CancellationToken cancellationToken)
+        {
+            var lastId = 0L;
+            var initialLoad = true;
+            var errorLogged = false;
+
+            try
+            {
+                while (true)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    try
+                    {
+                        var records = initialLoad
+                            ? await store.ReadLatestAsync(MaxDatabaseHistoryRowCount, cancellationToken).ConfigureAwait(false)
+                            : await store.ReadAfterAsync(lastId, DatabaseHistoryQueryBatchSize, cancellationToken).ConfigureAwait(false);
+
+                        if (initialLoad)
+                        {
+                            initialLoad = false;
+                            if (records.Count > 0)
+                            {
+                                lastId = records.Max(item => item.Id);
+                            }
+
+                            RunOnUi(() => ReplaceDatabaseHistoryRows(records));
+                        }
+                        else if (records.Count > 0)
+                        {
+                            lastId = records[records.Count - 1].Id;
+                            RunOnUi(() => PrependDatabaseHistoryRows(records));
+                        }
+                        else
+                        {
+                            RunOnUi(UpdateDatabaseHistoryStatus);
+                        }
+
+                        errorLogged = false;
+                        // 满批说明数据库中可能还有未读取数据，立即继续追赶；否则按一秒频率刷新。
+                        if (records.Count < DatabaseHistoryQueryBatchSize)
+                        {
+                            await Task.Delay(TimeSpan.FromSeconds(1), cancellationToken).ConfigureAwait(false);
+                        }
+                    }
+                    catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                    {
+                        throw;
+                    }
+                    catch (Exception ex)
+                    {
+                        if (!errorLogged)
+                        {
+                            _logger.Error("数据库实时表格刷新失败，将自动重试。", ex);
+                            errorLogged = true;
+                        }
+
+                        RunOnUi(() =>
+                        {
+                            DatabaseHistoryStatusTextBlock.Text = "刷新失败，将自动重试：" + ex.Message;
+                            DatabaseHistoryStatusTextBlock.Foreground = Brushes.IndianRed;
+                        });
+                        await Task.Delay(TimeSpan.FromSeconds(2), cancellationToken).ConfigureAwait(false);
+                    }
+                }
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                // 用户停止记录或关闭窗口时属于正常结束。
+            }
+        }
+
+        private void ReplaceDatabaseHistoryRows(IReadOnlyList<IndustrialDataRecord> records)
+        {
+            _databaseHistoryRows.Clear();
+            foreach (var record in records)
+            {
+                _databaseHistoryRows.Add(DatabaseHistoryDisplayRow.FromRecord(record));
+            }
+
+            UpdateDatabaseHistoryStatus();
+        }
+
+        private void PrependDatabaseHistoryRows(IReadOnlyList<IndustrialDataRecord> records)
+        {
+            // 增量查询按 Id 升序返回，逐条插入首行后自然形成“最新记录在最上方”。
+            foreach (var record in records)
+            {
+                _databaseHistoryRows.Insert(0, DatabaseHistoryDisplayRow.FromRecord(record));
+            }
+
+            while (_databaseHistoryRows.Count > MaxDatabaseHistoryRowCount)
+            {
+                _databaseHistoryRows.RemoveAt(_databaseHistoryRows.Count - 1);
+            }
+
+            UpdateDatabaseHistoryStatus();
+        }
+
+        private void UpdateDatabaseHistoryStatus()
+        {
+            DatabaseHistoryStatusTextBlock.Text = string.Format(
+                CultureInfo.InvariantCulture,
+                "已显示 {0} 条 · {1}",
+                _databaseHistoryRows.Count,
+                DateTime.Now.ToString("HH:mm:ss", CultureInfo.InvariantCulture));
+            DatabaseHistoryStatusTextBlock.Foreground = Brushes.ForestGreen;
         }
 
         private void ClearLogButton_Click(object sender, RoutedEventArgs e)
@@ -758,12 +939,14 @@ namespace IndustrialCommDemo
 
         protected override async void OnClosed(EventArgs e)
         {
+            // 先保存非敏感 UI 配置，再断开设备，使通信回调不再产生新的数据库记录。
             SaveUiState();
             await ResetModbusClientAsync();
             await ResetS7ClientAsync();
             await ResetMcClientAsync();
             await ResetSocketClientAsync();
             await ResetSocketServerAsync();
+            // 设备都停止后再排空写库队列，保证退出前尽量保存最后一批采集值。
             await StopDatabaseRecorderAsync();
             _logger.Dispose();
             base.OnClosed(e);
@@ -771,6 +954,8 @@ namespace IndustrialCommDemo
 
         private void OnModbusSubscriptionReceived(object sender, SubscriptionEvent e)
         {
+            // 数据先从轮询线程快速进入后台数据库队列，再切换到 UI 线程刷新表格。
+            // 如果反过来在 UI 委托中执行数据库操作，数据库变慢会直接造成界面卡顿。
             QueueDatabaseValues(_modbusClient, e.Values);
             RunOnUi(() =>
             {
@@ -1207,6 +1392,9 @@ namespace IndustrialCommDemo
         private void ApplyDatabaseState()
         {
             var state = _uiState.Database ?? new DatabaseUiState();
+
+            // 只恢复连接字符串和表名，不自动连接数据库。
+            // 每次启动都由用户点击“测试并启用”，可以明确看到本次连接是否成功。
             SetIfNotEmpty(DatabaseConnectionStringTextBox, state.ConnectionString);
             SetIfNotEmpty(DatabaseTableNameTextBox, state.TableName);
             DatabaseEnabledCheckBox.IsChecked = false;
@@ -2189,6 +2377,35 @@ namespace IndustrialCommDemo
             public string QualityText { get; set; }
             public string TimestampText { get; set; }
             public string ErrorMessage { get; set; }
+        }
+
+        private sealed class DatabaseHistoryDisplayRow
+        {
+            public long Id { get; set; }
+            public string Protocol { get; set; }
+            public string DeviceId { get; set; }
+            public string Address { get; set; }
+            public string DataType { get; set; }
+            public string ValueText { get; set; }
+            public string Quality { get; set; }
+            public string Timestamp { get; set; }
+            public string ErrorMessage { get; set; }
+
+            public static DatabaseHistoryDisplayRow FromRecord(IndustrialDataRecord record)
+            {
+                return new DatabaseHistoryDisplayRow
+                {
+                    Id = record.Id,
+                    Protocol = record.Protocol.ToString(),
+                    DeviceId = record.DeviceId,
+                    Address = record.Address,
+                    DataType = record.DataType.ToString(),
+                    ValueText = record.ValueText ?? string.Empty,
+                    Quality = FormatQualityLabel(record.Quality),
+                    Timestamp = record.Timestamp.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss.fff", CultureInfo.InvariantCulture),
+                    ErrorMessage = record.ErrorMessage ?? string.Empty,
+                };
+            }
         }
 
         private sealed class ModbusAddressInputAnalysis

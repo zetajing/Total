@@ -9,9 +9,17 @@ using NUnit.Framework;
 
 namespace IndustrialCommSdk.Tests
 {
+    /// <summary>
+    /// 数据库存储功能的单元测试。
+    /// 除真实 SQL Server 冒烟验证外，普通单元测试不应依赖开发电脑上是否安装数据库，
+    /// 因此后台记录器测试使用内存中的 CapturingDataStore 替代 SQL Server。
+    /// </summary>
     [TestFixture]
     public sealed class DatabaseStorageTests
     {
+        /// <summary>
+        /// 验证数值使用固定区域格式保存，并确认原始字节数组是副本而不是共享引用。
+        /// </summary>
         [Test]
         public void DataRecord_UsesInvariantValueAndCopiesRawBytes()
         {
@@ -26,6 +34,7 @@ namespace IndustrialCommSdk.Tests
                 null);
 
             var record = IndustrialDataRecord.FromDataValue(ProtocolKind.ModbusTcp, "device-1", value);
+            // 修改输入数组。如果实现正确复制了数据，record.RawData 不会随之变化。
             raw[0] = 0;
 
             Assert.That(record.Protocol, Is.EqualTo(ProtocolKind.ModbusTcp));
@@ -35,6 +44,9 @@ namespace IndustrialCommSdk.Tests
             Assert.That(record.RawData, Is.EqualTo(new byte[] { 0x12, 0x34 }));
         }
 
+        /// <summary>
+        /// 验证危险表名会在执行 SQL 之前被拒绝，防止通过表名注入额外 SQL 语句。
+        /// </summary>
         [Test]
         public void SqlServerStore_RejectsUnsafeTableName()
         {
@@ -47,6 +59,24 @@ namespace IndustrialCommSdk.Tests
             Assert.Throws<InvalidOperationException>(() => new SqlServerIndustrialDataStore(options));
         }
 
+        [Test]
+        public void SqlServerStore_RejectsInvalidHistoryQueryArgumentsBeforeConnecting()
+        {
+            var store = new SqlServerIndustrialDataStore(new SqlServerDataStoreOptions
+            {
+                ConnectionString = "Server=localhost;Database=UpperComputerDb;Integrated Security=True;",
+                TableName = "dbo.IndustrialDataHistory",
+            });
+
+            Assert.ThrowsAsync<ArgumentOutOfRangeException>(async () =>
+                await store.ReadLatestAsync(0, CancellationToken.None));
+            Assert.Throws<ArgumentOutOfRangeException>(() =>
+                store.ReadAfterAsync(-1, 100, CancellationToken.None));
+        }
+
+        /// <summary>
+        /// 验证停止记录器时会排空队列：即使刚入队就停止，该条记录仍应到达存储实现。
+        /// </summary>
         [Test]
         public async Task BufferedRecorder_DrainsQueuedValuesWhenStopped()
         {
@@ -74,6 +104,10 @@ namespace IndustrialCommSdk.Tests
             Assert.That(store.Records.Single().ValueText, Is.EqualTo("42"));
         }
 
+        /// <summary>
+        /// 仅用于测试的内存存储。它实现与 SQL Server 相同的接口，但把结果放入 List，
+        /// 从而让测试快速、可重复，并且不需要外部数据库环境。
+        /// </summary>
         private sealed class CapturingDataStore : IIndustrialDataStore
         {
             public bool Initialized { get; private set; }

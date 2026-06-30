@@ -93,6 +93,8 @@ namespace IndustrialCommDemo.Services
             state.Socket = state.Socket ?? new SocketUiState();
             state.S7 = state.S7 ?? new ProtocolUiState();
             state.Mc = state.Mc ?? new ProtocolUiState();
+            // 旧版本 ui-state.json 中没有 Database 字段。
+            // 这里补默认对象，使升级后的 Demo 可以直接读取旧配置而不会出现空引用。
             state.Database = state.Database ?? new DatabaseUiState();
 
             state.Modbus.RecentAddresses = state.Modbus.RecentAddresses ?? new List<string>();
@@ -138,7 +140,14 @@ namespace IndustrialCommDemo.Services
         public DatabaseUiState Database { get; set; } = new DatabaseUiState();
     }
 
-    /// <summary>SQL Server 历史存储页面的非敏感配置。</summary>
+    /// <summary>
+    /// SQL Server 历史存储页面的非敏感配置。
+    /// <para>
+    /// 这里只保存连接字符串和表名，不保存“当前已连接”这种运行时状态。
+    /// Demo 默认使用 Windows 身份验证；如果改成 SQL 用户名/密码，密码也会成为连接字符串的一部分，
+    /// 因此生产环境应改用受保护的配置系统，而不是直接写入本地 JSON。
+    /// </para>
+    /// </summary>
     [DataContract]
     internal sealed class DatabaseUiState
     {
