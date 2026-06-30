@@ -170,6 +170,8 @@ Server=localhost;Database=UpperComputerDb;Integrated Security=True;Encrypt=True;
 
 点击“测试并启用”后，Modbus / S7 / MC 的手动读取结果以及 Modbus 轮询结果会写入历史表。
 
+Demo 数据库页还提供：实时流水、按设备和地址聚合的最新值、组合筛选与分页、质量统计、分批 CSV 导出、带数量确认的条件删除，以及 7/30/90/180 天保留期清理。SDK 的 `IIndustrialHistoryManagementStore` 提供分页、统计、筛选候选和最新值查询；`BufferedIndustrialDataRecorder.GetSnapshot()` 可读取队列、写入、丢弃和失败指标。
+
 SDK 独立使用示例：
 
 ```csharp

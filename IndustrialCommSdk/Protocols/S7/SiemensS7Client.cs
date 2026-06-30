@@ -200,10 +200,16 @@ namespace IndustrialCommSdk.Protocols.S7
         /// <param name="parser">可选的 S7 地址解析器实例。</param>
         /// <exception cref="ArgumentNullException"><paramref name="options"/> 为 null 时引发。</exception>
         public SiemensS7Client(SiemensS7ClientOptions options, IIndustrialLogger logger = null, IPollingScheduler pollingScheduler = null, S7AddressParser parser = null)
-            : base(options.DeviceId, ProtocolKind.SiemensS7, pollingScheduler ?? new PollingScheduler(logger), logger ?? NullIndustrialLogger.Instance)
+            : base(GetDeviceId(options), ProtocolKind.SiemensS7, pollingScheduler ?? new PollingScheduler(logger), logger ?? NullIndustrialLogger.Instance)
         {
             _options = options ?? throw new ArgumentNullException(nameof(options));
             _parser = parser ?? new S7AddressParser();
+        }
+
+        private static string GetDeviceId(SiemensS7ClientOptions options)
+        {
+            if (options == null) throw new ArgumentNullException(nameof(options));
+            return options.DeviceId;
         }
 
         /// <summary>

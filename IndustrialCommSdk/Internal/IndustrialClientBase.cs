@@ -4,6 +4,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using IndustrialCommSdk.Abstractions;
 using IndustrialCommSdk.Diagnostics;
+using IndustrialCommSdk.Exceptions;
 
 namespace IndustrialCommSdk.Internal
 {
@@ -109,9 +110,25 @@ namespace IndustrialCommSdk.Internal
             await _operationLock.WaitAsync(cancellationToken).ConfigureAwait(false);
             try
             {
-                var value = await ReadCoreAsync(request, cancellationToken).ConfigureAwait(false);
-                RecordSuccess();
-                return value;
+                using (var operationCts = CreateOperationCancellation(request.Timeout, cancellationToken))
+                {
+                    try
+                    {
+                        var value = await ReadCoreAsync(request, operationCts.Token).ConfigureAwait(false);
+                        RecordSuccess();
+                        return value;
+                    }
+                    catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested && request.Timeout.HasValue)
+                    {
+                        var timeoutException = new IndustrialTimeoutException("Industrial read operation timed out.");
+                        RecordFailure(timeoutException);
+                        return new DataValue(request.Address, request.DataType, null, null, QualityStatus.Bad, DateTimeOffset.UtcNow, timeoutException.Message);
+                    }
+                }
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
             }
             catch (Exception ex)
             {
@@ -162,8 +179,18 @@ namespace IndustrialCommSdk.Internal
             await _operationLock.WaitAsync(cancellationToken).ConfigureAwait(false);
             try
             {
-                await WriteCoreAsync(request, cancellationToken).ConfigureAwait(false);
-                RecordSuccess();
+                using (var operationCts = CreateOperationCancellation(request.Timeout, cancellationToken))
+                {
+                    try
+                    {
+                        await WriteCoreAsync(request, operationCts.Token).ConfigureAwait(false);
+                        RecordSuccess();
+                    }
+                    catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested && request.Timeout.HasValue)
+                    {
+                        throw new IndustrialTimeoutException("Industrial write operation timed out.");
+                    }
+                }
             }
             catch (Exception ex)
             {
@@ -326,6 +353,16 @@ namespace IndustrialCommSdk.Internal
         {
             foreach (var request in requests)
                 await WriteCoreAsync(request, cancellationToken).ConfigureAwait(false);
+        }
+
+        private static CancellationTokenSource CreateOperationCancellation(TimeSpan? timeout, CancellationToken cancellationToken)
+        {
+            var source = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            if (timeout.HasValue)
+            {
+                source.CancelAfter(timeout.Value);
+            }
+            return source;
         }
 
         /// <summary>记录一次成功操作：更新最后成功时间、重置连续失败计数和错误消息，并将状态设为已连接。</summary>

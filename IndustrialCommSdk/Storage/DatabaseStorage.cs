@@ -98,8 +98,10 @@ namespace IndustrialCommSdk.Storage
         public string DeviceId { get; set; }
         /// <summary>按协议地址过滤（精确匹配，例如 "D100" 或 "DB1.DBD0"）。</summary>
         public string Address { get; set; }
+        public HistoryAddressMatchMode AddressMatchMode { get; set; } = HistoryAddressMatchMode.Exact;
         /// <summary>按协议类型过滤。</summary>
         public ProtocolKind? Protocol { get; set; }
+        public DataType? DataType { get; set; }
         /// <summary>只查询此时间之后的记录（含边界）。</summary>
         public DateTimeOffset? FromTime { get; set; }
         /// <summary>只查询此时间之前的记录（含边界）。</summary>
@@ -108,6 +110,48 @@ namespace IndustrialCommSdk.Storage
         public QualityStatus? Quality { get; set; }
         /// <summary>最大返回行数，默认 1000。</summary>
         public int MaxRows { get; set; } = 1000;
+    }
+
+    public enum HistoryAddressMatchMode { Exact, Contains }
+
+    public sealed class HistoryPageRequest
+    {
+        public HistoryQueryFilter Filter { get; set; } = new HistoryQueryFilter();
+        public int PageNumber { get; set; } = 1;
+        public int PageSize { get; set; } = 100;
+    }
+
+    public sealed class HistoryPageResult
+    {
+        public IReadOnlyList<IndustrialDataRecord> Records { get; set; }
+        public long TotalCount { get; set; }
+        public int PageNumber { get; set; }
+        public int PageSize { get; set; }
+    }
+
+    public sealed class HistorySummary
+    {
+        public long TotalCount { get; set; }
+        public long GoodCount { get; set; }
+        public long BadCount { get; set; }
+        public long StaleCount { get; set; }
+        public long UnknownCount { get; set; }
+        public DateTimeOffset? EarliestTimestamp { get; set; }
+        public DateTimeOffset? LatestTimestamp { get; set; }
+    }
+
+    public sealed class HistoryFilterOptions
+    {
+        public IReadOnlyList<string> DeviceIds { get; set; }
+        public IReadOnlyList<string> Addresses { get; set; }
+    }
+
+    public interface IIndustrialHistoryManagementStore
+    {
+        Task<HistoryPageResult> QueryPageAsync(HistoryPageRequest request, CancellationToken cancellationToken);
+        Task<HistorySummary> GetSummaryAsync(HistoryQueryFilter filter, CancellationToken cancellationToken);
+        Task<HistoryFilterOptions> GetFilterOptionsAsync(string deviceId, int maxItems, CancellationToken cancellationToken);
+        Task<IReadOnlyList<IndustrialDataRecord>> GetLatestValuesAsync(HistoryQueryFilter filter, int maxRows, CancellationToken cancellationToken);
     }
 
     /// <summary>
@@ -189,7 +233,7 @@ namespace IndustrialCommSdk.Storage
     /// 也不需要额外携带 Entity Framework 运行组件。
     /// </para>
     /// </summary>
-    public sealed class SqlServerIndustrialDataStore : IIndustrialDataStore
+    public sealed class SqlServerIndustrialDataStore : IIndustrialDataStore, IIndustrialHistoryManagementStore
     {
         private readonly SqlServerDataStoreOptions _options;
         private readonly SqlTableIdentifier _table;
@@ -337,6 +381,7 @@ ORDER BY [Id] ASC;",
         public async Task<IReadOnlyList<IndustrialDataRecord>> QueryAsync(HistoryQueryFilter filter, CancellationToken cancellationToken)
         {
             if (filter == null) throw new ArgumentNullException(nameof(filter));
+            ValidateFilter(filter);
             if (filter.MaxRows <= 0 || filter.MaxRows > 10000)
             {
                 throw new ArgumentOutOfRangeException(nameof(filter), "MaxRows 必须在 1 到 10000 之间。");
@@ -345,8 +390,9 @@ ORDER BY [Id] ASC;",
             // 动态构建 WHERE 子句，每个条件使用参数化查询防止 SQL 注入。
             var conditions = new List<string>();
             if (!string.IsNullOrWhiteSpace(filter.DeviceId)) conditions.Add("[DeviceId] = @DeviceId");
-            if (!string.IsNullOrWhiteSpace(filter.Address)) conditions.Add("[Address] = @Address");
+            if (!string.IsNullOrWhiteSpace(filter.Address)) conditions.Add(filter.AddressMatchMode == HistoryAddressMatchMode.Contains ? "[Address] LIKE @Address ESCAPE '\\'" : "[Address] = @Address");
             if (filter.Protocol.HasValue) conditions.Add("[Protocol] = @Protocol");
+            if (filter.DataType.HasValue) conditions.Add("[DataType] = @DataType");
             if (filter.FromTime.HasValue) conditions.Add("[Timestamp] >= @FromTime");
             if (filter.ToTime.HasValue) conditions.Add("[Timestamp] <= @ToTime");
             if (filter.Quality.HasValue) conditions.Add("[Quality] = @Quality");
@@ -370,8 +416,9 @@ ORDER BY [Timestamp] DESC;",
                 command.CommandTimeout = _options.CommandTimeoutSeconds;
                 command.Parameters.Add("@MaxRows", SqlDbType.Int).Value = filter.MaxRows;
                 if (!string.IsNullOrWhiteSpace(filter.DeviceId)) command.Parameters.Add("@DeviceId", SqlDbType.NVarChar, 128).Value = filter.DeviceId;
-                if (!string.IsNullOrWhiteSpace(filter.Address)) command.Parameters.Add("@Address", SqlDbType.NVarChar, 128).Value = filter.Address;
+                if (!string.IsNullOrWhiteSpace(filter.Address)) command.Parameters.Add("@Address", SqlDbType.NVarChar, 260).Value = FormatAddressParameter(filter);
                 if (filter.Protocol.HasValue) command.Parameters.Add("@Protocol", SqlDbType.NVarChar, 32).Value = filter.Protocol.Value.ToString();
+                if (filter.DataType.HasValue) command.Parameters.Add("@DataType", SqlDbType.NVarChar, 32).Value = filter.DataType.Value.ToString();
                 if (filter.FromTime.HasValue) command.Parameters.Add("@FromTime", SqlDbType.DateTimeOffset).Value = filter.FromTime.Value;
                 if (filter.ToTime.HasValue) command.Parameters.Add("@ToTime", SqlDbType.DateTimeOffset).Value = filter.ToTime.Value;
                 if (filter.Quality.HasValue) command.Parameters.Add("@Quality", SqlDbType.NVarChar, 32).Value = filter.Quality.Value.ToString();
@@ -411,11 +458,13 @@ ORDER BY [Timestamp] DESC;",
         public async Task<int> DeleteAsync(HistoryQueryFilter filter, CancellationToken cancellationToken)
         {
             if (filter == null) throw new ArgumentNullException(nameof(filter));
+            ValidateFilter(filter);
 
             var conditions = new List<string>();
             if (!string.IsNullOrWhiteSpace(filter.DeviceId)) conditions.Add("[DeviceId] = @DeviceId");
-            if (!string.IsNullOrWhiteSpace(filter.Address)) conditions.Add("[Address] = @Address");
+            if (!string.IsNullOrWhiteSpace(filter.Address)) conditions.Add(filter.AddressMatchMode == HistoryAddressMatchMode.Contains ? "[Address] LIKE @Address ESCAPE '\\'" : "[Address] = @Address");
             if (filter.Protocol.HasValue) conditions.Add("[Protocol] = @Protocol");
+            if (filter.DataType.HasValue) conditions.Add("[DataType] = @DataType");
             if (filter.FromTime.HasValue) conditions.Add("[Timestamp] >= @FromTime");
             if (filter.ToTime.HasValue) conditions.Add("[Timestamp] <= @ToTime");
             if (filter.Quality.HasValue) conditions.Add("[Quality] = @Quality");
@@ -436,8 +485,9 @@ ORDER BY [Timestamp] DESC;",
             {
                 command.CommandTimeout = _options.CommandTimeoutSeconds;
                 if (!string.IsNullOrWhiteSpace(filter.DeviceId)) command.Parameters.Add("@DeviceId", SqlDbType.NVarChar, 128).Value = filter.DeviceId;
-                if (!string.IsNullOrWhiteSpace(filter.Address)) command.Parameters.Add("@Address", SqlDbType.NVarChar, 128).Value = filter.Address;
+                if (!string.IsNullOrWhiteSpace(filter.Address)) command.Parameters.Add("@Address", SqlDbType.NVarChar, 260).Value = FormatAddressParameter(filter);
                 if (filter.Protocol.HasValue) command.Parameters.Add("@Protocol", SqlDbType.NVarChar, 32).Value = filter.Protocol.Value.ToString();
+                if (filter.DataType.HasValue) command.Parameters.Add("@DataType", SqlDbType.NVarChar, 32).Value = filter.DataType.Value.ToString();
                 if (filter.FromTime.HasValue) command.Parameters.Add("@FromTime", SqlDbType.DateTimeOffset).Value = filter.FromTime.Value;
                 if (filter.ToTime.HasValue) command.Parameters.Add("@ToTime", SqlDbType.DateTimeOffset).Value = filter.ToTime.Value;
                 if (filter.Quality.HasValue) command.Parameters.Add("@Quality", SqlDbType.NVarChar, 32).Value = filter.Quality.Value.ToString();
@@ -445,6 +495,150 @@ ORDER BY [Timestamp] DESC;",
                 await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
                 return await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
             }
+        }
+
+        public async Task<HistoryPageResult> QueryPageAsync(HistoryPageRequest request, CancellationToken cancellationToken)
+        {
+            if (request == null) throw new ArgumentNullException(nameof(request));
+            var filter = request.Filter ?? new HistoryQueryFilter();
+            ValidateFilter(filter);
+            if (request.PageNumber <= 0) throw new ArgumentOutOfRangeException(nameof(request.PageNumber));
+            if (request.PageSize != 50 && request.PageSize != 100 && request.PageSize != 200 && request.PageSize != 1000)
+                throw new ArgumentOutOfRangeException(nameof(request.PageSize));
+
+            var where = BuildWhereClause(filter);
+            var countSql = string.Format(CultureInfo.InvariantCulture, "SELECT COUNT_BIG(1) FROM {0} {1};", _table.QuotedName, where);
+            var pageSql = string.Format(CultureInfo.InvariantCulture,
+                @"SELECT [Id], [Protocol], [DeviceId], [Address], [DataType], [ValueText], [Quality], [Timestamp], [ErrorMessage]
+FROM {0} {1}
+ORDER BY [Timestamp] DESC, [Id] DESC
+OFFSET @Offset ROWS FETCH NEXT @PageSize ROWS ONLY;", _table.QuotedName, where);
+
+            using (var connection = new SqlConnection(_options.ConnectionString))
+            {
+                await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+                long total;
+                using (var countCommand = new SqlCommand(countSql, connection))
+                {
+                    countCommand.CommandTimeout = _options.CommandTimeoutSeconds;
+                    AddFilterParameters(countCommand, filter);
+                    total = Convert.ToInt64(await countCommand.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false), CultureInfo.InvariantCulture);
+                }
+
+                var records = new List<IndustrialDataRecord>(request.PageSize);
+                using (var command = new SqlCommand(pageSql, connection))
+                {
+                    command.CommandTimeout = _options.CommandTimeoutSeconds;
+                    AddFilterParameters(command, filter);
+                    command.Parameters.Add("@Offset", SqlDbType.Int).Value = checked((request.PageNumber - 1) * request.PageSize);
+                    command.Parameters.Add("@PageSize", SqlDbType.Int).Value = request.PageSize;
+                    using (var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false))
+                        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false)) records.Add(ReadRecord(reader));
+                }
+                return new HistoryPageResult { Records = records, TotalCount = total, PageNumber = request.PageNumber, PageSize = request.PageSize };
+            }
+        }
+
+        public async Task<HistorySummary> GetSummaryAsync(HistoryQueryFilter filter, CancellationToken cancellationToken)
+        {
+            filter = filter ?? new HistoryQueryFilter();
+            ValidateFilter(filter);
+            var sql = string.Format(CultureInfo.InvariantCulture,
+                @"SELECT COUNT_BIG(1),
+SUM(CASE WHEN [Quality]='Good' THEN CAST(1 AS BIGINT) ELSE 0 END), SUM(CASE WHEN [Quality]='Bad' THEN CAST(1 AS BIGINT) ELSE 0 END),
+SUM(CASE WHEN [Quality]='Stale' THEN CAST(1 AS BIGINT) ELSE 0 END), SUM(CASE WHEN [Quality]='Unknown' THEN CAST(1 AS BIGINT) ELSE 0 END),
+MIN([Timestamp]), MAX([Timestamp]) FROM {0} {1};", _table.QuotedName, BuildWhereClause(filter));
+            using (var connection = new SqlConnection(_options.ConnectionString))
+            using (var command = new SqlCommand(sql, connection))
+            {
+                command.CommandTimeout = _options.CommandTimeoutSeconds; AddFilterParameters(command, filter);
+                await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+                using (var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false))
+                {
+                    await reader.ReadAsync(cancellationToken).ConfigureAwait(false);
+                    return new HistorySummary {
+                        TotalCount = reader.GetInt64(0), GoodCount = reader.IsDBNull(1) ? 0 : Convert.ToInt64(reader.GetValue(1)),
+                        BadCount = reader.IsDBNull(2) ? 0 : Convert.ToInt64(reader.GetValue(2)), StaleCount = reader.IsDBNull(3) ? 0 : Convert.ToInt64(reader.GetValue(3)),
+                        UnknownCount = reader.IsDBNull(4) ? 0 : Convert.ToInt64(reader.GetValue(4)),
+                        EarliestTimestamp = reader.IsDBNull(5) ? (DateTimeOffset?)null : reader.GetDateTimeOffset(5),
+                        LatestTimestamp = reader.IsDBNull(6) ? (DateTimeOffset?)null : reader.GetDateTimeOffset(6) };
+                }
+            }
+        }
+
+        public async Task<HistoryFilterOptions> GetFilterOptionsAsync(string deviceId, int maxItems, CancellationToken cancellationToken)
+        {
+            if (maxItems <= 0 || maxItems > 1000) throw new ArgumentOutOfRangeException(nameof(maxItems));
+            var devices = new List<string>(); var addresses = new List<string>();
+            using (var connection = new SqlConnection(_options.ConnectionString))
+            {
+                await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+                using (var command = new SqlCommand(string.Format("SELECT DISTINCT TOP (@Max) [DeviceId] FROM {0} ORDER BY [DeviceId];", _table.QuotedName), connection))
+                { command.CommandTimeout = _options.CommandTimeoutSeconds; command.Parameters.Add("@Max", SqlDbType.Int).Value = maxItems; using (var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false)) while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false)) devices.Add(reader.GetString(0)); }
+                var addressSql = string.Format("SELECT DISTINCT TOP (@Max) [Address] FROM {0} {1} ORDER BY [Address];", _table.QuotedName, string.IsNullOrWhiteSpace(deviceId) ? "" : "WHERE [DeviceId]=@DeviceId");
+                using (var command = new SqlCommand(addressSql, connection))
+                { command.CommandTimeout = _options.CommandTimeoutSeconds; command.Parameters.Add("@Max", SqlDbType.Int).Value = maxItems; if (!string.IsNullOrWhiteSpace(deviceId)) command.Parameters.Add("@DeviceId", SqlDbType.NVarChar, 128).Value = deviceId; using (var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false)) while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false)) addresses.Add(reader.GetString(0)); }
+            }
+            return new HistoryFilterOptions { DeviceIds = devices, Addresses = addresses };
+        }
+
+        public async Task<IReadOnlyList<IndustrialDataRecord>> GetLatestValuesAsync(HistoryQueryFilter filter, int maxRows, CancellationToken cancellationToken)
+        {
+            filter = filter ?? new HistoryQueryFilter(); ValidateFilter(filter);
+            if (maxRows <= 0 || maxRows > 1000) throw new ArgumentOutOfRangeException(nameof(maxRows));
+            var sql = string.Format(CultureInfo.InvariantCulture,
+                @"WITH Latest AS (SELECT [Id],[Protocol],[DeviceId],[Address],[DataType],[ValueText],[Quality],[Timestamp],[ErrorMessage],
+ROW_NUMBER() OVER(PARTITION BY [DeviceId],[Address] ORDER BY [Timestamp] DESC,[Id] DESC) AS rn FROM {0} {1})
+SELECT TOP (@MaxRows) [Id],[Protocol],[DeviceId],[Address],[DataType],[ValueText],[Quality],[Timestamp],[ErrorMessage]
+FROM Latest WHERE rn=1 ORDER BY [Timestamp] DESC,[Id] DESC;", _table.QuotedName, BuildWhereClause(filter));
+            var records = new List<IndustrialDataRecord>();
+            using (var connection = new SqlConnection(_options.ConnectionString)) using (var command = new SqlCommand(sql, connection))
+            { command.CommandTimeout = _options.CommandTimeoutSeconds; command.Parameters.Add("@MaxRows", SqlDbType.Int).Value = maxRows; AddFilterParameters(command, filter); await connection.OpenAsync(cancellationToken).ConfigureAwait(false); using (var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false)) while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false)) records.Add(ReadRecord(reader)); }
+            return records;
+        }
+
+        private static void ValidateFilter(HistoryQueryFilter filter)
+        {
+            if (filter.FromTime.HasValue && filter.ToTime.HasValue && filter.FromTime.Value > filter.ToTime.Value)
+                throw new ArgumentException("开始时间不能晚于结束时间。", nameof(filter));
+        }
+
+        private static string BuildWhereClause(HistoryQueryFilter filter)
+        {
+            var conditions = new List<string>();
+            if (!string.IsNullOrWhiteSpace(filter.DeviceId)) conditions.Add("[DeviceId]=@DeviceId");
+            if (!string.IsNullOrWhiteSpace(filter.Address)) conditions.Add(filter.AddressMatchMode == HistoryAddressMatchMode.Contains ? "[Address] LIKE @Address ESCAPE '\\'" : "[Address]=@Address");
+            if (filter.Protocol.HasValue) conditions.Add("[Protocol]=@Protocol");
+            if (filter.DataType.HasValue) conditions.Add("[DataType]=@DataType");
+            if (filter.FromTime.HasValue) conditions.Add("[Timestamp]>=@FromTime");
+            if (filter.ToTime.HasValue) conditions.Add("[Timestamp]<=@ToTime");
+            if (filter.Quality.HasValue) conditions.Add("[Quality]=@Quality");
+            return conditions.Count == 0 ? string.Empty : "WHERE " + string.Join(" AND ", conditions);
+        }
+
+        private static void AddFilterParameters(SqlCommand command, HistoryQueryFilter filter)
+        {
+            if (!string.IsNullOrWhiteSpace(filter.DeviceId)) command.Parameters.Add("@DeviceId", SqlDbType.NVarChar, 128).Value = filter.DeviceId;
+            if (!string.IsNullOrWhiteSpace(filter.Address)) command.Parameters.Add("@Address", SqlDbType.NVarChar, 260).Value = FormatAddressParameter(filter);
+            if (filter.Protocol.HasValue) command.Parameters.Add("@Protocol", SqlDbType.NVarChar, 32).Value = filter.Protocol.Value.ToString();
+            if (filter.DataType.HasValue) command.Parameters.Add("@DataType", SqlDbType.NVarChar, 32).Value = filter.DataType.Value.ToString();
+            if (filter.FromTime.HasValue) command.Parameters.Add("@FromTime", SqlDbType.DateTimeOffset).Value = filter.FromTime.Value;
+            if (filter.ToTime.HasValue) command.Parameters.Add("@ToTime", SqlDbType.DateTimeOffset).Value = filter.ToTime.Value;
+            if (filter.Quality.HasValue) command.Parameters.Add("@Quality", SqlDbType.NVarChar, 32).Value = filter.Quality.Value.ToString();
+        }
+
+        private static string FormatAddressParameter(HistoryQueryFilter filter)
+        {
+            if (filter.AddressMatchMode != HistoryAddressMatchMode.Contains) return filter.Address;
+            return "%" + filter.Address.Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_").Replace("[", "\\[") + "%";
+        }
+
+        private static IndustrialDataRecord ReadRecord(SqlDataReader reader)
+        {
+            ProtocolKind protocol; DataType dataType; QualityStatus quality;
+            Enum.TryParse(reader.GetString(1), true, out protocol); Enum.TryParse(reader.GetString(4), true, out dataType); Enum.TryParse(reader.GetString(6), true, out quality);
+            return new IndustrialDataRecord { Id = reader.GetInt64(0), Protocol = protocol, DeviceId = reader.GetString(2), Address = reader.GetString(3), DataType = dataType,
+                ValueText = reader.IsDBNull(5) ? null : reader.GetString(5), Quality = quality, Timestamp = reader.GetDateTimeOffset(7), ErrorMessage = reader.IsDBNull(8) ? null : reader.GetString(8) };
         }
 
         /// <inheritdoc />
@@ -609,6 +803,18 @@ ORDER BY [Timestamp] DESC;",
         public int RetryCount { get; set; } = 2;
     }
 
+    public sealed class BufferedRecorderSnapshot
+    {
+        public bool IsRunning { get; set; }
+        public int QueuedBatchCount { get; set; }
+        public long AcceptedRecordCount { get; set; }
+        public long WrittenRecordCount { get; set; }
+        public long DroppedRecordCount { get; set; }
+        public long WriteFailureCount { get; set; }
+        public DateTimeOffset? LastSuccessfulWrite { get; set; }
+        public string LastError { get; set; }
+    }
+
     /// <summary>
     /// 把通信线程产生的读取结果放入有界队列，再由单独后台任务批量写库。
     /// <para>完整数据流如下：</para>
@@ -635,6 +841,12 @@ ORDER BY [Timestamp] DESC;",
 
         // 使用整数配合 Interlocked/Volatile 代替普通 bool，确保多线程能看到一致的启动状态。
         private int _started;
+        private long _acceptedRecordCount;
+        private long _writtenRecordCount;
+        private long _droppedRecordCount;
+        private long _writeFailureCount;
+        private long _lastSuccessfulWriteUtcTicks;
+        private string _lastError;
 
         /// <summary>
         /// 创建后台记录器，但此时还没有连接数据库或启动后台任务。
@@ -695,11 +907,27 @@ ORDER BY [Timestamp] DESC;",
 
             // 入队前转换并复制可变数据，确保后台线程读取的是调用时刻的稳定快照。
             var records = values.Select(value => IndustrialDataRecord.FromDataValue(protocol, deviceId, value)).ToArray();
-            if (_queue.TryAdd(records)) return true;
+            if (_queue.TryAdd(records))
+            {
+                Interlocked.Add(ref _acceptedRecordCount, records.Length);
+                return true;
+            }
 
             // TryAdd 不等待空间。队列满说明数据库速度已明显落后，优先保护通信和内存。
             _logger.Warn("数据库写入队列已满，本批采集数据已丢弃。");
+            Interlocked.Add(ref _droppedRecordCount, records.Length);
             return false;
+        }
+
+        public BufferedRecorderSnapshot GetSnapshot()
+        {
+            var ticks = Interlocked.Read(ref _lastSuccessfulWriteUtcTicks);
+            return new BufferedRecorderSnapshot {
+                IsRunning = Volatile.Read(ref _started) != 0,
+                QueuedBatchCount = _queue.Count,
+                AcceptedRecordCount = Interlocked.Read(ref _acceptedRecordCount), WrittenRecordCount = Interlocked.Read(ref _writtenRecordCount),
+                DroppedRecordCount = Interlocked.Read(ref _droppedRecordCount), WriteFailureCount = Interlocked.Read(ref _writeFailureCount),
+                LastSuccessfulWrite = ticks == 0 ? (DateTimeOffset?)null : new DateTimeOffset(ticks, TimeSpan.Zero), LastError = Volatile.Read(ref _lastError) };
         }
 
         /// <summary>
@@ -781,10 +1009,15 @@ ORDER BY [Timestamp] DESC;",
                 try
                 {
                     await _store.WriteAsync(records, cancellationToken).ConfigureAwait(false);
+                    Interlocked.Add(ref _writtenRecordCount, records.Count);
+                    Interlocked.Exchange(ref _lastSuccessfulWriteUtcTicks, DateTimeOffset.UtcNow.UtcTicks);
+                    Volatile.Write(ref _lastError, null);
                     return;
                 }
                 catch (Exception ex) when (!(ex is OperationCanceledException) && attempt < _options.RetryCount)
                 {
+                    Interlocked.Increment(ref _writeFailureCount);
+                    Volatile.Write(ref _lastError, ex.Message);
                     _logger.Warn(string.Format(CultureInfo.InvariantCulture, "数据库写入失败，准备第 {0} 次重试：{1}", attempt + 1, ex.Message));
 
                     // 重试间隔逐次增加，避免数据库刚恢复时大量客户端同时立即重试形成冲击。
@@ -794,6 +1027,9 @@ ORDER BY [Timestamp] DESC;",
                 {
                     // 达到重试上限后放弃本批。这里不能让异常结束消费者，否则后续数据库恢复也无法继续记录。
                     _logger.Error("数据库写入失败，本批数据已放弃。", ex);
+                    Interlocked.Increment(ref _writeFailureCount);
+                    Interlocked.Add(ref _droppedRecordCount, records.Count);
+                    Volatile.Write(ref _lastError, ex.Message);
                     return;
                 }
             }

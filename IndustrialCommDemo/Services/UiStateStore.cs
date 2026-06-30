@@ -160,6 +160,16 @@ namespace IndustrialCommDemo.Services
         /// <summary>获取或设置历史表名。</summary>
         [DataMember(Order = 2)]
         public string TableName { get; set; }
+        [DataMember(Order = 3)] public string QueryDeviceId { get; set; }
+        [DataMember(Order = 4)] public string QueryAddress { get; set; }
+        [DataMember(Order = 5)] public bool AddressContains { get; set; }
+        [DataMember(Order = 6)] public string FromTime { get; set; }
+        [DataMember(Order = 7)] public string ToTime { get; set; }
+        [DataMember(Order = 8)] public int PageSize { get; set; } = 100;
+        [DataMember(Order = 9)] public int RetentionDays { get; set; } = 30;
+        [DataMember(Order = 10)] public string Protocol { get; set; }
+        [DataMember(Order = 11)] public string DataType { get; set; }
+        [DataMember(Order = 12)] public string Quality { get; set; }
     }
 
     /// <summary>

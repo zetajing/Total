@@ -80,11 +80,17 @@ namespace IndustrialCommSdk.Protocols.Modbus
         /// <param name="addressParser">可选的 Modbus 地址解析器。如果为 null，则使用配置文件的默认解析器。</param>
         /// <exception cref="ArgumentNullException">当 <paramref name="options"/> 为 null 时引发。</exception>
         public ModbusTcpClient(ModbusTcpClientOptions options, IIndustrialLogger logger = null, IPollingScheduler pollingScheduler = null, ModbusAddressParser addressParser = null)
-            : base(options.DeviceId, ProtocolKind.ModbusTcp, pollingScheduler ?? new PollingScheduler(logger), logger ?? NullIndustrialLogger.Instance)
+            : base(GetDeviceId(options), ProtocolKind.ModbusTcp, pollingScheduler ?? new PollingScheduler(logger), logger ?? NullIndustrialLogger.Instance)
         {
             _options = options ?? throw new ArgumentNullException(nameof(options));
             _deviceProfile = options.DeviceProfile ?? ModbusDeviceProfiles.InovanceEasyPlc;
             _addressParser = addressParser ?? new ModbusAddressParser(_deviceProfile);
+        }
+
+        private static string GetDeviceId(ModbusTcpClientOptions options)
+        {
+            if (options == null) throw new ArgumentNullException(nameof(options));
+            return options.DeviceId;
         }
 
         /// <summary>
@@ -167,19 +173,19 @@ namespace IndustrialCommSdk.Protocols.Modbus
                 case ModbusArea.Coil:
                     // 读取线圈状态
                     return RegisterValueCodec.ToDataValue(normalizedRequest,
-                        await _master.ReadCoilsAsync(_options.SlaveId, parsed.ZeroBasedAddress, normalizedRequest.Length).ConfigureAwait(false));
+                        await ReadBitsInChunksAsync(ModbusArea.Coil, parsed.ZeroBasedAddress, normalizedRequest.Length, cancellationToken).ConfigureAwait(false));
                 case ModbusArea.DiscreteInput:
                     // 读取离散输入
                     return RegisterValueCodec.ToDataValue(normalizedRequest,
-                        await _master.ReadInputsAsync(_options.SlaveId, parsed.ZeroBasedAddress, normalizedRequest.Length).ConfigureAwait(false));
+                        await ReadBitsInChunksAsync(ModbusArea.DiscreteInput, parsed.ZeroBasedAddress, normalizedRequest.Length, cancellationToken).ConfigureAwait(false));
                 case ModbusArea.InputRegister:
                     // 读取输入寄存器，并按设备配置文件规范化
-                    var ir = await _master.ReadInputRegistersAsync(_options.SlaveId, parsed.ZeroBasedAddress, normalizedRequest.Length).ConfigureAwait(false);
+                    var ir = await ReadRegistersInChunksAsync(ModbusArea.InputRegister, parsed.ZeroBasedAddress, normalizedRequest.Length, cancellationToken).ConfigureAwait(false);
                     return RegisterValueCodec.ToDataValue(normalizedRequest,
                         _deviceProfile.NormalizeRegistersForRead(normalizedRequest.DataType, ir));
                 case ModbusArea.HoldingRegister:
                     // 读取保持寄存器，并按设备配置文件规范化
-                    var hr = await _master.ReadHoldingRegistersAsync(_options.SlaveId, parsed.ZeroBasedAddress, normalizedRequest.Length).ConfigureAwait(false);
+                    var hr = await ReadRegistersInChunksAsync(ModbusArea.HoldingRegister, parsed.ZeroBasedAddress, normalizedRequest.Length, cancellationToken).ConfigureAwait(false);
                     return RegisterValueCodec.ToDataValue(normalizedRequest,
                         _deviceProfile.NormalizeRegistersForRead(normalizedRequest.DataType, hr));
                 default:
@@ -248,13 +254,13 @@ namespace IndustrialCommSdk.Protocols.Modbus
             IReadOnlyCollection<ReadRequest> requests, CancellationToken cancellationToken)
         {
             EnsureConnected();
-            var values = new List<DataValue>(requests.Count);
+            var values = new DataValue[requests.Count];
             var overallStopwatch = Stopwatch.StartNew();
             var mergedBatchCount = 0;
 
             // 按 Modbus 区域分组，然后按地址排序并合并连续的范围
             var parsedItems = requests
-                .Select(r => new { Request = r, Address = (ModbusAddress)_addressParser.Parse(r.Address) })
+                .Select((r, index) => new { Request = r, Address = (ModbusAddress)_addressParser.Parse(r.Address), Index = index })
                 .ToList();
 
             var groups = parsedItems
@@ -263,7 +269,7 @@ namespace IndustrialCommSdk.Protocols.Modbus
             foreach (var group in groups)
             {
                 var sortedItems = group
-                    .Select(x => new MergeItem { Request = x.Request, Address = x.Address, Norm = NormalizeReadRequest(x.Request, x.Address) })
+                    .Select(x => new MergeItem { Request = x.Request, Address = x.Address, Norm = NormalizeReadRequest(x.Request, x.Address), OriginalIndex = x.Index })
                     .OrderBy(x => x.Address.ZeroBasedAddress)
                     .ToList();
 
@@ -276,62 +282,62 @@ namespace IndustrialCommSdk.Protocols.Modbus
                     var batchStopwatch = Stopwatch.StartNew();
 
                     var startAddr = batch[0].Address.ZeroBasedAddress;
-                    var lastItem = batch[batch.Count - 1];
-                    var totalLength = (ushort)(lastItem.Address.ZeroBasedAddress + lastItem.Norm.Length - startAddr);
+                    var endAddressExclusive = batch.Max(item => (int)item.Address.ZeroBasedAddress + item.Norm.Length);
+                    var totalLength = endAddressExclusive - startAddr;
 
                     switch (group.Key)
                     {
                         case ModbusArea.Coil:
                         {
                             // 批量读取线圈数据，然后按各个请求的偏移量切片
-                            var raw = await _master.ReadCoilsAsync(_options.SlaveId, startAddr, totalLength).ConfigureAwait(false);
+                            var raw = await ReadBitsInChunksAsync(ModbusArea.Coil, startAddr, totalLength, cancellationToken).ConfigureAwait(false);
                             foreach (var item in batch)
                             {
                                 var offset = item.Address.ZeroBasedAddress - startAddr;
                                 var slice = new bool[item.Norm.Length];
                                 Array.Copy(raw, offset, slice, 0, item.Norm.Length);
-                                values.Add(RegisterValueCodec.ToDataValue(item.Norm, slice));
+                                values[item.OriginalIndex] = RegisterValueCodec.ToDataValue(item.Norm, slice);
                             }
                             break;
                         }
                         case ModbusArea.DiscreteInput:
                         {
                             // 批量读取离散输入数据，然后按各个请求的偏移量切片
-                            var raw = await _master.ReadInputsAsync(_options.SlaveId, startAddr, totalLength).ConfigureAwait(false);
+                            var raw = await ReadBitsInChunksAsync(ModbusArea.DiscreteInput, startAddr, totalLength, cancellationToken).ConfigureAwait(false);
                             foreach (var item in batch)
                             {
                                 var offset = item.Address.ZeroBasedAddress - startAddr;
                                 var slice = new bool[item.Norm.Length];
                                 Array.Copy(raw, offset, slice, 0, item.Norm.Length);
-                                values.Add(RegisterValueCodec.ToDataValue(item.Norm, slice));
+                                values[item.OriginalIndex] = RegisterValueCodec.ToDataValue(item.Norm, slice);
                             }
                             break;
                         }
                         case ModbusArea.InputRegister:
                         {
                             // 批量读取输入寄存器数据，按设备配置文件规范化后按偏移量切片
-                            var raw = await _master.ReadInputRegistersAsync(_options.SlaveId, startAddr, totalLength).ConfigureAwait(false);
+                            var raw = await ReadRegistersInChunksAsync(ModbusArea.InputRegister, startAddr, totalLength, cancellationToken).ConfigureAwait(false);
                             foreach (var item in batch)
                             {
                                 var offset = item.Address.ZeroBasedAddress - startAddr;
                                 var slice = new ushort[item.Norm.Length];
                                 Array.Copy(raw, offset, slice, 0, item.Norm.Length);
-                                values.Add(RegisterValueCodec.ToDataValue(item.Norm,
-                                    _deviceProfile.NormalizeRegistersForRead(item.Norm.DataType, slice)));
+                                values[item.OriginalIndex] = RegisterValueCodec.ToDataValue(item.Norm,
+                                    _deviceProfile.NormalizeRegistersForRead(item.Norm.DataType, slice));
                             }
                             break;
                         }
                         case ModbusArea.HoldingRegister:
                         {
                             // 批量读取保持寄存器数据，按设备配置文件规范化后按偏移量切片
-                            var raw = await _master.ReadHoldingRegistersAsync(_options.SlaveId, startAddr, totalLength).ConfigureAwait(false);
+                            var raw = await ReadRegistersInChunksAsync(ModbusArea.HoldingRegister, startAddr, totalLength, cancellationToken).ConfigureAwait(false);
                             foreach (var item in batch)
                             {
                                 var offset = item.Address.ZeroBasedAddress - startAddr;
                                 var slice = new ushort[item.Norm.Length];
                                 Array.Copy(raw, offset, slice, 0, item.Norm.Length);
-                                values.Add(RegisterValueCodec.ToDataValue(item.Norm,
-                                    _deviceProfile.NormalizeRegistersForRead(item.Norm.DataType, slice)));
+                                values[item.OriginalIndex] = RegisterValueCodec.ToDataValue(item.Norm,
+                                    _deviceProfile.NormalizeRegistersForRead(item.Norm.DataType, slice));
                             }
                             break;
                         }
@@ -360,6 +366,62 @@ namespace IndustrialCommSdk.Protocols.Modbus
                 overallStopwatch.ElapsedMilliseconds));
 
             return new BatchReadResult(values);
+        }
+
+        private async Task<bool[]> ReadBitsInChunksAsync(
+            ModbusArea area,
+            ushort startAddress,
+            int totalLength,
+            CancellationToken cancellationToken)
+        {
+            ValidateAddressRange(startAddress, totalLength);
+            const int maxBitsPerRequest = 2000;
+            var result = new bool[totalLength];
+            var offset = 0;
+            while (offset < totalLength)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var chunkLength = Math.Min(maxBitsPerRequest, totalLength - offset);
+                var chunkStart = (ushort)(startAddress + offset);
+                var chunk = area == ModbusArea.Coil
+                    ? await _master.ReadCoilsAsync(_options.SlaveId, chunkStart, (ushort)chunkLength).ConfigureAwait(false)
+                    : await _master.ReadInputsAsync(_options.SlaveId, chunkStart, (ushort)chunkLength).ConfigureAwait(false);
+                Array.Copy(chunk, 0, result, offset, chunkLength);
+                offset += chunkLength;
+            }
+            return result;
+        }
+
+        private async Task<ushort[]> ReadRegistersInChunksAsync(
+            ModbusArea area,
+            ushort startAddress,
+            int totalLength,
+            CancellationToken cancellationToken)
+        {
+            ValidateAddressRange(startAddress, totalLength);
+            const int maxRegistersPerRequest = 125;
+            var result = new ushort[totalLength];
+            var offset = 0;
+            while (offset < totalLength)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var chunkLength = Math.Min(maxRegistersPerRequest, totalLength - offset);
+                var chunkStart = (ushort)(startAddress + offset);
+                var chunk = area == ModbusArea.InputRegister
+                    ? await _master.ReadInputRegistersAsync(_options.SlaveId, chunkStart, (ushort)chunkLength).ConfigureAwait(false)
+                    : await _master.ReadHoldingRegistersAsync(_options.SlaveId, chunkStart, (ushort)chunkLength).ConfigureAwait(false);
+                Array.Copy(chunk, 0, result, offset, chunkLength);
+                offset += chunkLength;
+            }
+            return result;
+        }
+
+        private static void ValidateAddressRange(ushort startAddress, int totalLength)
+        {
+            if (totalLength <= 0 || (long)startAddress + totalLength > ushort.MaxValue + 1L)
+            {
+                throw new IndustrialProtocolException("Modbus read range exceeds the 16-bit address space.");
+            }
         }
 
         /// <summary>
@@ -484,6 +546,7 @@ namespace IndustrialCommSdk.Protocols.Modbus
             /// 获取或设置规范化后的读取请求。
             /// </summary>
             public ReadRequest Norm { get; set; }
+            public int OriginalIndex { get; set; }
         }
 
         /// <summary>

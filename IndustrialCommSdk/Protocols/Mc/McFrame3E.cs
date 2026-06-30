@@ -8,8 +8,9 @@ namespace IndustrialCommSdk.Protocols.Mc
     /// </summary>
     internal static class McFrame3E
     {
-        /// <summary>子报头（Subheader），表示请求帧，值为 0x5000。</summary>
-        private const ushort SubheaderRequest = 0x5000;
+        /// <summary>请求子报头；按小端整数保存为 0x0050，线上字节为 50 00。</summary>
+        private const ushort SubheaderRequest = 0x0050;
+        private const ushort SubheaderResponse = 0x00D0;
         /// <summary>网络编号，默认 0x00。</summary>
         private const byte NetworkNo = 0x00;
         /// <summary>PC 编号，默认 0xFF。</summary>
@@ -59,13 +60,13 @@ namespace IndustrialCommSdk.Protocols.Mc
         /// <returns>完整的 3E 帧字节数组。</returns>
         public static byte[] BuildWriteWordsRequest(McAddress start, ushort[] values)
         {
-            var appLength = 11 + values.Length * 2;
-            var packet = BuildPacket(appLength);
-            var pos = 9;
+            var coreLength = 10 + values.Length * 2;
+            var packet = BuildPacket(coreLength);
+            var pos = 11;
             WriteU16LE(packet, ref pos, CmdBatchWrite);
             WriteU16LE(packet, ref pos, SubcmdWord);
-            packet[pos++] = GetDeviceCode(start.DeviceType);
             WriteI32LE3(packet, ref pos, start.Index);
+            packet[pos++] = GetDeviceCode(start.DeviceType);
             WriteU16LE(packet, ref pos, (ushort)values.Length);
             foreach (var value in values)
             {
@@ -82,16 +83,15 @@ namespace IndustrialCommSdk.Protocols.Mc
         /// <returns>完整的 3E 帧字节数组。</returns>
         public static byte[] BuildWriteBitsRequest(McAddress start, bool[] values)
         {
-            var byteLength = (values.Length + 7) / 8;
-            var appLength = 11 + byteLength;
-            var packet = BuildPacket(appLength);
-            var pos = 9;
+            var packed = PackBits(values);
+            var coreLength = 10 + packed.Length;
+            var packet = BuildPacket(coreLength);
+            var pos = 11;
             WriteU16LE(packet, ref pos, CmdBatchWrite);
             WriteU16LE(packet, ref pos, SubcmdBit);
-            packet[pos++] = GetDeviceCode(start.DeviceType);
             WriteI32LE3(packet, ref pos, start.Index);
+            packet[pos++] = GetDeviceCode(start.DeviceType);
             WriteU16LE(packet, ref pos, (ushort)values.Length);
-            var packed = Common.RegisterValueCodec.PackBits(values);
             System.Buffer.BlockCopy(packed, 0, packet, pos, packed.Length);
             return packet;
         }
@@ -109,9 +109,20 @@ namespace IndustrialCommSdk.Protocols.Mc
             {
                 throw new IndustrialProtocolException("Invalid MC response length.");
             }
+            ValidateResponseSubheader(response);
 
             var pos = 7;
             var responseLength = ReadU16LE(response, pos);
+            ValidateResponseDataLength(responseLength);
+            var expectedLength = 9 + responseLength;
+            if (response.Length != expectedLength)
+            {
+                throw new IndustrialProtocolException(string.Format(
+                    "Invalid MC response length. Expected {0} bytes, received {1} bytes.",
+                    expectedLength,
+                    response.Length));
+            }
+
             pos += 2;
             var endCode = ReadU16LE(response, pos);
             pos += 2;
@@ -125,6 +136,42 @@ namespace IndustrialCommSdk.Protocols.Mc
             var payload = new byte[payloadLength];
             System.Buffer.BlockCopy(response, pos, payload, 0, payloadLength);
             return payload;
+        }
+
+        /// <summary>
+        /// 计算读取 11 字节响应前缀后仍需接收的字节数。
+        /// DataLen 包含已经位于前缀中的 2 字节结束码，因此剩余长度必须扣除这 2 字节。
+        /// </summary>
+        public static int GetRemainingResponseLength(byte[] responsePrefix)
+        {
+            if (responsePrefix == null || responsePrefix.Length < 11)
+            {
+                throw new IndustrialProtocolException("Invalid MC response header length.");
+            }
+            ValidateResponseSubheader(responsePrefix);
+
+            var responseLength = ReadU16LE(responsePrefix, 7);
+            ValidateResponseDataLength(responseLength);
+            return responseLength - 2;
+        }
+
+        private static void ValidateResponseDataLength(ushort responseLength)
+        {
+            if (responseLength < 2)
+            {
+                throw new IndustrialProtocolException(string.Format(
+                    "Invalid MC response data length: {0}. The length must include the 2-byte end code.",
+                    responseLength));
+            }
+        }
+
+        private static void ValidateResponseSubheader(byte[] response)
+        {
+            var subheader = ReadU16LE(response, 0);
+            if (subheader != SubheaderResponse)
+            {
+                throw new IndustrialProtocolException(string.Format("Invalid MC response subheader: 0x{0:X4}.", subheader));
+            }
         }
 
         /// <summary>
@@ -159,6 +206,11 @@ namespace IndustrialCommSdk.Protocols.Mc
         /// <returns>转换后的寄存器数组。</returns>
         public static ushort[] ToRegisters(byte[] payload)
         {
+            if (payload == null || payload.Length % 2 != 0)
+            {
+                throw new IndustrialProtocolException("Invalid MC word payload length.");
+            }
+
             var registers = new ushort[payload.Length / 2];
             for (var i = 0; i < registers.Length; i++)
             {
@@ -175,12 +227,36 @@ namespace IndustrialCommSdk.Protocols.Mc
         /// <returns>解包后的布尔值数组。</returns>
         public static bool[] UnpackBits(byte[] payload, ushort count)
         {
+            var expectedLength = (count + 1) / 2;
+            if (payload == null || payload.Length < expectedLength)
+            {
+                throw new IndustrialProtocolException("Invalid MC bit payload length.");
+            }
+
             var values = new bool[count];
             for (var i = 0; i < count; i++)
             {
-                values[i] = ((payload[i / 8] >> (i % 8)) & 1) == 1;
+                values[i] = i % 2 == 0
+                    ? (payload[i / 2] & 0x10) == 0x10
+                    : (payload[i / 2] & 0x01) == 0x01;
             }
             return values;
+        }
+
+        /// <summary>按 MC 3E Binary 的半字节格式打包位数据：首点在高半字节，次点在低半字节。</summary>
+        public static byte[] PackBits(bool[] values)
+        {
+            if (values == null) throw new System.ArgumentNullException(nameof(values));
+
+            var packed = new byte[(values.Length + 1) / 2];
+            for (var i = 0; i < values.Length; i++)
+            {
+                if (values[i])
+                {
+                    packed[i / 2] |= i % 2 == 0 ? (byte)0x10 : (byte)0x01;
+                }
+            }
+            return packed;
         }
 
         /// <summary>
@@ -192,12 +268,13 @@ namespace IndustrialCommSdk.Protocols.Mc
         /// <returns>完整的读取请求帧字节数组。</returns>
         private static byte[] BuildReadRequest(McAddress start, ushort count, ushort subcommand)
         {
-            var packet = BuildPacket(11);
-            var pos = 9;
+            const int coreLength = 10;
+            var packet = BuildPacket(coreLength);
+            var pos = 11;
             WriteU16LE(packet, ref pos, CmdBatchRead);
             WriteU16LE(packet, ref pos, subcommand);
-            packet[pos++] = GetDeviceCode(start.DeviceType);
             WriteI32LE3(packet, ref pos, start.Index);
+            packet[pos++] = GetDeviceCode(start.DeviceType);
             WriteU16LE(packet, ref pos, count);
             return packet;
         }
@@ -208,16 +285,16 @@ namespace IndustrialCommSdk.Protocols.Mc
         /// </summary>
         /// <param name="appDataLength">应用数据的长度。</param>
         /// <returns>包含完整报头的字节数组（头部 9 字节 + 应用数据空间）。</returns>
-        private static byte[] BuildPacket(int appDataLength)
+        private static byte[] BuildPacket(int coreLength)
         {
-            var packet = new byte[9 + appDataLength];
+            var packet = new byte[11 + coreLength];
             var pos = 0;
             WriteU16LE(packet, ref pos, SubheaderRequest);
             packet[pos++] = NetworkNo;
             packet[pos++] = PcNo;
             WriteU16LE(packet, ref pos, DestIoNo);
             packet[pos++] = DestStationNo;
-            WriteU16LE(packet, ref pos, (ushort)(appDataLength + 2));
+            WriteU16LE(packet, ref pos, (ushort)(coreLength + 2));
             WriteU16LE(packet, ref pos, DefaultTimer);
             return packet;
         }
@@ -268,8 +345,9 @@ namespace IndustrialCommSdk.Protocols.Mc
                 case McDeviceType.X: return 0x9C;
                 case McDeviceType.Y: return 0x9D;
                 case McDeviceType.L: return 0x92;
-                case McDeviceType.TN: return 0xC0;
-                case McDeviceType.SS: return 0xC1;
+                case McDeviceType.TN: return 0xC2;
+                case McDeviceType.SS: return 0xC7;
+                case McDeviceType.SN: return 0xC8;
                 case McDeviceType.CN: return 0xC5;
                 default: throw new IndustrialProtocolException("Unsupported MC device type.");
             }

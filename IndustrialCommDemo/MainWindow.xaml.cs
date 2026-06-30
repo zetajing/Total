@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.ObjectModel;
 using System.Collections.Generic;
 using System.Globalization;
+using System.IO;
 using System.Linq;
 using System.Net;
 using System.Text;
@@ -11,6 +12,7 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using Microsoft.Win32;
 using IndustrialCommDemo.Services;
 using IndustrialCommDemo.SocketDebug;
 using IndustrialCommSdk;
@@ -46,6 +48,8 @@ namespace IndustrialCommDemo
         private DemoUiState _uiState;
         private readonly ObservableCollection<SubscriptionDisplayRow> _modbusSubscriptionRows = new ObservableCollection<SubscriptionDisplayRow>();
         private readonly ObservableCollection<DatabaseHistoryDisplayRow> _databaseHistoryRows = new ObservableCollection<DatabaseHistoryDisplayRow>();
+        private readonly ObservableCollection<DatabaseHistoryDisplayRow> _databaseLatestRows = new ObservableCollection<DatabaseHistoryDisplayRow>();
+        private readonly ObservableCollection<DatabaseHistoryDisplayRow> _databaseQueryRows = new ObservableCollection<DatabaseHistoryDisplayRow>();
 
         private IIndustrialClient _modbusClient;
         private string _modbusSubscriptionId;
@@ -58,6 +62,9 @@ namespace IndustrialCommDemo
         private BufferedIndustrialDataRecorder _databaseRecorder;
         private CancellationTokenSource _databaseHistoryCancellation;
         private Task _databaseHistoryTask;
+        private SqlServerIndustrialDataStore _databaseManagementStore;
+        private int _databaseQueryPage = 1;
+        private long _databaseQueryTotal;
 
         // Modbus 轮询回调可能运行在非 UI 线程，因此不能通过读取 WPF CheckBox 判断状态。
         // 使用 Interlocked/Volatile 管理这个整数标志，可以安全地跨线程读写启用状态。
@@ -73,6 +80,7 @@ namespace IndustrialCommDemo
 
             SelectDataType(ModbusDataTypeComboBox, DataType.Int16);
             ApplyModbusProfile();
+            InitializeDatabaseManagementControls();
             LoadUiState();
             RefreshModbusDataTypeState();
             RefreshModbusInputHints();
@@ -81,6 +89,8 @@ namespace IndustrialCommDemo
             RefreshAddressHistoryCombos();
             ModbusSubscriptionDataGrid.ItemsSource = _modbusSubscriptionRows;
             DatabaseHistoryDataGrid.ItemsSource = _databaseHistoryRows;
+            DatabaseLatestDataGrid.ItemsSource = _databaseLatestRows;
+            DatabaseQueryDataGrid.ItemsSource = _databaseQueryRows;
 
             SetHeaderStatus("就绪", Brushes.LightGreen);
             _logger.Info("工业通讯演示已就绪。");
@@ -667,6 +677,7 @@ namespace IndustrialCommDemo
             {
                 // 用户可能修改连接字符串后再次点击按钮。先排空并释放旧实例，避免两个消费者同时写库。
                 await StopDatabaseRecorderAsync();
+                if (_databaseManagementStore != null) { _databaseManagementStore.Dispose(); _databaseManagementStore = null; }
 
                 // UI 文本先经过非空校验，再交给 SDK 配置类继续校验表名和超时。
                 var options = new SqlServerDataStoreOptions
@@ -700,12 +711,15 @@ namespace IndustrialCommDemo
 
                 // 只有上面的数据库初始化完整成功后，才发布记录器引用和启用标志。
                 _databaseRecorder = recorder;
+                _databaseManagementStore = new SqlServerIndustrialDataStore(options);
                 Interlocked.Exchange(ref _databaseRecordingEnabled, 1);
                 _databaseHistoryRows.Clear();
                 DatabaseHistoryStatusTextBlock.Text = "正在读取最近的历史数据...";
                 DatabaseHistoryStatusTextBlock.Foreground = Brushes.SteelBlue;
                 _databaseHistoryCancellation = new CancellationTokenSource();
                 _databaseHistoryTask = RefreshDatabaseHistoryAsync(store, _databaseHistoryCancellation.Token);
+                await RefreshDatabaseFilterOptionsAsync();
+                await RefreshDatabaseLatestAsync();
                 DatabaseEnabledCheckBox.IsChecked = true;
                 DatabaseStatusTextBlock.Text = "已连接，正在后台记录读取和轮询数据。";
                 DatabaseStatusTextBlock.Foreground = Brushes.ForestGreen;
@@ -739,6 +753,7 @@ namespace IndustrialCommDemo
                     "刷新已停止，保留当前 {0} 条",
                     _databaseHistoryRows.Count);
                 DatabaseHistoryStatusTextBlock.Foreground = Brushes.DarkGoldenrod;
+                UpdateDatabaseRecorderMetrics();
                 _logger.Info("SQL Server 历史数据记录已停止。");
             }
             catch (Exception ex)
@@ -859,6 +874,7 @@ namespace IndustrialCommDemo
                         {
                             RunOnUi(UpdateDatabaseHistoryStatus);
                         }
+                        RunOnUi(UpdateDatabaseRecorderMetrics);
 
                         errorLogged = false;
                         // 满批说明数据库中可能还有未读取数据，立即继续追赶；否则按一秒频率刷新。
@@ -931,6 +947,141 @@ namespace IndustrialCommDemo
             DatabaseHistoryStatusTextBlock.Foreground = Brushes.ForestGreen;
         }
 
+        private void InitializeDatabaseManagementControls()
+        {
+            AddFilterComboItem(DatabaseQueryProtocolComboBox, "全部", null);
+            foreach (ProtocolKind value in Enum.GetValues(typeof(ProtocolKind))) AddFilterComboItem(DatabaseQueryProtocolComboBox, value.ToString(), value);
+            AddFilterComboItem(DatabaseQueryDataTypeComboBox, "全部", null);
+            foreach (DataType value in Enum.GetValues(typeof(DataType))) AddFilterComboItem(DatabaseQueryDataTypeComboBox, value.ToString(), value);
+            AddFilterComboItem(DatabaseQueryQualityComboBox, "全部", null);
+            foreach (QualityStatus value in Enum.GetValues(typeof(QualityStatus))) AddFilterComboItem(DatabaseQueryQualityComboBox, value.ToString(), value);
+            DatabaseQueryProtocolComboBox.SelectedIndex = DatabaseQueryDataTypeComboBox.SelectedIndex = DatabaseQueryQualityComboBox.SelectedIndex = 0;
+        }
+
+        private static void AddFilterComboItem(ComboBox combo, string text, object value)
+        {
+            combo.Items.Add(new ComboBoxItem { Content = text, Tag = value });
+        }
+
+        private async Task RefreshDatabaseFilterOptionsAsync()
+        {
+            var store = _databaseManagementStore; if (store == null) return;
+            var options = await store.GetFilterOptionsAsync(null, 200, CancellationToken.None);
+            DatabaseLatestDeviceComboBox.ItemsSource = new[] { string.Empty }.Concat(options.DeviceIds).ToArray();
+            DatabaseQueryDeviceComboBox.ItemsSource = new[] { string.Empty }.Concat(options.DeviceIds).ToArray();
+        }
+
+        private async void DatabaseLatestRefreshButton_Click(object sender, RoutedEventArgs e)
+        {
+            try { await RefreshDatabaseLatestAsync(); } catch (Exception ex) { HandleActionError("刷新最新值失败。", ex, true); }
+        }
+
+        private async Task RefreshDatabaseLatestAsync()
+        {
+            var store = RequireDatabaseManagementStore();
+            var filter = new HistoryQueryFilter { DeviceId = NormalizeFilterText(DatabaseLatestDeviceComboBox.Text) };
+            var records = await store.GetLatestValuesAsync(filter, 500, CancellationToken.None);
+            _databaseLatestRows.Clear(); foreach (var record in records) _databaseLatestRows.Add(DatabaseHistoryDisplayRow.FromRecord(record));
+        }
+
+        private async void DatabaseQueryButton_Click(object sender, RoutedEventArgs e) { _databaseQueryPage = 1; await ExecuteDatabaseQueryAsync(true); }
+        private async void DatabasePreviousPageButton_Click(object sender, RoutedEventArgs e) { if (_databaseQueryPage > 1) { _databaseQueryPage--; await ExecuteDatabaseQueryAsync(false); } }
+        private async void DatabaseNextPageButton_Click(object sender, RoutedEventArgs e) { if (_databaseQueryPage * GetDatabasePageSize() < _databaseQueryTotal) { _databaseQueryPage++; await ExecuteDatabaseQueryAsync(false); } }
+
+        private async Task ExecuteDatabaseQueryAsync(bool refreshOptions)
+        {
+            try
+            {
+                var store = RequireDatabaseManagementStore(); var filter = BuildDatabaseFilter(); var pageSize = GetDatabasePageSize();
+                var page = await store.QueryPageAsync(new HistoryPageRequest { Filter = filter, PageNumber = _databaseQueryPage, PageSize = pageSize }, CancellationToken.None);
+                var summary = await store.GetSummaryAsync(filter, CancellationToken.None);
+                _databaseQueryRows.Clear(); foreach (var record in page.Records) _databaseQueryRows.Add(DatabaseHistoryDisplayRow.FromRecord(record));
+                _databaseQueryTotal = page.TotalCount;
+                DatabaseQueryStatusTextBlock.Text = string.Format(CultureInfo.InvariantCulture, "第 {0}/{1} 页 · 共 {2} 条 · Good {3} · Bad {4} · Stale {5} · Unknown {6} · {7} ～ {8}", page.PageNumber, Math.Max(1, (page.TotalCount + pageSize - 1) / pageSize), page.TotalCount, summary.GoodCount, summary.BadCount, summary.StaleCount, summary.UnknownCount, summary.EarliestTimestamp.HasValue ? summary.EarliestTimestamp.Value.ToLocalTime().ToString("yyyy-MM-dd HH:mm") : "--", summary.LatestTimestamp.HasValue ? summary.LatestTimestamp.Value.ToLocalTime().ToString("yyyy-MM-dd HH:mm") : "--");
+                if (refreshOptions) await RefreshDatabaseFilterOptionsAsync();
+            }
+            catch (Exception ex) { HandleActionError("历史数据查询失败。", ex, true); }
+        }
+
+        private void DatabaseQueryResetButton_Click(object sender, RoutedEventArgs e)
+        {
+            DatabaseQueryDeviceComboBox.Text = DatabaseQueryAddressTextBox.Text = DatabaseQueryFromTextBox.Text = DatabaseQueryToTextBox.Text = string.Empty;
+            DatabaseQueryContainsCheckBox.IsChecked = false; DatabaseQueryProtocolComboBox.SelectedIndex = DatabaseQueryDataTypeComboBox.SelectedIndex = DatabaseQueryQualityComboBox.SelectedIndex = 0;
+            _databaseQueryPage = 1;
+        }
+
+        private async void DatabaseExportButton_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var dialog = new SaveFileDialog { Filter = "CSV 文件 (*.csv)|*.csv", FileName = "industrial-history-" + DateTime.Now.ToString("yyyyMMdd-HHmmss") + ".csv" };
+                if (dialog.ShowDialog(this) != true) return;
+                var store = RequireDatabaseManagementStore(); var filter = BuildDatabaseFilter(); if (!filter.ToTime.HasValue) filter.ToTime = DateTimeOffset.UtcNow; const int limit = 50000; var exported = 0; var page = 1;
+                var summary = await store.GetSummaryAsync(filter, CancellationToken.None); var truncated = summary.TotalCount > limit;
+                using (var stream = File.Create(dialog.FileName))
+                {
+                    while (exported < limit)
+                    {
+                        var result = await store.QueryPageAsync(new HistoryPageRequest { Filter = filter, PageNumber = page++, PageSize = 1000 }, CancellationToken.None);
+                        await CsvHistoryExporter.WriteBatchAsync(result.Records, stream, exported == 0, CancellationToken.None);
+                        exported += result.Records.Count;
+                        if (result.Records.Count < 1000) break;
+                    }
+                }
+                MessageBox.Show(this, string.Format("已导出 {0} 条。{1}", exported, truncated ? "结果超过 50,000 条，已截断。" : string.Empty), "导出完成");
+            }
+            catch (Exception ex) { HandleActionError("导出历史数据失败。", ex, true); }
+        }
+
+        private async void DatabaseDeleteButton_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var store = RequireDatabaseManagementStore(); var filter = BuildDatabaseFilter(); EnsureDestructiveFilter(filter);
+                var summary = await store.GetSummaryAsync(filter, CancellationToken.None); if (summary.TotalCount == 0) { MessageBox.Show(this, "没有匹配记录。"); return; }
+                if (MessageBox.Show(this, "确定删除匹配的 " + summary.TotalCount + " 条记录？", "确认删除", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return;
+                var removed = await store.DeleteAsync(filter, CancellationToken.None); MessageBox.Show(this, "已删除 " + removed + " 条记录。"); await ExecuteDatabaseQueryAsync(true); await RefreshDatabaseLatestAsync();
+            }
+            catch (Exception ex) { HandleActionError("删除历史数据失败。", ex, true); }
+        }
+
+        private async void DatabaseCleanupButton_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var item = DatabaseRetentionComboBox.SelectedItem as ComboBoxItem; var days = int.Parse(Convert.ToString(item.Tag), CultureInfo.InvariantCulture);
+                var filter = new HistoryQueryFilter { ToTime = DateTimeOffset.Now.AddDays(-days) }; var store = RequireDatabaseManagementStore(); var summary = await store.GetSummaryAsync(filter, CancellationToken.None);
+                if (summary.TotalCount == 0) { MessageBox.Show(this, "没有需要清理的数据。"); return; }
+                if (MessageBox.Show(this, string.Format("确定删除 {0} 天以前的 {1} 条记录？", days, summary.TotalCount), "确认清理", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return;
+                var removed = await store.DeleteAsync(filter, CancellationToken.None); MessageBox.Show(this, "已清理 " + removed + " 条记录。"); await ExecuteDatabaseQueryAsync(true);
+            }
+            catch (Exception ex) { HandleActionError("清理历史数据失败。", ex, true); }
+        }
+
+        private HistoryQueryFilter BuildDatabaseFilter()
+        {
+            return new HistoryQueryFilter { DeviceId = NormalizeFilterText(DatabaseQueryDeviceComboBox.Text), Address = NormalizeFilterText(DatabaseQueryAddressTextBox.Text),
+                AddressMatchMode = DatabaseQueryContainsCheckBox.IsChecked == true ? HistoryAddressMatchMode.Contains : HistoryAddressMatchMode.Exact,
+                Protocol = GetSelectedFilterValue<ProtocolKind>(DatabaseQueryProtocolComboBox), DataType = GetSelectedFilterValue<DataType>(DatabaseQueryDataTypeComboBox), Quality = GetSelectedFilterValue<QualityStatus>(DatabaseQueryQualityComboBox),
+                FromTime = ParseOptionalDatabaseTime(DatabaseQueryFromTextBox.Text), ToTime = ParseOptionalDatabaseTime(DatabaseQueryToTextBox.Text) };
+        }
+
+        private static T? GetSelectedFilterValue<T>(ComboBox combo) where T : struct { var item = combo.SelectedItem as ComboBoxItem; return item != null && item.Tag is T ? (T?)item.Tag : null; }
+        private static string GetComboTagText(ComboBox combo) { var item = combo.SelectedItem as ComboBoxItem; return item == null || item.Tag == null ? null : item.Tag.ToString(); }
+        private static void SelectComboByTag(ComboBox combo, string tag) { if (string.IsNullOrWhiteSpace(tag)) return; foreach (var item in combo.Items.OfType<ComboBoxItem>()) if (item.Tag != null && string.Equals(item.Tag.ToString(), tag, StringComparison.OrdinalIgnoreCase)) { combo.SelectedItem = item; return; } }
+        private static void SelectComboByContent(ComboBox combo, string content) { foreach (var item in combo.Items.OfType<ComboBoxItem>()) if (string.Equals(Convert.ToString(item.Content), content, StringComparison.OrdinalIgnoreCase)) { combo.SelectedItem = item; return; } }
+        private static string NormalizeFilterText(string text) { return string.IsNullOrWhiteSpace(text) ? null : text.Trim(); }
+        private static DateTimeOffset? ParseOptionalDatabaseTime(string text) { if (string.IsNullOrWhiteSpace(text)) return null; DateTimeOffset value; if (!DateTimeOffset.TryParse(text, CultureInfo.CurrentCulture, DateTimeStyles.AssumeLocal, out value)) throw new InvalidOperationException("时间格式无效，请使用 yyyy-MM-dd HH:mm:ss。"); return value; }
+        private int GetDatabasePageSize() { var item = DatabaseQueryPageSizeComboBox.SelectedItem as ComboBoxItem; return int.Parse(Convert.ToString(item.Content), CultureInfo.InvariantCulture); }
+        private SqlServerIndustrialDataStore RequireDatabaseManagementStore() { if (_databaseManagementStore == null) throw new InvalidOperationException("请先测试并启用数据库连接。"); return _databaseManagementStore; }
+        private static void EnsureDestructiveFilter(HistoryQueryFilter filter) { if (string.IsNullOrWhiteSpace(filter.DeviceId) && string.IsNullOrWhiteSpace(filter.Address) && !filter.Protocol.HasValue && !filter.DataType.HasValue && !filter.Quality.HasValue && !filter.FromTime.HasValue && !filter.ToTime.HasValue) throw new InvalidOperationException("删除操作必须至少设置一个筛选条件。"); }
+
+        private void UpdateDatabaseRecorderMetrics()
+        {
+            var snapshot = _databaseRecorder == null ? null : _databaseRecorder.GetSnapshot();
+            DatabaseRecorderMetricsTextBlock.Text = snapshot == null ? "队列 0 · 已接收 0 · 已写入 0 · 丢弃 0 · 失败 0" : string.Format(CultureInfo.InvariantCulture, "队列 {0} · 已接收 {1} · 已写入 {2} · 丢弃 {3} · 失败 {4} · 最近写入 {5}{6}", snapshot.QueuedBatchCount, snapshot.AcceptedRecordCount, snapshot.WrittenRecordCount, snapshot.DroppedRecordCount, snapshot.WriteFailureCount, snapshot.LastSuccessfulWrite.HasValue ? snapshot.LastSuccessfulWrite.Value.ToLocalTime().ToString("HH:mm:ss") : "--", string.IsNullOrWhiteSpace(snapshot.LastError) ? string.Empty : " · " + snapshot.LastError);
+        }
+
         private void ClearLogButton_Click(object sender, RoutedEventArgs e)
         {
             LogTextBox.Clear();
@@ -948,6 +1099,7 @@ namespace IndustrialCommDemo
             await ResetSocketServerAsync();
             // 设备都停止后再排空写库队列，保证退出前尽量保存最后一批采集值。
             await StopDatabaseRecorderAsync();
+            if (_databaseManagementStore != null) { _databaseManagementStore.Dispose(); _databaseManagementStore = null; }
             _logger.Dispose();
             base.OnClosed(e);
         }
@@ -1303,6 +1455,17 @@ namespace IndustrialCommDemo
 
             _uiState.Database.ConnectionString = DatabaseConnectionStringTextBox.Text;
             _uiState.Database.TableName = DatabaseTableNameTextBox.Text;
+            _uiState.Database.QueryDeviceId = DatabaseQueryDeviceComboBox.Text;
+            _uiState.Database.QueryAddress = DatabaseQueryAddressTextBox.Text;
+            _uiState.Database.AddressContains = DatabaseQueryContainsCheckBox.IsChecked == true;
+            _uiState.Database.FromTime = DatabaseQueryFromTextBox.Text;
+            _uiState.Database.ToTime = DatabaseQueryToTextBox.Text;
+            _uiState.Database.PageSize = GetDatabasePageSize();
+            var retention = DatabaseRetentionComboBox.SelectedItem as ComboBoxItem;
+            _uiState.Database.RetentionDays = retention == null ? 30 : int.Parse(Convert.ToString(retention.Tag), CultureInfo.InvariantCulture);
+            _uiState.Database.Protocol = GetComboTagText(DatabaseQueryProtocolComboBox);
+            _uiState.Database.DataType = GetComboTagText(DatabaseQueryDataTypeComboBox);
+            _uiState.Database.Quality = GetComboTagText(DatabaseQueryQualityComboBox);
 
             _uiStateStore.Save(_uiState);
         }
@@ -1397,6 +1560,16 @@ namespace IndustrialCommDemo
             // 每次启动都由用户点击“测试并启用”，可以明确看到本次连接是否成功。
             SetIfNotEmpty(DatabaseConnectionStringTextBox, state.ConnectionString);
             SetIfNotEmpty(DatabaseTableNameTextBox, state.TableName);
+            DatabaseQueryDeviceComboBox.Text = state.QueryDeviceId ?? string.Empty;
+            DatabaseQueryAddressTextBox.Text = state.QueryAddress ?? string.Empty;
+            DatabaseQueryContainsCheckBox.IsChecked = state.AddressContains;
+            DatabaseQueryFromTextBox.Text = state.FromTime ?? string.Empty;
+            DatabaseQueryToTextBox.Text = state.ToTime ?? string.Empty;
+            SelectComboByContent(DatabaseQueryPageSizeComboBox, state.PageSize <= 0 ? "100" : state.PageSize.ToString(CultureInfo.InvariantCulture));
+            SelectComboByTag(DatabaseQueryProtocolComboBox, state.Protocol);
+            SelectComboByTag(DatabaseQueryDataTypeComboBox, state.DataType);
+            SelectComboByTag(DatabaseQueryQualityComboBox, state.Quality);
+            foreach (var item in DatabaseRetentionComboBox.Items.OfType<ComboBoxItem>()) if (Convert.ToString(item.Tag) == (state.RetentionDays <= 0 ? 30 : state.RetentionDays).ToString(CultureInfo.InvariantCulture)) { DatabaseRetentionComboBox.SelectedItem = item; break; }
             DatabaseEnabledCheckBox.IsChecked = false;
             DatabaseStatusTextBlock.Text = "未启用";
         }

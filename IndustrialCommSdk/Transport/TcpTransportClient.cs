@@ -41,6 +41,9 @@ namespace IndustrialCommSdk.Transport
         public TcpTransportClient(TcpTransportOptions options)
         {
             _options = options ?? throw new ArgumentNullException(nameof(options));
+            if (_options.ConnectTimeoutMilliseconds <= 0) throw new ArgumentOutOfRangeException(nameof(options), "Connect timeout must be greater than zero.");
+            if (_options.SendTimeoutMilliseconds <= 0) throw new ArgumentOutOfRangeException(nameof(options), "Send timeout must be greater than zero.");
+            if (_options.ReceiveTimeoutMilliseconds <= 0) throw new ArgumentOutOfRangeException(nameof(options), "Receive timeout must be greater than zero.");
         }
 
         /// <summary>
@@ -105,6 +108,15 @@ namespace IndustrialCommSdk.Transport
                 if (completedTask != connectTask)
                 {
                     DisposeClient();
+                    try
+                    {
+                        await connectTask.ConfigureAwait(false);
+                    }
+                    catch
+                    {
+                        // 关闭尚在连接的套接字会使连接任务失败；下面保留原始取消或超时语义。
+                    }
+                    cancellationToken.ThrowIfCancellationRequested();
                     throw new IndustrialTimeoutException("TCP connect timeout.");
                 }
 
@@ -151,8 +163,16 @@ namespace IndustrialCommSdk.Transport
         {
             if (payload == null) throw new ArgumentNullException(nameof(payload));
             await EnsureConnectedAsync(cancellationToken).ConfigureAwait(false);
-            await _stream.WriteAsync(payload, 0, payload.Length, cancellationToken).ConfigureAwait(false);
-            await _stream.FlushAsync(cancellationToken).ConfigureAwait(false);
+            await AwaitIoAsync(
+                _stream.WriteAsync(payload, 0, payload.Length, cancellationToken),
+                _options.SendTimeoutMilliseconds,
+                "TCP send timeout.",
+                cancellationToken).ConfigureAwait(false);
+            await AwaitIoAsync(
+                _stream.FlushAsync(cancellationToken),
+                _options.SendTimeoutMilliseconds,
+                "TCP flush timeout.",
+                cancellationToken).ConfigureAwait(false);
         }
 
         /// <summary>
@@ -172,7 +192,11 @@ namespace IndustrialCommSdk.Transport
             var offset = 0;
             while (offset < length)
             {
-                var read = await _stream.ReadAsync(buffer, offset, length - offset, cancellationToken).ConfigureAwait(false);
+                var read = await AwaitIoAsync(
+                    _stream.ReadAsync(buffer, offset, length - offset, cancellationToken),
+                    _options.ReceiveTimeoutMilliseconds,
+                    "TCP receive timeout.",
+                    cancellationToken).ConfigureAwait(false);
                 if (read == 0)
                 {
                     DisposeClient();
@@ -181,6 +205,51 @@ namespace IndustrialCommSdk.Transport
                 offset += read;
             }
             return buffer;
+        }
+
+        private async Task AwaitIoAsync(Task operation, int timeoutMilliseconds, string timeoutMessage, CancellationToken cancellationToken)
+        {
+            var timeoutTask = Task.Delay(timeoutMilliseconds, cancellationToken);
+            var completed = await Task.WhenAny(operation, timeoutTask).ConfigureAwait(false);
+            if (completed == operation)
+            {
+                await operation.ConfigureAwait(false);
+                return;
+            }
+
+            DisposeClient();
+            try
+            {
+                await operation.ConfigureAwait(false);
+            }
+            catch
+            {
+                // 超时后关闭连接会使挂起的异步 I/O 以异常结束；对外统一报告超时。
+            }
+            cancellationToken.ThrowIfCancellationRequested();
+            throw new IndustrialTimeoutException(timeoutMessage);
+        }
+
+        private async Task<T> AwaitIoAsync<T>(Task<T> operation, int timeoutMilliseconds, string timeoutMessage, CancellationToken cancellationToken)
+        {
+            var timeoutTask = Task.Delay(timeoutMilliseconds, cancellationToken);
+            var completed = await Task.WhenAny(operation, timeoutTask).ConfigureAwait(false);
+            if (completed == operation)
+            {
+                return await operation.ConfigureAwait(false);
+            }
+
+            DisposeClient();
+            try
+            {
+                await operation.ConfigureAwait(false);
+            }
+            catch
+            {
+                // 超时后关闭连接会使挂起的异步 I/O 以异常结束；对外统一报告超时。
+            }
+            cancellationToken.ThrowIfCancellationRequested();
+            throw new IndustrialTimeoutException(timeoutMessage);
         }
 
         /// <summary>

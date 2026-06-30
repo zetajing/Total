@@ -63,11 +63,17 @@ namespace IndustrialCommSdk.Protocols.Socket
         /// <param name="pollingScheduler">可选的轮询调度器实例。</param>
         /// <exception cref="ArgumentNullException"><paramref name="options"/> 或 <paramref name="adapter"/> 为 null 时引发。</exception>
         public SocketBridgeClient(SocketBridgeClientOptions options, ISocketProtocolAdapter adapter, IIndustrialLogger logger = null, IPollingScheduler pollingScheduler = null)
-            : base(options.DeviceId, ProtocolKind.TcpSocket, pollingScheduler ?? new PollingScheduler(logger), logger ?? NullIndustrialLogger.Instance)
+            : base(GetDeviceId(options), ProtocolKind.TcpSocket, pollingScheduler ?? new PollingScheduler(logger), logger ?? NullIndustrialLogger.Instance)
         {
             if (options == null) throw new ArgumentNullException(nameof(options));
             _adapter = adapter ?? throw new ArgumentNullException(nameof(adapter));
             _transport = new TcpTransportClient(options.Transport);
+        }
+
+        private static string GetDeviceId(SocketBridgeClientOptions options)
+        {
+            if (options == null) throw new ArgumentNullException(nameof(options));
+            return options.DeviceId;
         }
 
         /// <summary>

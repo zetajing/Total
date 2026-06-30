@@ -38,8 +38,10 @@ namespace IndustrialCommSdk.Protocols.Mc
         L,
         /// <summary>定时器当前值（Timer Current Value）。</summary>
         TN,
-        /// <summary>累计定时器（Summation / Retentive Timer）。</summary>
+        /// <summary>累计定时器触点（Retentive Timer Contact）。</summary>
         SS,
+        /// <summary>累计定时器当前值（Retentive Timer Current Value）。</summary>
+        SN,
         /// <summary>计数器当前值（Counter Current Value）。</summary>
         CN,
     }
@@ -79,7 +81,7 @@ namespace IndustrialCommSdk.Protocols.Mc
         /// 匹配 MC 地址的正则表达式，例如 "D100"、"X3F"、"M0"、"ZR1000"。
         /// 分组 1：设备类型前缀（如 D、M、X、Y、ZR、SD 等）；分组 2：地址数字部分（十六进制或十进制）。
         /// </summary>
-        private static readonly Regex Pattern = new Regex(@"^(ZR|SD|TN|SS|CN|[A-Z])([0-9A-F]+)$", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+        private static readonly Regex Pattern = new Regex(@"^(ZR|SD|TN|SS|SN|CN|[A-Z])([0-9A-F]+)$", RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
         /// <summary>
         /// 将 MC 地址字符串解析为 <see cref="McAddress"/> 对象。
@@ -101,9 +103,9 @@ namespace IndustrialCommSdk.Protocols.Mc
                 throw new Exceptions.IndustrialAddressParseException("Unsupported MC device type.");
             }
 
-            var isHex = type == McDeviceType.X || type == McDeviceType.Y || type == McDeviceType.W;
+            var isHex = type == McDeviceType.X || type == McDeviceType.Y || type == McDeviceType.W || type == McDeviceType.ZR;
             var index = Convert.ToInt32(match.Groups[2].Value, isHex ? 16 : 10);
-            var isBit = type == McDeviceType.M || type == McDeviceType.X || type == McDeviceType.Y || type == McDeviceType.L;
+            var isBit = type == McDeviceType.M || type == McDeviceType.X || type == McDeviceType.Y || type == McDeviceType.L || type == McDeviceType.SS;
             return new McAddress(type, index, isBit);
         }
     }
@@ -131,7 +133,7 @@ namespace IndustrialCommSdk.Protocols.Mc
     /// </summary>
     public sealed class MitsubishiMcClient : IndustrialClientBase
     {
-        private readonly TcpTransportClient _transport;
+        private readonly ITransportClient _transport;
         private readonly McAddressParser _parser;
 
         /// <summary>
@@ -143,7 +145,7 @@ namespace IndustrialCommSdk.Protocols.Mc
         /// <param name="parser">可选的 MC 地址解析器实例。</param>
         /// <exception cref="ArgumentNullException"><paramref name="options"/> 为 null 时引发。</exception>
         public MitsubishiMcClient(MitsubishiMcClientOptions options, IIndustrialLogger logger = null, IPollingScheduler pollingScheduler = null, McAddressParser parser = null)
-            : base(options.DeviceId, ProtocolKind.MitsubishiMc, pollingScheduler ?? new PollingScheduler(logger), logger ?? NullIndustrialLogger.Instance)
+            : base(GetDeviceId(options), ProtocolKind.MitsubishiMc, pollingScheduler ?? new PollingScheduler(logger), logger ?? NullIndustrialLogger.Instance)
         {
             if (options == null) throw new ArgumentNullException(nameof(options));
 
@@ -154,6 +156,27 @@ namespace IndustrialCommSdk.Protocols.Mc
                 SendTimeoutMilliseconds = options.SendTimeoutMilliseconds,
                 ReceiveTimeoutMilliseconds = options.ReceiveTimeoutMilliseconds,
             });
+            _parser = parser ?? new McAddressParser();
+        }
+
+        private static string GetDeviceId(MitsubishiMcClientOptions options)
+        {
+            if (options == null) throw new ArgumentNullException(nameof(options));
+            return options.DeviceId;
+        }
+
+        /// <summary>
+        /// 使用指定传输层创建客户端。该入口仅供 SDK 内部和测试使用，避免协议测试依赖真实 PLC 或 TCP 时序。
+        /// </summary>
+        internal MitsubishiMcClient(
+            string deviceId,
+            ITransportClient transport,
+            IIndustrialLogger logger = null,
+            IPollingScheduler pollingScheduler = null,
+            McAddressParser parser = null)
+            : base(deviceId, ProtocolKind.MitsubishiMc, pollingScheduler ?? new PollingScheduler(logger), logger ?? NullIndustrialLogger.Instance)
+        {
+            _transport = transport ?? throw new ArgumentNullException(nameof(transport));
             _parser = parser ?? new McAddressParser();
         }
 
@@ -198,8 +221,8 @@ namespace IndustrialCommSdk.Protocols.Mc
 
             await _transport.SendAsync(frame, cancellationToken).ConfigureAwait(false);
             var header = await _transport.ReceiveExactAsync(11, cancellationToken).ConfigureAwait(false);
-            var responseLength = McFrame3E.ReadU16LE(header, 7);
-            var body = await _transport.ReceiveExactAsync(responseLength, cancellationToken).ConfigureAwait(false);
+            var remainingLength = McFrame3E.GetRemainingResponseLength(header);
+            var body = await _transport.ReceiveExactAsync(remainingLength, cancellationToken).ConfigureAwait(false);
             var response = McFrame3E.Combine(header, body);
             var payload = McFrame3E.ParseResponse(response);
 
@@ -225,8 +248,8 @@ namespace IndustrialCommSdk.Protocols.Mc
 
             await _transport.SendAsync(frame, cancellationToken).ConfigureAwait(false);
             var header = await _transport.ReceiveExactAsync(11, cancellationToken).ConfigureAwait(false);
-            var responseLength = McFrame3E.ReadU16LE(header, 7);
-            var body = await _transport.ReceiveExactAsync(responseLength, cancellationToken).ConfigureAwait(false);
+            var remainingLength = McFrame3E.GetRemainingResponseLength(header);
+            var body = await _transport.ReceiveExactAsync(remainingLength, cancellationToken).ConfigureAwait(false);
             McFrame3E.ParseResponse(McFrame3E.Combine(header, body));
         }
 

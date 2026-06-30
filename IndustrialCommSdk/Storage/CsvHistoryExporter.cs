@@ -37,14 +37,23 @@ namespace IndustrialCommSdk.Storage
             if (records == null) throw new ArgumentNullException(nameof(records));
             if (stream == null) throw new ArgumentNullException(nameof(stream));
 
-            // UTF-8 BOM 让 Excel 正确识别中文字符。
-            var bom = new byte[] { 0xEF, 0xBB, 0xBF };
-            await stream.WriteAsync(bom, 0, bom.Length, cancellationToken).ConfigureAwait(false);
+            await WriteBatchAsync(records, stream, true, cancellationToken).ConfigureAwait(false);
+        }
+
+        /// <summary>向同一流分批追加记录；首批设置 includeHeader=true，后续批次设置 false。</summary>
+        public static async Task WriteBatchAsync(IEnumerable<IndustrialDataRecord> records, Stream stream, bool includeHeader, CancellationToken cancellationToken)
+        {
+            if (records == null) throw new ArgumentNullException(nameof(records));
+            if (stream == null) throw new ArgumentNullException(nameof(stream));
+            if (includeHeader)
+            {
+                var bom = new byte[] { 0xEF, 0xBB, 0xBF };
+                await stream.WriteAsync(bom, 0, bom.Length, cancellationToken).ConfigureAwait(false);
+            }
 
             using (var writer = new StreamWriter(stream, new UTF8Encoding(false), 8192, true))
             {
-                // 写表头
-                await writer.WriteLineAsync(string.Join(",", Headers)).ConfigureAwait(false);
+                if (includeHeader) await writer.WriteLineAsync(string.Join(",", Headers)).ConfigureAwait(false);
 
                 // 逐行写记录
                 foreach (var record in records)

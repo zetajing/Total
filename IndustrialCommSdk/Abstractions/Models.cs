@@ -16,6 +16,7 @@ namespace IndustrialCommSdk.Abstractions
         {
             if (string.IsNullOrWhiteSpace(deviceId)) throw new ArgumentNullException(nameof(deviceId));
             if (string.IsNullOrWhiteSpace(address)) throw new ArgumentNullException(nameof(address));
+            if (timeout.HasValue && timeout.Value <= TimeSpan.Zero) throw new ArgumentOutOfRangeException(nameof(timeout));
 
             DeviceId = deviceId;
             Address = address;
@@ -51,6 +52,7 @@ namespace IndustrialCommSdk.Abstractions
             if (string.IsNullOrWhiteSpace(deviceId)) throw new ArgumentNullException(nameof(deviceId));
             if (string.IsNullOrWhiteSpace(address)) throw new ArgumentNullException(nameof(address));
             if (value == null) throw new ArgumentNullException(nameof(value));
+            if (timeout.HasValue && timeout.Value <= TimeSpan.Zero) throw new ArgumentOutOfRangeException(nameof(timeout));
 
             DeviceId = deviceId;
             Address = address;

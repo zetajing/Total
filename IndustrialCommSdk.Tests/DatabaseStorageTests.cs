@@ -97,6 +97,10 @@ namespace IndustrialCommSdk.Tests
 
                 Assert.That(recorder.TryRecord(ProtocolKind.SiemensS7, "s7-1", new[] { value }), Is.True);
                 await recorder.StopAsync(CancellationToken.None);
+                var snapshot = recorder.GetSnapshot();
+                Assert.That(snapshot.AcceptedRecordCount, Is.EqualTo(1));
+                Assert.That(snapshot.WrittenRecordCount, Is.EqualTo(1));
+                Assert.That(snapshot.DroppedRecordCount, Is.EqualTo(0));
             }
 
             Assert.That(store.Initialized, Is.True);
@@ -147,6 +151,26 @@ namespace IndustrialCommSdk.Tests
 
             Assert.That(results.Count, Is.EqualTo(1));
             Assert.That(results[0].Address, Is.EqualTo("D200"));
+        }
+
+        [Test]
+        public async Task QueryAsync_SupportsAddressContainsAndDataType()
+        {
+            var store = new CapturingDataStore();
+            var first = CreateRecord("d1", "DB1.DBD0", DateTimeOffset.UtcNow); first.DataType = DataType.Int32;
+            var second = CreateRecord("d1", "D100", DateTimeOffset.UtcNow);
+            await store.WriteAsync(new[] { first, second }, CancellationToken.None);
+            var result = await store.QueryAsync(new HistoryQueryFilter { Address = "DBD", AddressMatchMode = HistoryAddressMatchMode.Contains, DataType = DataType.Int32 }, CancellationToken.None);
+            Assert.That(result.Select(x => x.Address), Is.EqualTo(new[] { "DB1.DBD0" }));
+        }
+
+        [Test]
+        public void ManagementQuery_RejectsInvalidTimeRangeBeforeConnecting()
+        {
+            var store = new SqlServerIndustrialDataStore(new SqlServerDataStoreOptions { ConnectionString = "Server=localhost;Database=x;Integrated Security=True;" });
+            Assert.ThrowsAsync<ArgumentException>(async () => await store.QueryPageAsync(new HistoryPageRequest {
+                Filter = new HistoryQueryFilter { FromTime = DateTimeOffset.UtcNow, ToTime = DateTimeOffset.UtcNow.AddDays(-1) }
+            }, CancellationToken.None));
         }
 
         /// <summary>
@@ -219,6 +243,19 @@ namespace IndustrialCommSdk.Tests
             Assert.That(lines[1], Does.Contain("\"D\"\"100\""));
         }
 
+        [Test]
+        public async Task CsvExporter_AppendsBatchesWithSingleHeader()
+        {
+            using (var stream = new System.IO.MemoryStream())
+            {
+                await CsvHistoryExporter.WriteBatchAsync(new[] { CreateRecord("d1", "D1", DateTimeOffset.UtcNow) }, stream, true, CancellationToken.None);
+                await CsvHistoryExporter.WriteBatchAsync(new[] { CreateRecord("d2", "D2", DateTimeOffset.UtcNow) }, stream, false, CancellationToken.None);
+                var text = System.Text.Encoding.UTF8.GetString(stream.ToArray());
+                Assert.That(text.Split(new[] { "Id,Protocol" }, StringSplitOptions.None).Length - 1, Is.EqualTo(1));
+                Assert.That(text, Does.Contain("d1")); Assert.That(text, Does.Contain("d2"));
+            }
+        }
+
         private static IndustrialDataRecord CreateRecord(string deviceId, string address, DateTimeOffset timestamp)
         {
             return new IndustrialDataRecord
@@ -260,9 +297,11 @@ namespace IndustrialCommSdk.Tests
                 if (!string.IsNullOrWhiteSpace(filter.DeviceId))
                     query = query.Where(r => r.DeviceId == filter.DeviceId);
                 if (!string.IsNullOrWhiteSpace(filter.Address))
-                    query = query.Where(r => r.Address == filter.Address);
+                    query = filter.AddressMatchMode == HistoryAddressMatchMode.Contains ? query.Where(r => r.Address.Contains(filter.Address)) : query.Where(r => r.Address == filter.Address);
                 if (filter.Protocol.HasValue)
                     query = query.Where(r => r.Protocol == filter.Protocol.Value);
+                if (filter.DataType.HasValue)
+                    query = query.Where(r => r.DataType == filter.DataType.Value);
                 if (filter.FromTime.HasValue)
                     query = query.Where(r => r.Timestamp >= filter.FromTime.Value);
                 if (filter.ToTime.HasValue)

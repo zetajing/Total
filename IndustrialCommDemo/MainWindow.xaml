@@ -572,10 +572,13 @@
                                                Margin="0,6,0,0"
                                                Foreground="#475569"
                                                Text="未启用" />
+                                    <TextBlock x:Name="DatabaseRecorderMetricsTextBlock" Margin="0,6,0,0" Foreground="#475569" Text="队列 0 · 已接收 0 · 已写入 0 · 丢弃 0 · 失败 0" />
                                 </StackPanel>
                             </Border>
 
-                            <Border Grid.Row="3" Margin="0,16,0,0" Padding="14" CornerRadius="12" Background="#FFFFFF" BorderBrush="#D8E2EE" BorderThickness="1">
+                            <TabControl Grid.Row="3" Margin="0,16,0,0">
+                              <TabItem Header="实时流水">
+                               <Border Padding="14" Background="#FFFFFF" BorderBrush="#D8E2EE" BorderThickness="1">
                                 <Grid>
                                     <Grid.RowDefinitions>
                                         <RowDefinition Height="Auto" />
@@ -613,13 +616,61 @@
                                         </DataGrid.Columns>
                                     </DataGrid>
                                 </Grid>
-                            </Border>
+                               </Border>
+                              </TabItem>
+                              <TabItem Header="最新值">
+                                <Grid Margin="10">
+                                  <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+                                  <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                                    <TextBlock VerticalAlignment="Center" Text="设备："/><ComboBox x:Name="DatabaseLatestDeviceComboBox" Width="180" IsEditable="True"/>
+                                    <Button Margin="10,0,0,0" Padding="14,6" Click="DatabaseLatestRefreshButton_Click" Content="刷新最新值"/>
+                                  </StackPanel>
+                                  <DataGrid x:Name="DatabaseLatestDataGrid" Grid.Row="1" Height="340" AutoGenerateColumns="False" IsReadOnly="True" CanUserAddRows="False" RowHeaderWidth="0">
+                                    <DataGrid.Columns>
+                                      <DataGridTextColumn Header="设备" Binding="{Binding DeviceId}" Width="120"/><DataGridTextColumn Header="地址" Binding="{Binding Address}" Width="110"/>
+                                      <DataGridTextColumn Header="协议" Binding="{Binding Protocol}" Width="100"/><DataGridTextColumn Header="类型" Binding="{Binding DataType}" Width="80"/>
+                                      <DataGridTextColumn Header="最新值" Binding="{Binding ValueText}" Width="*"/><DataGridTextColumn Header="质量" Binding="{Binding Quality}" Width="100"/>
+                                      <DataGridTextColumn Header="采集时间" Binding="{Binding Timestamp}" Width="170"/>
+                                    </DataGrid.Columns>
+                                  </DataGrid>
+                                </Grid>
+                              </TabItem>
+                              <TabItem Header="历史管理">
+                                <Grid Margin="10">
+                                  <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+                                  <WrapPanel Margin="0,0,0,8">
+                                    <TextBlock VerticalAlignment="Center" Text="设备"/><ComboBox x:Name="DatabaseQueryDeviceComboBox" Width="130" Margin="5,0,10,0" IsEditable="True"/>
+                                    <TextBlock VerticalAlignment="Center" Text="地址"/><TextBox x:Name="DatabaseQueryAddressTextBox" Width="100" Margin="5,0"/><CheckBox x:Name="DatabaseQueryContainsCheckBox" VerticalAlignment="Center" Margin="5,0,10,0" Content="包含"/>
+                                    <TextBlock VerticalAlignment="Center" Text="协议"/><ComboBox x:Name="DatabaseQueryProtocolComboBox" Width="110" Margin="5,0,10,0"/>
+                                    <TextBlock VerticalAlignment="Center" Text="类型"/><ComboBox x:Name="DatabaseQueryDataTypeComboBox" Width="100" Margin="5,0,10,0"/>
+                                    <TextBlock VerticalAlignment="Center" Text="质量"/><ComboBox x:Name="DatabaseQueryQualityComboBox" Width="100" Margin="5,0"/>
+                                  </WrapPanel>
+                                  <WrapPanel Grid.Row="1" Margin="0,0,0,8">
+                                    <TextBlock VerticalAlignment="Center" Text="开始"/><TextBox x:Name="DatabaseQueryFromTextBox" Width="145" Margin="5,0,10,0" ToolTip="yyyy-MM-dd HH:mm:ss"/>
+                                    <TextBlock VerticalAlignment="Center" Text="结束"/><TextBox x:Name="DatabaseQueryToTextBox" Width="145" Margin="5,0,10,0" ToolTip="yyyy-MM-dd HH:mm:ss"/>
+                                    <TextBlock VerticalAlignment="Center" Text="每页"/><ComboBox x:Name="DatabaseQueryPageSizeComboBox" Width="70" Margin="5,0,10,0" SelectedIndex="1"><ComboBoxItem Content="50"/><ComboBoxItem Content="100"/><ComboBoxItem Content="200"/></ComboBox>
+                                    <Button Padding="12,5" Click="DatabaseQueryButton_Click" Content="查询"/><Button Margin="6,0" Padding="12,5" Click="DatabaseQueryResetButton_Click" Content="重置"/>
+                                  </WrapPanel>
+                                  <DockPanel Grid.Row="2" Margin="0,0,0,8">
+                                    <StackPanel DockPanel.Dock="Left" Orientation="Horizontal"><Button Padding="10,4" Click="DatabasePreviousPageButton_Click" Content="上一页"/><Button Margin="6,0" Padding="10,4" Click="DatabaseNextPageButton_Click" Content="下一页"/><TextBlock x:Name="DatabaseQueryStatusTextBlock" Margin="10,5" Text="未查询"/></StackPanel>
+                                    <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" HorizontalAlignment="Right"><Button Padding="10,4" Click="DatabaseExportButton_Click" Content="导出 CSV"/><Button Margin="6,0" Padding="10,4" Click="DatabaseDeleteButton_Click" Content="删除筛选结果"/><ComboBox x:Name="DatabaseRetentionComboBox" Width="80" SelectedIndex="1"><ComboBoxItem Content="7天" Tag="7"/><ComboBoxItem Content="30天" Tag="30"/><ComboBoxItem Content="90天" Tag="90"/><ComboBoxItem Content="180天" Tag="180"/></ComboBox><Button Margin="6,0,0,0" Padding="10,4" Click="DatabaseCleanupButton_Click" Content="清理旧数据"/></StackPanel>
+                                  </DockPanel>
+                                  <DataGrid x:Name="DatabaseQueryDataGrid" Grid.Row="3" Height="340" AutoGenerateColumns="False" IsReadOnly="True" CanUserAddRows="False" RowHeaderWidth="0">
+                                    <DataGrid.Columns>
+                                      <DataGridTextColumn Header="ID" Binding="{Binding Id}" Width="65"/><DataGridTextColumn Header="设备" Binding="{Binding DeviceId}" Width="110"/><DataGridTextColumn Header="地址" Binding="{Binding Address}" Width="100"/>
+                                      <DataGridTextColumn Header="协议" Binding="{Binding Protocol}" Width="95"/><DataGridTextColumn Header="类型" Binding="{Binding DataType}" Width="75"/><DataGridTextColumn Header="值" Binding="{Binding ValueText}" Width="*"/>
+                                      <DataGridTextColumn Header="质量" Binding="{Binding Quality}" Width="90"/><DataGridTextColumn Header="时间" Binding="{Binding Timestamp}" Width="165"/><DataGridTextColumn Header="错误" Binding="{Binding ErrorMessage}" Width="140"/>
+                                    </DataGrid.Columns>
+                                  </DataGrid>
+                                </Grid>
+                              </TabItem>
+                            </TabControl>
 
                             <TextBlock Grid.Row="4"
                                        Margin="0,14,0,0"
                                        Foreground="#64748B"
                                        TextWrapping="Wrap"
-                                       Text="数据库只负责历史记录，不参与实时控制。启用时会自动创建历史表；表格每秒增量刷新并保留最近 500 行，后台有界队列确保数据库变慢时不会阻塞 PLC 通信。" />
+                                       Text="数据库只负责历史记录，不参与实时控制。实时流水、最新值和历史管理互不影响；删除与保留期清理均需要确认。" />
                         </Grid>
                     </ScrollViewer>
                 </TabItem>
