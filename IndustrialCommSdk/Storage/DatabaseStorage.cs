@@ -87,6 +87,29 @@ namespace IndustrialCommSdk.Storage
         }
     }
 
+
+    /// <summary>
+    /// 历史数据查询过滤条件。
+    /// 所有字段均为可选，null 表示不限制该条件，多个条件之间为 AND 关系。
+    /// </summary>
+    public sealed class HistoryQueryFilter
+    {
+        /// <summary>按设备标识过滤（精确匹配）。</summary>
+        public string DeviceId { get; set; }
+        /// <summary>按协议地址过滤（精确匹配，例如 "D100" 或 "DB1.DBD0"）。</summary>
+        public string Address { get; set; }
+        /// <summary>按协议类型过滤。</summary>
+        public ProtocolKind? Protocol { get; set; }
+        /// <summary>只查询此时间之后的记录（含边界）。</summary>
+        public DateTimeOffset? FromTime { get; set; }
+        /// <summary>只查询此时间之前的记录（含边界）。</summary>
+        public DateTimeOffset? ToTime { get; set; }
+        /// <summary>只查询指定质量状态的记录。</summary>
+        public QualityStatus? Quality { get; set; }
+        /// <summary>最大返回行数，默认 1000。</summary>
+        public int MaxRows { get; set; } = 1000;
+    }
+
     /// <summary>
     /// 工业采集数据存储接口。
     /// <para>
@@ -108,6 +131,16 @@ namespace IndustrialCommSdk.Storage
         /// 批量写入可以减少频繁打开事务带来的开销。
         /// </summary>
         Task WriteAsync(IReadOnlyCollection<IndustrialDataRecord> records, CancellationToken cancellationToken);
+
+        /// <summary>
+        /// 按条件查询历史记录，结果按时间降序排列。
+        /// </summary>
+        Task<IReadOnlyList<IndustrialDataRecord>> QueryAsync(HistoryQueryFilter filter, CancellationToken cancellationToken);
+
+        /// <summary>
+        /// 按条件删除历史记录，返回实际删除的行数。
+        /// </summary>
+        Task<int> DeleteAsync(HistoryQueryFilter filter, CancellationToken cancellationToken);
     }
 
     /// <summary>
@@ -298,6 +331,120 @@ ORDER BY [Id] ASC;",
                 afterId,
                 maxRows,
                 cancellationToken);
+        }
+
+        /// <inheritdoc />
+        public async Task<IReadOnlyList<IndustrialDataRecord>> QueryAsync(HistoryQueryFilter filter, CancellationToken cancellationToken)
+        {
+            if (filter == null) throw new ArgumentNullException(nameof(filter));
+            if (filter.MaxRows <= 0 || filter.MaxRows > 10000)
+            {
+                throw new ArgumentOutOfRangeException(nameof(filter), "MaxRows 必须在 1 到 10000 之间。");
+            }
+
+            // 动态构建 WHERE 子句，每个条件使用参数化查询防止 SQL 注入。
+            var conditions = new List<string>();
+            if (!string.IsNullOrWhiteSpace(filter.DeviceId)) conditions.Add("[DeviceId] = @DeviceId");
+            if (!string.IsNullOrWhiteSpace(filter.Address)) conditions.Add("[Address] = @Address");
+            if (filter.Protocol.HasValue) conditions.Add("[Protocol] = @Protocol");
+            if (filter.FromTime.HasValue) conditions.Add("[Timestamp] >= @FromTime");
+            if (filter.ToTime.HasValue) conditions.Add("[Timestamp] <= @ToTime");
+            if (filter.Quality.HasValue) conditions.Add("[Quality] = @Quality");
+
+            var whereClause = conditions.Count > 0 ? "WHERE " + string.Join(" AND ", conditions) : string.Empty;
+
+            var sql = string.Format(
+                CultureInfo.InvariantCulture,
+                @"SELECT TOP (@MaxRows)
+[Id], [Protocol], [DeviceId], [Address], [DataType], [ValueText], [Quality], [Timestamp], [ErrorMessage]
+FROM {0}
+{1}
+ORDER BY [Timestamp] DESC;",
+                _table.QuotedName,
+                whereClause);
+
+            var records = new List<IndustrialDataRecord>(filter.MaxRows);
+            using (var connection = new SqlConnection(_options.ConnectionString))
+            using (var command = new SqlCommand(sql, connection))
+            {
+                command.CommandTimeout = _options.CommandTimeoutSeconds;
+                command.Parameters.Add("@MaxRows", SqlDbType.Int).Value = filter.MaxRows;
+                if (!string.IsNullOrWhiteSpace(filter.DeviceId)) command.Parameters.Add("@DeviceId", SqlDbType.NVarChar, 128).Value = filter.DeviceId;
+                if (!string.IsNullOrWhiteSpace(filter.Address)) command.Parameters.Add("@Address", SqlDbType.NVarChar, 128).Value = filter.Address;
+                if (filter.Protocol.HasValue) command.Parameters.Add("@Protocol", SqlDbType.NVarChar, 32).Value = filter.Protocol.Value.ToString();
+                if (filter.FromTime.HasValue) command.Parameters.Add("@FromTime", SqlDbType.DateTimeOffset).Value = filter.FromTime.Value;
+                if (filter.ToTime.HasValue) command.Parameters.Add("@ToTime", SqlDbType.DateTimeOffset).Value = filter.ToTime.Value;
+                if (filter.Quality.HasValue) command.Parameters.Add("@Quality", SqlDbType.NVarChar, 32).Value = filter.Quality.Value.ToString();
+
+                await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+                using (var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false))
+                {
+                    while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+                    {
+                        ProtocolKind protocol;
+                        DataType dataType;
+                        QualityStatus quality;
+                        Enum.TryParse(reader.GetString(1), true, out protocol);
+                        Enum.TryParse(reader.GetString(4), true, out dataType);
+                        Enum.TryParse(reader.GetString(6), true, out quality);
+
+                        records.Add(new IndustrialDataRecord
+                        {
+                            Id = reader.GetInt64(0),
+                            Protocol = protocol,
+                            DeviceId = reader.GetString(2),
+                            Address = reader.GetString(3),
+                            DataType = dataType,
+                            ValueText = reader.IsDBNull(5) ? null : reader.GetString(5),
+                            Quality = quality,
+                            Timestamp = reader.GetDateTimeOffset(7),
+                            ErrorMessage = reader.IsDBNull(8) ? null : reader.GetString(8),
+                        });
+                    }
+                }
+            }
+
+            return records;
+        }
+
+        /// <inheritdoc />
+        public async Task<int> DeleteAsync(HistoryQueryFilter filter, CancellationToken cancellationToken)
+        {
+            if (filter == null) throw new ArgumentNullException(nameof(filter));
+
+            var conditions = new List<string>();
+            if (!string.IsNullOrWhiteSpace(filter.DeviceId)) conditions.Add("[DeviceId] = @DeviceId");
+            if (!string.IsNullOrWhiteSpace(filter.Address)) conditions.Add("[Address] = @Address");
+            if (filter.Protocol.HasValue) conditions.Add("[Protocol] = @Protocol");
+            if (filter.FromTime.HasValue) conditions.Add("[Timestamp] >= @FromTime");
+            if (filter.ToTime.HasValue) conditions.Add("[Timestamp] <= @ToTime");
+            if (filter.Quality.HasValue) conditions.Add("[Quality] = @Quality");
+
+            if (conditions.Count == 0)
+            {
+                throw new InvalidOperationException("删除操作必须至少指定一个过滤条件，防止误删全部数据。");
+            }
+
+            var sql = string.Format(
+                CultureInfo.InvariantCulture,
+                "DELETE FROM {0} WHERE {1};",
+                _table.QuotedName,
+                string.Join(" AND ", conditions));
+
+            using (var connection = new SqlConnection(_options.ConnectionString))
+            using (var command = new SqlCommand(sql, connection))
+            {
+                command.CommandTimeout = _options.CommandTimeoutSeconds;
+                if (!string.IsNullOrWhiteSpace(filter.DeviceId)) command.Parameters.Add("@DeviceId", SqlDbType.NVarChar, 128).Value = filter.DeviceId;
+                if (!string.IsNullOrWhiteSpace(filter.Address)) command.Parameters.Add("@Address", SqlDbType.NVarChar, 128).Value = filter.Address;
+                if (filter.Protocol.HasValue) command.Parameters.Add("@Protocol", SqlDbType.NVarChar, 32).Value = filter.Protocol.Value.ToString();
+                if (filter.FromTime.HasValue) command.Parameters.Add("@FromTime", SqlDbType.DateTimeOffset).Value = filter.FromTime.Value;
+                if (filter.ToTime.HasValue) command.Parameters.Add("@ToTime", SqlDbType.DateTimeOffset).Value = filter.ToTime.Value;
+                if (filter.Quality.HasValue) command.Parameters.Add("@Quality", SqlDbType.NVarChar, 32).Value = filter.Quality.Value.ToString();
+
+                await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+                return await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+            }
         }
 
         /// <inheritdoc />

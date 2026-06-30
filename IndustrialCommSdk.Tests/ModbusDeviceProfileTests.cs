@@ -75,7 +75,7 @@ namespace IndustrialCommSdk.Tests
             var parsed = ModbusDeviceProfiles.MitsubishiModbusTcp.ParseAddress("W1A");
 
             Assert.That(parsed.Area, Is.EqualTo(ModbusArea.HoldingRegister));
-            Assert.That(parsed.ZeroBasedAddress, Is.EqualTo(0x1A));
+            Assert.That(parsed.ZeroBasedAddress, Is.EqualTo(30720 + 0x1A));
         }
 
         [Test]

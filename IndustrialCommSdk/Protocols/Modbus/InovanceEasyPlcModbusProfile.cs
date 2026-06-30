@@ -33,34 +33,9 @@ namespace IndustrialCommSdk.Protocols.Modbus
     /// </remarks>
     public sealed class InovanceEasyPlcModbusProfile : IModbusDeviceProfile
     {
-        /// <summary>
-        /// 地址映射表，将地址类型前缀字符映射到对应的地址解析规则。
-        /// </summary>
-        /// <remarks>
-        /// <para>
-        /// 字典键为地址类型前缀字符（如 'D'、'R'、'M' 等），值为包含以下信息的元组：
-        /// <list type="bullet">
-        ///   <item>Item1（ushort）：Modbus 基地址偏移量。</item>
-        ///   <item>Item2（ModbusArea）：地址所属的 Modbus 区域。</item>
-        ///   <item>Item3（int）：该地址类型的最大索引数量（用于范围检查）。</item>
-        ///   <item>Item4（bool）：是否使用八进制解析索引（true 表示 X、Y 地址使用八进制）。</item>
-        /// </list>
-        /// </para>
-        /// <para>
-        /// 支持的地址类型：
-        /// <list type="table">
-        ///   <item><term>D</term><description>数据寄存器，基地址 0x0000，保持寄存器，8000 个，十进制索引</description></item>
-        ///   <item><term>R</term><description>扩展寄存器，基地址 0x3000，保持寄存器，32768 个，十进制索引</description></item>
-        ///   <item><term>M</term><description>中间继电器，基地址 0x0000，线圈，8000 个，十进制索引</description></item>
-        ///   <item><term>B</term><description>辅助继电器，基地址 0x3000，线圈，32768 个，十进制索引</description></item>
-        ///   <item><term>S</term><description>状态继电器，基地址 0xE000，线圈，4096 个，十进制索引</description></item>
-        ///   <item><term>X</term><description>输入点，基地址 0xF800，离散量输入，1024 个，八进制索引</description></item>
-        ///   <item><term>Y</term><description>输出点，基地址 0xFC00，线圈，1024 个，八进制索引</description></item>
-        /// </list>
-        /// </para>
-        /// </remarks>
         private static readonly Dictionary<char, Tuple<ushort, ModbusArea, int, bool>> AddressMap = new Dictionary<char, Tuple<ushort, ModbusArea, int, bool>>
         {
+            //Dictionary<char, Tuple<基址偏移, ModbusArea, 最大索引数, 是否八进制>>
             { 'D', Tuple.Create((ushort)0x0000, ModbusArea.HoldingRegister, 8000, false) },
             { 'R', Tuple.Create((ushort)0x3000, ModbusArea.HoldingRegister, 32768, false) },
             { 'M', Tuple.Create((ushort)0x0000, ModbusArea.Coil, 8000, false) },

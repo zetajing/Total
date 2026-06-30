@@ -105,6 +105,135 @@ namespace IndustrialCommSdk.Tests
         }
 
         /// <summary>
+        /// 验证按设备标识过滤查询能正确返回匹配记录。
+        /// </summary>
+        [Test]
+        public async Task QueryAsync_FiltersByDeviceId()
+        {
+            var store = new CapturingDataStore();
+            await store.WriteAsync(new[]
+            {
+                CreateRecord("device-1", "D100", DateTimeOffset.UtcNow),
+                CreateRecord("device-2", "D200", DateTimeOffset.UtcNow),
+                CreateRecord("device-1", "D300", DateTimeOffset.UtcNow),
+            }, CancellationToken.None);
+
+            var results = await store.QueryAsync(
+                new HistoryQueryFilter { DeviceId = "device-1" },
+                CancellationToken.None);
+
+            Assert.That(results.Count, Is.EqualTo(2));
+            Assert.That(results.All(r => r.DeviceId == "device-1"), Is.True);
+        }
+
+        /// <summary>
+        /// 验证按时间范围过滤查询。
+        /// </summary>
+        [Test]
+        public async Task QueryAsync_FiltersByTimeRange()
+        {
+            var now = DateTimeOffset.UtcNow;
+            var store = new CapturingDataStore();
+            await store.WriteAsync(new[]
+            {
+                CreateRecord("d1", "D100", now.AddHours(-2)),
+                CreateRecord("d1", "D200", now),
+                CreateRecord("d1", "D300", now.AddHours(2)),
+            }, CancellationToken.None);
+
+            var results = await store.QueryAsync(
+                new HistoryQueryFilter { FromTime = now.AddMinutes(-30), ToTime = now.AddHours(1) },
+                CancellationToken.None);
+
+            Assert.That(results.Count, Is.EqualTo(1));
+            Assert.That(results[0].Address, Is.EqualTo("D200"));
+        }
+
+        /// <summary>
+        /// 验证删除操作只删除匹配的记录。
+        /// </summary>
+        [Test]
+        public async Task DeleteAsync_RemovesMatchingRecords()
+        {
+            var store = new CapturingDataStore();
+            await store.WriteAsync(new[]
+            {
+                CreateRecord("device-1", "D100", DateTimeOffset.UtcNow),
+                CreateRecord("device-2", "D200", DateTimeOffset.UtcNow),
+                CreateRecord("device-1", "D300", DateTimeOffset.UtcNow),
+            }, CancellationToken.None);
+
+            var removed = await store.DeleteAsync(
+                new HistoryQueryFilter { DeviceId = "device-1" },
+                CancellationToken.None);
+
+            Assert.That(removed, Is.EqualTo(2));
+            Assert.That(store.Records.Count, Is.EqualTo(1));
+            Assert.That(store.Records[0].DeviceId, Is.EqualTo("device-2"));
+        }
+
+        /// <summary>
+        /// 验证 CSV 导出包含正确的表头和数据行。
+        /// </summary>
+        [Test]
+        public void CsvExporter_ProducesCorrectHeaderAndData()
+        {
+            var records = new[]
+            {
+                CreateRecord("device-1", "D100", new DateTimeOffset(2026, 6, 30, 14, 0, 0, TimeSpan.Zero)),
+            };
+
+            var bytes = CsvHistoryExporter.ExportToBytes(records);
+            var text = System.Text.Encoding.UTF8.GetString(bytes);
+
+            // 验证 BOM 存在
+            Assert.That(bytes[0], Is.EqualTo(0xEF));
+            Assert.That(bytes[1], Is.EqualTo(0xBB));
+            Assert.That(bytes[2], Is.EqualTo(0xBF));
+
+            var lines = text.Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries);
+            Assert.That(lines.Length, Is.EqualTo(2)); // 表头 + 1 行数据
+            Assert.That(lines[0], Does.StartWith("Id,Protocol,DeviceId,Address,DataType"));
+            Assert.That(lines[1], Does.Contain("device-1"));
+            Assert.That(lines[1], Does.Contain("D100"));
+        }
+
+        /// <summary>
+        /// 验证 CSV 导出正确处理含逗号/引号的字段。
+        /// </summary>
+        [Test]
+        public void CsvExporter_EscapesSpecialCharacters()
+        {
+            var records = new[]
+            {
+                CreateRecord("dev,ice", "D\"100", new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero)),
+            };
+
+            var bytes = CsvHistoryExporter.ExportToBytes(records);
+            var text = System.Text.Encoding.UTF8.GetString(bytes);
+            var lines = text.Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries);
+
+            // 含逗号的字段应被引号包裹
+            Assert.That(lines[1], Does.Contain("\"dev,ice\""));
+            // 含引号的字段中双引号应加倍
+            Assert.That(lines[1], Does.Contain("\"D\"\"100\""));
+        }
+
+        private static IndustrialDataRecord CreateRecord(string deviceId, string address, DateTimeOffset timestamp)
+        {
+            return new IndustrialDataRecord
+            {
+                Protocol = ProtocolKind.ModbusTcp,
+                DeviceId = deviceId,
+                Address = address,
+                DataType = DataType.Int16,
+                ValueText = "100",
+                Quality = QualityStatus.Good,
+                Timestamp = timestamp,
+            };
+        }
+
+        /// <summary>
         /// 仅用于测试的内存存储。它实现与 SQL Server 相同的接口，但把结果放入 List，
         /// 从而让测试快速、可重复，并且不需要外部数据库环境。
         /// </summary>
@@ -123,6 +252,43 @@ namespace IndustrialCommSdk.Tests
             {
                 Records.AddRange(records);
                 return Task.CompletedTask;
+            }
+
+            public Task<IReadOnlyList<IndustrialDataRecord>> QueryAsync(HistoryQueryFilter filter, CancellationToken cancellationToken)
+            {
+                IEnumerable<IndustrialDataRecord> query = Records;
+                if (!string.IsNullOrWhiteSpace(filter.DeviceId))
+                    query = query.Where(r => r.DeviceId == filter.DeviceId);
+                if (!string.IsNullOrWhiteSpace(filter.Address))
+                    query = query.Where(r => r.Address == filter.Address);
+                if (filter.Protocol.HasValue)
+                    query = query.Where(r => r.Protocol == filter.Protocol.Value);
+                if (filter.FromTime.HasValue)
+                    query = query.Where(r => r.Timestamp >= filter.FromTime.Value);
+                if (filter.ToTime.HasValue)
+                    query = query.Where(r => r.Timestamp <= filter.ToTime.Value);
+                if (filter.Quality.HasValue)
+                    query = query.Where(r => r.Quality == filter.Quality.Value);
+
+                var result = query
+                    .OrderByDescending(r => r.Timestamp)
+                    .Take(filter.MaxRows)
+                    .ToList();
+
+                return Task.FromResult<IReadOnlyList<IndustrialDataRecord>>(result);
+            }
+
+            public Task<int> DeleteAsync(HistoryQueryFilter filter, CancellationToken cancellationToken)
+            {
+                int removed;
+                if (!string.IsNullOrWhiteSpace(filter.DeviceId))
+                    removed = Records.RemoveAll(r => r.DeviceId == filter.DeviceId);
+                else if (!string.IsNullOrWhiteSpace(filter.Address))
+                    removed = Records.RemoveAll(r => r.Address == filter.Address);
+                else
+                    throw new InvalidOperationException("删除操作必须至少指定一个过滤条件。");
+
+                return Task.FromResult(removed);
             }
 
             public void Dispose()
