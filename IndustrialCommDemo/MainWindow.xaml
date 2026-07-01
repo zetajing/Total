@@ -13,30 +13,47 @@
         WindowStartupLocation="CenterScreen"
         Background="#F3F6FB">
     <Grid Margin="16">
-        <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="28*"/>
-            <ColumnDefinition Width="35*"/>
-            <ColumnDefinition Width="1185*"/>
-        </Grid.ColumnDefinitions>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
             <RowDefinition Height="180" />
         </Grid.RowDefinitions>
 
-        <Border HorizontalAlignment="Left" Padding="12,8" CornerRadius="12" Background="#183A5C" Grid.Column="2" Margin="1101,0,0,599" Grid.RowSpan="2">
-            <StackPanel Orientation="Horizontal">
-                <TextBlock Margin="0,0,8,0" VerticalAlignment="Center" FontSize="12" Foreground="#A8C2DB" Text="状态" />
-                <TextBlock x:Name="HeaderStatusTextBlock"
-                           VerticalAlignment="Center"
-                           FontSize="14"
-                           FontWeight="SemiBold"
-                           Foreground="#86EFAC"
-                           Text="就绪" />
-            </StackPanel>
+        <Border Padding="18,14" CornerRadius="18" Background="#183A5C">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel>
+                    <TextBlock FontSize="22"
+                               FontWeight="SemiBold"
+                               Foreground="White"
+                               Text="工业通讯 Demo" />
+                    <TextBlock Margin="0,4,0,0"
+                               FontSize="12"
+                               Foreground="#A8C2DB"
+                               Text="设备连接、数据读写与运行诊断" />
+                </StackPanel>
+                <Border Grid.Column="1"
+                        Padding="14,8"
+                        VerticalAlignment="Center"
+                        CornerRadius="12"
+                        Background="#244D73">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Margin="0,0,8,0" VerticalAlignment="Center" FontSize="12" Foreground="#A8C2DB" Text="状态" />
+                        <TextBlock x:Name="HeaderStatusTextBlock"
+                                   VerticalAlignment="Center"
+                                   FontSize="14"
+                                   FontWeight="SemiBold"
+                                   Foreground="#86EFAC"
+                                   Text="就绪" />
+                    </StackPanel>
+                </Border>
+            </Grid>
         </Border>
 
-        <Border Grid.Row="1" Margin="0,12,0,12" Padding="12" CornerRadius="18" Background="White" Grid.ColumnSpan="3">
+        <Border Grid.Row="1" Margin="0,12" Padding="12" CornerRadius="18" Background="White">
             <TabControl x:Name="ProtocolTabControl">
                 <TabItem Header="Modbus TCP / RTU">
                     <ScrollViewer VerticalScrollBarVisibility="Auto">
@@ -806,7 +823,7 @@
             </TabControl>
         </Border>
 
-        <Border Grid.Row="2" Padding="16" CornerRadius="18" Background="White" Grid.ColumnSpan="3">
+        <Border Grid.Row="2" Padding="16" CornerRadius="18" Background="White">
             <Grid>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
