@@ -1,7 +1,9 @@
 using System;
+using System.Collections;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
-using System.Linq;
+using System.Globalization;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using IndustrialCommSdk.Abstractions;
@@ -46,6 +48,8 @@ namespace IndustrialCommSdk.Polling
         /// <exception cref="InvalidOperationException">具有相同 <see cref="SubscriptionRequest.SubscriptionKey"/> 的订阅已存在时抛出。</exception>
         public Task<string> SubscribeAsync(IIndustrialClient client, SubscriptionRequest request, EventHandler<SubscriptionEvent> handler, CancellationToken cancellationToken)
         {
+            if (client == null) throw new ArgumentNullException(nameof(client));
+            if (request == null) throw new ArgumentNullException(nameof(request));
             cancellationToken.ThrowIfCancellationRequested();
 
             var worker = new SubscriptionWorker(client, request, handler, _logger);
@@ -169,7 +173,7 @@ namespace IndustrialCommSdk.Polling
                     try
                     {
                         var result = await _client.ReadManyAsync(_request.Items, _cts.Token).ConfigureAwait(false);
-                        var values = result.Values.ToList();
+                        var values = result.Values;
                         var fingerprint = BuildFingerprint(values);
 
                         if (!_request.ReportOnChangeOnly || !string.Equals(_lastFingerprint, fingerprint, StringComparison.Ordinal))
@@ -208,7 +212,46 @@ namespace IndustrialCommSdk.Polling
             /// <returns>表示数据快照的指纹字符串。</returns>
             private static string BuildFingerprint(IEnumerable<DataValue> values)
             {
-                return string.Join("|", values.Select(v => string.Format("{0}:{1}:{2}", v.Address, v.Quality, v.Value ?? "<null>")));
+                var builder = new StringBuilder();
+                foreach (var value in values)
+                {
+                    if (builder.Length > 0) builder.Append('|');
+                    builder.Append(value.Address).Append(':').Append(value.Quality).Append(':');
+                    AppendValue(builder, value.Value);
+                }
+                return builder.ToString();
+            }
+
+            private static void AppendValue(StringBuilder builder, object value)
+            {
+                if (value == null)
+                {
+                    builder.Append("<null>");
+                    return;
+                }
+
+                var bytes = value as byte[];
+                if (bytes != null)
+                {
+                    builder.Append(Convert.ToBase64String(bytes));
+                    return;
+                }
+
+                if (!(value is string) && value is IEnumerable sequence)
+                {
+                    builder.Append('[');
+                    var first = true;
+                    foreach (var item in sequence)
+                    {
+                        if (!first) builder.Append(',');
+                        AppendValue(builder, item);
+                        first = false;
+                    }
+                    builder.Append(']');
+                    return;
+                }
+
+                builder.Append(Convert.ToString(value, CultureInfo.InvariantCulture));
             }
 
             /// <summary>

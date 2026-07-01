@@ -86,6 +86,7 @@ namespace IndustrialCommDemo
             DataDirectoryHintTextBlock.Text = "当前目录：" + LogHelper.StoragePathProvider.DataRoot;
 
             SelectDataType(ModbusDataTypeComboBox, DataType.Int16);
+            RefreshModbusProfileOptions();
             ApplyModbusProfile();
             InitializeDatabaseManagementControls();
             LoadUiState();
@@ -208,6 +209,10 @@ namespace IndustrialCommDemo
             ModbusStopBitsComboBox.Visibility = rtuVisibility;
             ModbusRtuTimeoutLabel.Visibility = rtuVisibility;
             ModbusRtuTimeoutTextBox.Visibility = rtuVisibility;
+
+            RefreshModbusProfileOptions();
+            ApplyModbusProfile();
+            RefreshModbusDataTypeState();
 
             // 切换到 RTU 时刷新可用串口列表
             if (isRtu)
@@ -1695,6 +1700,42 @@ namespace IndustrialCommDemo
             }
         }
 
+        private void RefreshModbusProfileOptions()
+        {
+            if (ModbusModelComboBox == null)
+            {
+                return;
+            }
+
+            var selectedKey = (ModbusModelComboBox.SelectedItem as ComboBoxItem)?.Tag as string;
+            var isRtu = ModbusConnectionTypeComboBox.SelectedIndex == 1;
+
+            ModbusModelComboBox.Items.Clear();
+            if (isRtu)
+            {
+                ModbusModelComboBox.Items.Add(new ComboBoxItem
+                {
+                    Content = "通用 Modbus",
+                    Tag = ModbusDeviceProfiles.Generic.Key,
+                });
+            }
+            else
+            {
+                ModbusModelComboBox.Items.Add(new ComboBoxItem
+                {
+                    Content = "汇川 EasyPLC",
+                    Tag = ModbusDeviceProfiles.InovanceEasyPlc.Key,
+                });
+                ModbusModelComboBox.Items.Add(new ComboBoxItem
+                {
+                    Content = "三菱 Modbus TCP",
+                    Tag = ModbusDeviceProfiles.MitsubishiModbusTcp.Key,
+                });
+            }
+
+            SelectModbusModel(selectedKey);
+        }
+
         private void LoadUiState()
         {
             ApplyModbusState();
@@ -1786,17 +1827,19 @@ namespace IndustrialCommDemo
             SetIfNotEmpty(ModbusHostTextBox, state.Host);
             SetIfNotEmpty(ModbusPortTextBox, state.Port);
             SetIfNotEmpty(ModbusSlaveIdTextBox, state.SlaveId);
-            SelectModbusModel(state.ModelKey);
-            SetIfNotEmpty(ModbusAddressTextBox, state.Address);
-            SetIfNotEmpty(ModbusLengthTextBox, state.Length);
-            SetIfNotEmpty(ModbusWriteValueTextBox, state.WriteValue);
-            SetIfNotEmpty(ModbusPollIntervalTextBox, state.PollInterval);
 
             // RTU 状态恢复
             if (string.Equals(state.ConnectionType, "Rtu", StringComparison.OrdinalIgnoreCase))
             {
                 ModbusConnectionTypeComboBox.SelectedIndex = 1;
             }
+            RefreshModbusProfileOptions();
+            SelectModbusModel(state.ModelKey);
+            ApplyModbusProfile();
+            SetIfNotEmpty(ModbusAddressTextBox, state.Address);
+            SetIfNotEmpty(ModbusLengthTextBox, state.Length);
+            SetIfNotEmpty(ModbusWriteValueTextBox, state.WriteValue);
+            SetIfNotEmpty(ModbusPollIntervalTextBox, state.PollInterval);
             if (!string.IsNullOrEmpty(state.PortName))
             {
                 ModbusPortNameComboBox.Text = state.PortName;
@@ -2907,20 +2950,6 @@ namespace IndustrialCommDemo
             return Convert.ToString(value, CultureInfo.InvariantCulture);
         }
 
-        private sealed class S7AddressInputInfo
-        {
-            public S7AddressInputInfo(string normalizedAddress, DataType? inferredDataType, ushort? inferredLength)
-            {
-                NormalizedAddress = normalizedAddress;
-                InferredDataType = inferredDataType;
-                InferredLength = inferredLength;
-            }
-
-            public string NormalizedAddress { get; private set; }
-            public DataType? InferredDataType { get; private set; }
-            public ushort? InferredLength { get; private set; }
-        }
-
         private void AppendLogBatch(IReadOnlyList<string> messages)
         {
             foreach (var message in messages)
@@ -2986,84 +3015,5 @@ namespace IndustrialCommDemo
             Dispatcher.BeginInvoke(action);
         }
 
-        private sealed class SubscriptionDisplayRow
-        {
-            public string Address { get; set; }
-            public string DataType { get; set; }
-            public string ValueText { get; set; }
-            public string QualityText { get; set; }
-            public string TimestampText { get; set; }
-            public string ErrorMessage { get; set; }
-        }
-
-        private sealed class DatabaseHistoryDisplayRow
-        {
-            public long Id { get; set; }
-            public string Protocol { get; set; }
-            public string DeviceId { get; set; }
-            public string Address { get; set; }
-            public string DataType { get; set; }
-            public string ValueText { get; set; }
-            public string Quality { get; set; }
-            public string Timestamp { get; set; }
-            public string ErrorMessage { get; set; }
-
-            public static DatabaseHistoryDisplayRow FromRecord(IndustrialDataRecord record)
-            {
-                return new DatabaseHistoryDisplayRow
-                {
-                    Id = record.Id,
-                    Protocol = record.Protocol.ToString(),
-                    DeviceId = record.DeviceId,
-                    Address = record.Address,
-                    DataType = record.DataType.ToString(),
-                    ValueText = record.ValueText ?? string.Empty,
-                    Quality = FormatQualityLabel(record.Quality),
-                    Timestamp = record.Timestamp.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss.fff", CultureInfo.InvariantCulture),
-                    ErrorMessage = record.ErrorMessage ?? string.Empty,
-                };
-            }
-        }
-
-        private sealed class ModbusAddressInputAnalysis
-        {
-            public List<string> Addresses { get; private set; }
-            public bool IsValid { get; private set; }
-            public bool IsBitFamily { get; private set; }
-            public string ErrorMessage { get; private set; }
-            public int AddressCount
-            {
-                get { return Addresses == null ? 0 : Addresses.Count; }
-            }
-
-            public static ModbusAddressInputAnalysis Empty()
-            {
-                return new ModbusAddressInputAnalysis
-                {
-                    Addresses = new List<string>(),
-                    IsValid = true,
-                };
-            }
-
-            public static ModbusAddressInputAnalysis Valid(List<string> addresses, bool isBitFamily)
-            {
-                return new ModbusAddressInputAnalysis
-                {
-                    Addresses = addresses,
-                    IsValid = true,
-                    IsBitFamily = isBitFamily,
-                };
-            }
-
-            public static ModbusAddressInputAnalysis Invalid(List<string> addresses, string errorMessage)
-            {
-                return new ModbusAddressInputAnalysis
-                {
-                    Addresses = addresses ?? new List<string>(),
-                    IsValid = false,
-                    ErrorMessage = errorMessage,
-                };
-            }
-        }
     }
 }

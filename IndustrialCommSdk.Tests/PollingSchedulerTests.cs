@@ -43,12 +43,52 @@ namespace IndustrialCommSdk.Tests
             Assert.That(tcs.Task.Result.Values[0].Value, Is.EqualTo(42));
         }
 
+        [Test]
+        public async Task PollingScheduler_Should_Detect_ByteArray_Content_Changes()
+        {
+            using (var scheduler = new PollingScheduler())
+            {
+                var readCount = 0;
+                var client = new FakeIndustrialClient(() =>
+                {
+                    readCount++;
+                    return readCount < 3 ? new byte[] { 0x01 } : new byte[] { 0x02 };
+                });
+                var request = new SubscriptionRequest("bytes", "dev-1", new[]
+                {
+                    new ReadRequest("dev-1", "addr-1", DataType.ByteArray)
+                }, TimeSpan.FromMilliseconds(20), true);
+
+                var reports = 0;
+                var changed = new TaskCompletionSource<byte[]>();
+                await scheduler.SubscribeAsync(client, request, (sender, args) =>
+                {
+                    reports++;
+                    var bytes = (byte[])args.Values[0].Value;
+                    if (bytes[0] == 0x02) changed.TrySetResult(bytes);
+                }, CancellationToken.None);
+
+                var completed = await Task.WhenAny(changed.Task, Task.Delay(1000));
+                await scheduler.UnsubscribeAsync("bytes", CancellationToken.None);
+
+                Assert.That(completed, Is.EqualTo(changed.Task));
+                Assert.That(reports, Is.EqualTo(2));
+            }
+        }
+
         /// <summary>
         ///     用于轮询调度器测试的模拟工业客户端。
         ///     实现 <see cref="IIndustrialClient" /> 接口，<see cref="ReadAsync" /> 方法固定返回值为 42 的 <see cref="DataValue" />。
         /// </summary>
         private sealed class FakeIndustrialClient : IIndustrialClient
         {
+            private readonly Func<object> _valueFactory;
+
+            public FakeIndustrialClient(Func<object> valueFactory = null)
+            {
+                _valueFactory = valueFactory ?? (() => 42);
+            }
+
             /// <summary>固定设备 ID，始终返回 "fake"。</summary>
             public string DeviceId { get { return "fake"; } }
 
@@ -75,7 +115,7 @@ namespace IndustrialCommSdk.Tests
             /// </summary>
             public Task<DataValue> ReadAsync(ReadRequest request, CancellationToken cancellationToken)
             {
-                return Task.FromResult(new DataValue(request.Address, request.DataType, 42, new byte[] { 0x00, 0x2A }, QualityStatus.Good, DateTimeOffset.UtcNow, null));
+                return Task.FromResult(new DataValue(request.Address, request.DataType, _valueFactory(), new byte[] { 0x00, 0x2A }, QualityStatus.Good, DateTimeOffset.UtcNow, null));
             }
 
             /// <summary>
