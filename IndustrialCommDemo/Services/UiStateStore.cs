@@ -96,6 +96,7 @@ namespace IndustrialCommDemo.Services
             // 旧版本 ui-state.json 中没有 Database 字段。
             // 这里补默认对象，使升级后的 Demo 可以直接读取旧配置而不会出现空引用。
             state.Database = state.Database ?? new DatabaseUiState();
+            state.Mes = state.Mes ?? new MesUiState();
 
             state.Modbus.RecentAddresses = state.Modbus.RecentAddresses ?? new List<string>();
             state.S7.RecentAddresses = state.S7.RecentAddresses ?? new List<string>();
@@ -138,6 +139,25 @@ namespace IndustrialCommDemo.Services
         /// <summary>获取或设置可选的 SQL Server 历史存储配置。</summary>
         [DataMember(Order = 5)]
         public DatabaseUiState Database { get; set; } = new DatabaseUiState();
+
+        [DataMember(Order = 6)]
+        public MesUiState Mes { get; set; } = new MesUiState();
+    }
+
+    /// <summary>MES 联调页保存的非敏感连接和报工输入。</summary>
+    [DataContract]
+    internal sealed class MesUiState
+    {
+        [DataMember(Order = 1)] public string Host { get; set; }
+        [DataMember(Order = 2)] public string Port { get; set; }
+        [DataMember(Order = 3)] public string DeviceNo { get; set; }
+        [DataMember(Order = 4)] public string DeviceName { get; set; }
+        [DataMember(Order = 5)] public string DeviceIp { get; set; }
+        [DataMember(Order = 6)] public string DeviceMac { get; set; }
+        [DataMember(Order = 7)] public string Process { get; set; }
+        [DataMember(Order = 8)] public string SerialNo { get; set; }
+        [DataMember(Order = 9)] public string Number { get; set; }
+        [DataMember(Order = 10)] public string Parameters { get; set; }
     }
 
     /// <summary>

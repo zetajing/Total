@@ -251,6 +251,48 @@ var subscriptionId = await client.SubscribeAsync(
 - 位地址会自动锁定为 `Bool`
 - 写入值支持逗号、分号、换行分隔
 
+## FA MES TCP 双向对接
+
+SDK 提供 `IndustrialCommSdk.Mes.MesTcpClient`，兼容《设备与 MES 通讯文档（FA）》及 H101_ST0 参考程序的无分隔符长连接协议：
+
+1. 设备主动连接 MES，默认端口为 `9312`。
+2. 每次连接或重连成功后自动发送 `START ... STOP` 上线信息。
+3. 同一连接接收 `FACHECK`，设备完成后发送 `FATRACK`，随后接收 `FANUM`。
+4. 接收器按完整 JSON 对象边界处理 TCP 拆包和粘包；发送内容不追加 CRLF。
+
+```csharp
+using IndustrialCommSdk.Mes;
+
+var mes = new MesTcpClient(new MesClientOptions
+{
+    Host = "127.0.0.1", // 联调时填写实际 MES 地址
+    Port = 9312,
+    DeviceNo = "001",
+    DeviceName = "设备001",
+    DeviceIp = "192.168.1.10",
+    DeviceMac = "00-11-22-33-44-55",
+});
+
+mes.FaCheckReceived += (sender, e) =>
+    Console.WriteLine($"{e.Message.Message.SerialNo}: {e.Message.Message.Result}");
+mes.FaNumReceived += (sender, e) =>
+    Console.WriteLine($"过站结果: {e.Message.Message.Result}");
+
+await mes.ConnectAsync(CancellationToken.None);
+await mes.SendTrackAsync(new FaTrackMessage
+{
+    Message = new FaTrackBody
+    {
+        Process = "FAFAL0290M0",
+        SerialNo = "SN001",
+        Number = "4",
+        Parameters = new Dictionary<string, string> { ["test"] = "1" },
+    },
+}, CancellationToken.None);
+```
+
+Demo 的“MES”页可保存非敏感连接参数、查看连接/重连状态、手工发送上线信息和 `FATRACK`，并以颜色展示 `FACHECK`、`FANUM` 的 OK/NG 结果。生产地址不会自动连接；确认设备编号、网卡 IP/MAC 和工序编码后再联调。当前协议没有请求 ID，不应并行发送多个需要按顺序匹配 `FANUM` 的报工请求。
+
 ## 快捷 API 一览
 
 - 读取

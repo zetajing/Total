@@ -296,6 +296,58 @@
                     </ScrollViewer>
                 </TabItem>
 
+                <TabItem Header="MES">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <Grid Margin="10">
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="1.05*"/><ColumnDefinition Width="1.25*"/></Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                            <GroupBox Header="MES 连接" Grid.Row="0" Grid.Column="0" Margin="0,0,12,12">
+                                <Grid Margin="12">
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="105"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
+                                    </Grid.RowDefinitions>
+                                    <TextBlock Grid.Row="0" Margin="0,8" Text="MES 主机"/><TextBox x:Name="MesHostTextBox" Grid.Row="0" Grid.Column="1" Margin="0,5" Text="127.0.0.1"/>
+                                    <TextBlock Grid.Row="1" Margin="0,8" Text="端口"/><TextBox x:Name="MesPortTextBox" Grid.Row="1" Grid.Column="1" Margin="0,5" Text="9312"/>
+                                    <TextBlock Grid.Row="2" Margin="0,8" Text="设备编号"/><TextBox x:Name="MesDeviceNoTextBox" Grid.Row="2" Grid.Column="1" Margin="0,5" Text="001"/>
+                                    <TextBlock Grid.Row="3" Margin="0,8" Text="设备名称"/><TextBox x:Name="MesDeviceNameTextBox" Grid.Row="3" Grid.Column="1" Margin="0,5" Text="001"/>
+                                    <TextBlock Grid.Row="4" Margin="0,8" Text="设备 IP"/><TextBox x:Name="MesDeviceIpTextBox" Grid.Row="4" Grid.Column="1" Margin="0,5" Text="127.0.0.1"/>
+                                    <TextBlock Grid.Row="5" Margin="0,8" Text="设备 MAC"/><TextBox x:Name="MesDeviceMacTextBox" Grid.Row="5" Grid.Column="1" Margin="0,5" Text="00-00-00-00-00-00"/>
+                                    <TextBlock Grid.Row="6" Margin="0,8" Text="状态"/><TextBlock x:Name="MesStatusTextBlock" Grid.Row="6" Grid.Column="1" Margin="0,8" Foreground="IndianRed" Text="未连接"/>
+                                    <UniformGrid Grid.Row="7" Grid.ColumnSpan="2" Columns="3" Margin="0,12,0,0">
+                                        <Button Margin="0,0,6,0" Padding="8" Background="#0891B2" Foreground="White" BorderThickness="0" Click="MesConnectButton_Click" Content="连接"/>
+                                        <Button Margin="3,0" Padding="8" Background="#334155" Foreground="White" BorderThickness="0" Click="MesDisconnectButton_Click" Content="断开"/>
+                                        <Button Margin="6,0,0,0" Padding="8" Background="#2563EB" Foreground="White" BorderThickness="0" Click="MesOnlineButton_Click" Content="发送上线"/>
+                                    </UniformGrid>
+                                </Grid>
+                            </GroupBox>
+                            <GroupBox Header="FATRACK 手工报工" Grid.Row="0" Grid.Column="1" Margin="0,0,0,12">
+                                <Grid Margin="12">
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="105"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                                    <TextBlock Grid.Row="0" Margin="0,8" Text="工序编码"/><TextBox x:Name="MesProcessTextBox" Grid.Row="0" Grid.Column="1" Margin="0,5" Text="FAFAL0290M0"/>
+                                    <TextBlock Grid.Row="1" Margin="0,8" Text="SN"/><TextBox x:Name="MesSerialNoTextBox" Grid.Row="1" Grid.Column="1" Margin="0,5"/>
+                                    <TextBlock Grid.Row="2" Margin="0,8" Text="螺丝数量"/><TextBox x:Name="MesNumberTextBox" Grid.Row="2" Grid.Column="1" Margin="0,5" Text="0"/>
+                                    <TextBlock Grid.Row="3" Margin="0,8" Text="参数" VerticalAlignment="Top"/><TextBox x:Name="MesParametersTextBox" Grid.Row="3" Grid.Column="1" Margin="0,5" MinHeight="75" AcceptsReturn="True" TextWrapping="Wrap" Text="test=1" ToolTip="每行一个 key=value"/>
+                                    <Button Grid.Row="4" Grid.ColumnSpan="2" Margin="0,12,0,0" Padding="10" Background="#059669" Foreground="White" BorderThickness="0" Click="MesSendTrackButton_Click" Content="发送 FATRACK"/>
+                                </Grid>
+                            </GroupBox>
+                            <GroupBox Header="MES 消息与结果" Grid.Row="1" Grid.ColumnSpan="2">
+                                <Grid Margin="12">
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="120"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                                    <TextBlock Grid.Row="0" Margin="0,5" Text="FACHECK" FontWeight="SemiBold"/><TextBlock x:Name="MesFaCheckTextBlock" Grid.Row="0" Grid.Column="1" Margin="0,5" Text="（未收到）" TextWrapping="Wrap"/>
+                                    <TextBlock Grid.Row="1" Margin="0,5" Text="FANUM" FontWeight="SemiBold"/><TextBlock x:Name="MesFaNumTextBlock" Grid.Row="1" Grid.Column="1" Margin="0,5" Text="（未收到）" TextWrapping="Wrap"/>
+                                    <TextBlock Grid.Row="2" Margin="0,5" Text="协议错误" FontWeight="SemiBold"/><TextBlock x:Name="MesProtocolErrorTextBlock" Grid.Row="2" Grid.Column="1" Margin="0,5" Foreground="IndianRed" Text="（无）" TextWrapping="Wrap"/>
+                                    <TextBlock Grid.Row="3" Margin="0,5" Text="收发记录" FontWeight="SemiBold" VerticalAlignment="Top"/>
+                                    <TextBox x:Name="MesTrafficTextBox" Grid.Row="3" Grid.Column="1" Margin="0,5" MinHeight="180" IsReadOnly="True" AcceptsReturn="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto"/>
+                                </Grid>
+                            </GroupBox>
+                        </Grid>
+                    </ScrollViewer>
+                </TabItem>
+
                 <TabItem Header="Siemens S7">
                     <ScrollViewer VerticalScrollBarVisibility="Auto">
                         <Grid Margin="10">

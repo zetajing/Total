@@ -21,6 +21,7 @@ using IndustrialCommSdk.Protocols.Mc;
 using IndustrialCommSdk.Protocols.Modbus;
 using IndustrialCommSdk.Protocols.S7;
 using IndustrialCommSdk.Storage;
+using IndustrialCommSdk.Mes;
 using CpuType = S7.Net.CpuType;
 
 namespace IndustrialCommDemo
@@ -57,6 +58,7 @@ namespace IndustrialCommDemo
         private IIndustrialClient _mcClient;
         private LineBasedTcpServer _socketServer;
         private LineBasedTcpClient _socketClient;
+        private IMesClient _mesClient;
         // 数据库记录器仅在用户点击“测试并启用”且连接成功后存在。
         // 它内部使用后台队列，不会在 PLC 读取回调中直接执行 SQL。
         private BufferedIndustrialDataRecorder _databaseRecorder;
@@ -666,6 +668,76 @@ namespace IndustrialCommDemo
             }
         }
 
+        private async void MesConnectButton_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                await ResetMesClientAsync();
+                var options = new MesClientOptions
+                {
+                    Host = RequireText(MesHostTextBox.Text, "MES 主机"),
+                    Port = ParseIntValue(MesPortTextBox.Text, "MES 端口"),
+                    DeviceNo = RequireText(MesDeviceNoTextBox.Text, "MES 设备编号"),
+                    DeviceName = RequireText(MesDeviceNameTextBox.Text, "MES 设备名称"),
+                    DeviceIp = RequireText(MesDeviceIpTextBox.Text, "MES 设备 IP"),
+                    DeviceMac = RequireText(MesDeviceMacTextBox.Text, "MES 设备 MAC"),
+                    AutoReconnect = true,
+                };
+                var client = new MesTcpClient(options, _logger);
+                client.ConnectionStateChanged += MesClient_ConnectionStateChanged;
+                client.FaCheckReceived += MesClient_FaCheckReceived;
+                client.FaNumReceived += MesClient_FaNumReceived;
+                client.RawMessage += MesClient_RawMessage;
+                client.ProtocolError += MesClient_ProtocolError;
+                _mesClient = client;
+                await client.ConnectAsync(CancellationToken.None);
+                SetHeaderStatus("MES 已连接", Brushes.LightGreen);
+            }
+            catch (Exception ex)
+            {
+                UpdateMesStatus();
+                HandleActionError("MES 首次连接失败，后台将继续重连。", ex, true);
+            }
+        }
+
+        private async void MesDisconnectButton_Click(object sender, RoutedEventArgs e)
+        {
+            try { await ResetMesClientAsync(); SetHeaderStatus("MES 已断开", Brushes.Khaki); }
+            catch (Exception ex) { HandleActionError("MES 断开失败。", ex, false); }
+        }
+
+        private async void MesOnlineButton_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                RequireMesClient();
+                await _mesClient.SendOnlineAsync(CancellationToken.None);
+                SetHeaderStatus("MES 上线信息已发送", Brushes.LightGreen);
+            }
+            catch (Exception ex) { HandleActionError("MES 上线信息发送失败。", ex, true); }
+        }
+
+        private async void MesSendTrackButton_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                RequireMesClient();
+                var message = new FaTrackMessage
+                {
+                    Message = new FaTrackBody
+                    {
+                        Process = RequireText(MesProcessTextBox.Text, "MES 工序编码"),
+                        SerialNo = RequireText(MesSerialNoTextBox.Text, "MES SN"),
+                        Number = RequireText(MesNumberTextBox.Text, "MES 螺丝数量"),
+                        Parameters = ParseMesParameters(MesParametersTextBox.Text),
+                    },
+                };
+                await _mesClient.SendTrackAsync(message, CancellationToken.None);
+                SetHeaderStatus("MES FATRACK 已发送", Brushes.LightGreen);
+            }
+            catch (Exception ex) { HandleActionError("MES FATRACK 发送失败。", ex, true); }
+        }
+
         /// <summary>
         /// “测试并启用”按钮事件。
         /// 先停止旧记录器，再验证当前连接字符串、创建历史表，最后才把记录状态切换为启用。
@@ -1097,6 +1169,7 @@ namespace IndustrialCommDemo
             await ResetMcClientAsync();
             await ResetSocketClientAsync();
             await ResetSocketServerAsync();
+            await ResetMesClientAsync();
             // 设备都停止后再排空写库队列，保证退出前尽量保存最后一批采集值。
             await StopDatabaseRecorderAsync();
             if (_databaseManagementStore != null) { _databaseManagementStore.Dispose(); _databaseManagementStore = null; }
@@ -1187,6 +1260,49 @@ namespace IndustrialCommDemo
                 SetHeaderStatus("Socket 客户端收到数据", Brushes.LightGreen);
                 _logger.Info(string.Format("Socket 客户端收到：{0}", e.Message));
             });
+        }
+
+        private void MesClient_ConnectionStateChanged(object sender, MesConnectionStateChangedEventArgs e)
+        {
+            RunOnUi(() =>
+            {
+                UpdateMesStatus();
+                if (!string.IsNullOrWhiteSpace(e.ErrorMessage)) MesProtocolErrorTextBlock.Text = e.ErrorMessage;
+            });
+        }
+
+        private void MesClient_FaCheckReceived(object sender, MesMessageEventArgs<FaCheckMessage> e)
+        {
+            RunOnUi(() =>
+            {
+                var body = e.Message == null ? null : e.Message.Message;
+                var result = body == null ? string.Empty : body.Result;
+                MesFaCheckTextBlock.Text = body == null ? "消息缺少 message 内容" :
+                    string.Format(CultureInfo.InvariantCulture, "{0} · SN={1} · 工序={2}{3}", result, body.SerialNo, body.Process,
+                        string.IsNullOrWhiteSpace(body.Description) ? string.Empty : " · " + body.Description);
+                MesFaCheckTextBlock.Foreground = ResultBrush(result);
+            });
+        }
+
+        private void MesClient_FaNumReceived(object sender, MesMessageEventArgs<FaNumMessage> e)
+        {
+            RunOnUi(() =>
+            {
+                var result = e.Message == null || e.Message.Message == null ? string.Empty : e.Message.Message.Result;
+                MesFaNumTextBlock.Text = string.IsNullOrWhiteSpace(result) ? "消息缺少 result" : result;
+                MesFaNumTextBlock.Foreground = ResultBrush(result);
+            });
+        }
+
+        private void MesClient_RawMessage(object sender, MesRawMessageEventArgs e)
+        {
+            RunOnUi(() => AppendMesTraffic(e.Sent ? "发送" : "接收", e.Message));
+        }
+
+        private void MesClient_ProtocolError(object sender, MesProtocolErrorEventArgs e)
+        {
+            RunOnUi(() => MesProtocolErrorTextBlock.Text = e.ErrorMessage +
+                (e.Exception == null ? string.Empty : " " + e.Exception.Message));
         }
 
         private async Task ResetModbusClientAsync()
@@ -1328,11 +1444,27 @@ namespace IndustrialCommDemo
             UpdateSocketClientStatus();
         }
 
+        private async Task ResetMesClientAsync()
+        {
+            var client = _mesClient;
+            _mesClient = null;
+            if (client == null) { UpdateMesStatus(); return; }
+            client.ConnectionStateChanged -= MesClient_ConnectionStateChanged;
+            client.FaCheckReceived -= MesClient_FaCheckReceived;
+            client.FaNumReceived -= MesClient_FaNumReceived;
+            client.RawMessage -= MesClient_RawMessage;
+            client.ProtocolError -= MesClient_ProtocolError;
+            try { await client.DisconnectAsync(CancellationToken.None); }
+            catch { }
+            finally { client.Dispose(); UpdateMesStatus(); }
+        }
+
         private void UpdateAllStatuses()
         {
             UpdateModbusStatus();
             UpdateSocketServerStatus();
             UpdateSocketClientStatus();
+            UpdateMesStatus();
             UpdateS7Status();
             UpdateMcStatus();
         }
@@ -1408,6 +1540,7 @@ namespace IndustrialCommDemo
         {
             ApplyModbusState();
             ApplySocketState();
+            ApplyMesState();
             ApplyS7State();
             ApplyMcState();
             ApplyDatabaseState();
@@ -1437,6 +1570,17 @@ namespace IndustrialCommDemo
             _uiState.Socket.EchoEnabled = SocketServerEchoCheckBox.IsChecked ?? true;
             _uiState.Socket.ServerMessage = SocketServerMessageTextBox.Text;
             _uiState.Socket.ClientMessage = SocketClientMessageTextBox.Text;
+
+            _uiState.Mes.Host = MesHostTextBox.Text;
+            _uiState.Mes.Port = MesPortTextBox.Text;
+            _uiState.Mes.DeviceNo = MesDeviceNoTextBox.Text;
+            _uiState.Mes.DeviceName = MesDeviceNameTextBox.Text;
+            _uiState.Mes.DeviceIp = MesDeviceIpTextBox.Text;
+            _uiState.Mes.DeviceMac = MesDeviceMacTextBox.Text;
+            _uiState.Mes.Process = MesProcessTextBox.Text;
+            _uiState.Mes.SerialNo = MesSerialNoTextBox.Text;
+            _uiState.Mes.Number = MesNumberTextBox.Text;
+            _uiState.Mes.Parameters = MesParametersTextBox.Text;
 
             _uiState.S7.DeviceId = S7DeviceIdTextBox.Text;
             _uiState.S7.Host = S7HostTextBox.Text;
@@ -1529,6 +1673,21 @@ namespace IndustrialCommDemo
             SocketServerEchoCheckBox.IsChecked = state.EchoEnabled;
         }
 
+        private void ApplyMesState()
+        {
+            var state = _uiState.Mes ?? new MesUiState();
+            SetIfNotEmpty(MesHostTextBox, state.Host);
+            SetIfNotEmpty(MesPortTextBox, state.Port);
+            SetIfNotEmpty(MesDeviceNoTextBox, state.DeviceNo);
+            SetIfNotEmpty(MesDeviceNameTextBox, state.DeviceName);
+            SetIfNotEmpty(MesDeviceIpTextBox, state.DeviceIp);
+            SetIfNotEmpty(MesDeviceMacTextBox, state.DeviceMac);
+            SetIfNotEmpty(MesProcessTextBox, state.Process);
+            SetIfNotEmpty(MesSerialNoTextBox, state.SerialNo);
+            SetIfNotEmpty(MesNumberTextBox, state.Number);
+            SetIfNotEmpty(MesParametersTextBox, state.Parameters);
+        }
+
         private void ApplyS7State()
         {
             var state = _uiState.S7 ?? new ProtocolUiState();
@@ -1550,6 +1709,18 @@ namespace IndustrialCommDemo
             SetIfNotEmpty(McAddressTextBox, state.Address);
             SetIfNotEmpty(McLengthTextBox, state.Length);
             SetIfNotEmpty(McWriteValueTextBox, state.WriteValue);
+        }
+
+        private void UpdateMesStatus()
+        {
+            var state = _mesClient == null ? MesConnectionState.Disconnected : _mesClient.State;
+            switch (state)
+            {
+                case MesConnectionState.Connected: MesStatusTextBlock.Text = "已连接"; MesStatusTextBlock.Foreground = Brushes.ForestGreen; break;
+                case MesConnectionState.Connecting: MesStatusTextBlock.Text = "正在连接"; MesStatusTextBlock.Foreground = Brushes.SteelBlue; break;
+                case MesConnectionState.Reconnecting: MesStatusTextBlock.Text = "正在重连"; MesStatusTextBlock.Foreground = Brushes.DarkGoldenrod; break;
+                default: MesStatusTextBlock.Text = "未连接"; MesStatusTextBlock.Foreground = Brushes.IndianRed; break;
+            }
         }
 
         private void ApplyDatabaseState()
@@ -2290,6 +2461,44 @@ namespace IndustrialCommDemo
             }
 
             return value;
+        }
+
+        private void RequireMesClient()
+        {
+            if (_mesClient == null || !_mesClient.IsConnected)
+                throw new InvalidOperationException("请先连接 MES。");
+        }
+
+        private static Dictionary<string, string> ParseMesParameters(string text)
+        {
+            var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var rawLine in (text ?? string.Empty).Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries))
+            {
+                var line = rawLine.Trim();
+                if (line.Length == 0) continue;
+                var separator = line.IndexOf('=');
+                if (separator <= 0) throw new InvalidOperationException("MES 参数必须使用 key=value 格式，每行一个。");
+                var key = line.Substring(0, separator).Trim();
+                if (key.Length == 0) throw new InvalidOperationException("MES 参数名不能为空。");
+                result[key] = line.Substring(separator + 1).Trim();
+            }
+            return result;
+        }
+
+        private static Brush ResultBrush(string result)
+        {
+            if (string.Equals(result, "OK", StringComparison.OrdinalIgnoreCase)) return Brushes.ForestGreen;
+            if (string.Equals(result, "NG", StringComparison.OrdinalIgnoreCase)) return Brushes.IndianRed;
+            return Brushes.DarkGoldenrod;
+        }
+
+        private void AppendMesTraffic(string direction, string message)
+        {
+            MesTrafficTextBox.AppendText(string.Format(CultureInfo.InvariantCulture, "[{0:HH:mm:ss.fff}] {1} {2}{3}",
+                DateTime.Now, direction, message, Environment.NewLine));
+            if (MesTrafficTextBox.Text.Length > 50000)
+                MesTrafficTextBox.Text = MesTrafficTextBox.Text.Substring(MesTrafficTextBox.Text.Length - 40000);
+            MesTrafficTextBox.ScrollToEnd();
         }
 
         private static int ParseIntValue(string text, string fieldName)
