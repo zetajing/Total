@@ -19,7 +19,7 @@ namespace LogHelper
         /// <summary>
         ///     待写入日志消息的线程安全队列。
         /// </summary>
-        private static readonly ConcurrentQueue<string> PendingMessages = new ConcurrentQueue<string>();
+        private static readonly ConcurrentQueue<LogEntry> PendingMessages = new ConcurrentQueue<LogEntry>();
 
         /// <summary>
         ///     用于通知工作线程有新的待处理消息的信号量。
@@ -67,12 +67,18 @@ namespace LogHelper
         /// <param name="message">要记录的日志消息内容。</param>
         public static void ShowMsg(string message)
         {
+            ShowMsg("Demo", message);
+        }
+
+        /// <summary>将日志写入指定的独立通道目录。</summary>
+        public static void ShowMsg(string channel, string message)
+        {
             if (string.IsNullOrWhiteSpace(message))
             {
                 return;
             }
 
-            PendingMessages.Enqueue(message);
+            PendingMessages.Enqueue(new LogEntry(NormalizeChannel(channel), message));
             FlushSignal.Set();
         }
 
@@ -129,32 +135,33 @@ namespace LogHelper
         /// </summary>
         private static void FlushPendingMessages()
         {
-            var batch = new List<string>();
-            string message;
-            while (PendingMessages.TryDequeue(out message))
+            var batches = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+            LogEntry entry;
+            var count = 0;
+            while (count < 200 && PendingMessages.TryDequeue(out entry))
             {
-                batch.Add(message);
-                if (batch.Count >= 200)
+                List<string> batch;
+                if (!batches.TryGetValue(entry.Channel, out batch))
                 {
-                    WriteBatch(batch);
-                    batch.Clear();
+                    batch = new List<string>();
+                    batches.Add(entry.Channel, batch);
                 }
+                batch.Add(entry.Message);
+                count++;
             }
 
-            if (batch.Count > 0)
-            {
-                WriteBatch(batch);
-            }
+            foreach (var pair in batches) WriteBatch(pair.Key, pair.Value);
+            if (!PendingMessages.IsEmpty) FlushSignal.Set();
         }
 
         /// <summary>
         ///     将一批日志消息写入到按小时轮转的日志文件中。
-        ///     日志文件路径为：{LocalApplicationData}/{应用名称}/Logs/{yyyyMMdd_HH}.log。
+        ///     日志文件路径为：{StoragePathProvider.DataRoot}/Logs/{channel}/{yyyyMMdd_HH}.log。
         ///     每写入 120 批消息后，自动触发一次旧日志清理（保留最近 14 天）。
         ///     所有 I/O 异常被静默吞噬，不影响业务线程。
         /// </summary>
         /// <param name="batch">待写入的日志消息集合。</param>
-        private static void WriteBatch(IReadOnlyCollection<string> batch)
+        private static void WriteBatch(string channel, IReadOnlyCollection<string> batch)
         {
             if (batch == null || batch.Count == 0)
             {
@@ -163,7 +170,7 @@ namespace LogHelper
 
             try
             {
-                var logDirectory = GetLogDirectory();
+                var logDirectory = GetLogDirectory(channel);
                 Directory.CreateDirectory(logDirectory);
 
                 var logFile = Path.Combine(logDirectory, DateTime.Now.ToString("yyyyMMdd_HH") + ".log");
@@ -183,16 +190,25 @@ namespace LogHelper
         /// <summary>
         ///     获取日志文件存储目录。
         ///     优先使用入口程序集的名称，若无法获取则回退为 "IndustrialCommDemo"。
-        ///     目录路径为：{LocalApplicationData}/{应用名称}/Logs。
+        ///     目录路径为：{StoragePathProvider.DataRoot}/Logs。
         /// </summary>
         /// <returns>日志目录的完整路径字符串。</returns>
-        private static string GetLogDirectory()
+        public static string GetLogDirectory(string channel)
         {
-            var appName = (Assembly.GetEntryAssembly() ?? Assembly.GetExecutingAssembly()).GetName().Name ?? "IndustrialCommDemo";
-            return Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                appName,
-                "Logs");
+            return Path.Combine(StoragePathProvider.LogsRoot, NormalizeChannel(channel));
+        }
+
+        private static string NormalizeChannel(string channel)
+        {
+            if (string.Equals(channel, "SDK", StringComparison.OrdinalIgnoreCase)) return "SDK";
+            return "Demo";
+        }
+
+        private sealed class LogEntry
+        {
+            public LogEntry(string channel, string message) { Channel = channel; Message = message; }
+            public string Channel { get; private set; }
+            public string Message { get; private set; }
         }
 
         /// <summary>

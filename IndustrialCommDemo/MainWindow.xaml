@@ -5,6 +5,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d"
         Title="通讯"
+        Icon="Assets/industrial-comm-icon.png"
         Width="1280"
         Height="860"
         MinWidth="1180"
@@ -37,7 +38,7 @@
 
         <Border Grid.Row="1" Margin="0,12,0,12" Padding="12" CornerRadius="18" Background="White" Grid.ColumnSpan="3">
             <TabControl x:Name="ProtocolTabControl">
-                <TabItem Header="Modbus TCP">
+                <TabItem Header="Modbus TCP / RTU">
                     <ScrollViewer VerticalScrollBarVisibility="Auto">
                         <Grid Margin="10">
                             <Grid.RowDefinitions>
@@ -131,7 +132,9 @@
                                                TextWrapping="Wrap"
                                                Foreground="#5B6F82"
                                                Text="D100, R200, M0, S10, B5, X17, Y20" />
-                                    <StackPanel Grid.Row="10" Grid.ColumnSpan="2" Orientation="Horizontal" Margin="0,16,0,0">
+                                    <TextBlock x:Name="ModbusRtuTimeoutLabel" Grid.Row="10" Grid.Column="0" Margin="0,8" VerticalAlignment="Center" Text="响应超时（ms）" Visibility="Collapsed" />
+                                    <TextBox x:Name="ModbusRtuTimeoutTextBox" Grid.Row="10" Grid.Column="1" Margin="0,6,0,6" Text="3000" Visibility="Collapsed" />
+                                    <StackPanel Grid.Row="11" Grid.ColumnSpan="2" Orientation="Horizontal" Margin="0,16,0,0">
                                         <Button Width="120" Margin="0,0,12,0" Padding="10" Background="#1D4ED8" Foreground="White" BorderThickness="0" Click="ModbusConnectButton_Click" Content="连接" />
                                         <Button Width="120" Margin="0,0,12,0" Padding="10" Background="#334155" Foreground="White" BorderThickness="0" Click="ModbusDisconnectButton_Click" Content="断开" />
                                         <TextBlock Margin="8,0,0,0" VerticalAlignment="Center" FontWeight="SemiBold" Text="状态：" />
@@ -210,6 +213,21 @@
                                         <StackPanel>
                                             <TextBlock FontWeight="SemiBold" Foreground="#17324D" Text="结果" />
                                             <TextBlock x:Name="ModbusResultTextBlock" Margin="0,8,0,0" TextWrapping="Wrap" Foreground="#334155" Text="等待中..." />
+                                            <Border x:Name="ModbusRtuFramePanel" Margin="0,12,0,0" Padding="10" Background="#EEF6FF" CornerRadius="8" Visibility="Collapsed">
+                                                <StackPanel>
+                                                    <TextBlock FontWeight="SemiBold" Foreground="#17324D" Text="RS-485 / Modbus RTU 标准报文（含 CRC）" />
+                                                    <TextBlock Margin="0,7,0,0" Foreground="#475569" Text="请求（十六进制，可不填 CRC）" />
+                                                    <TextBox x:Name="ModbusRtuRawRequestTextBox" Margin="0,3,0,0" FontFamily="Consolas" Text="01 03 00 00 00 01" />
+                                                    <StackPanel Margin="0,7,0,2" Orientation="Horizontal">
+                                                        <CheckBox x:Name="ModbusRtuAutoCrcCheckBox" VerticalAlignment="Center" IsChecked="True" Content="自动追加 CRC16" />
+                                                        <Button Margin="14,0,0,0" Padding="14,6" Background="#2563EB" Foreground="White" BorderThickness="0" Click="ModbusRtuRawSendButton_Click" Content="发送原始报文" />
+                                                    </StackPanel>
+                                                    <TextBlock Margin="0,7,0,0" Foreground="#0369A1" Text="发送 TX" />
+                                                    <TextBox x:Name="ModbusRtuTxTextBox" Margin="0,3,0,0" IsReadOnly="True" FontFamily="Consolas" Text="等待发送..." />
+                                                    <TextBlock Margin="0,7,0,0" Foreground="#047857" Text="接收 RX" />
+                                                    <TextBox x:Name="ModbusRtuRxTextBox" Margin="0,3,0,0" IsReadOnly="True" FontFamily="Consolas" Text="等待接收..." />
+                                                </StackPanel>
+                                            </Border>
                                             <TextBlock Margin="0,14,0,6" FontWeight="SemiBold" Foreground="#17324D" Text="读取 / 订阅结果" />
                                             <DataGrid x:Name="ModbusSubscriptionDataGrid"
                                                       AutoGenerateColumns="False"
@@ -238,7 +256,7 @@
                                 <TextBlock Margin="12"
                                            TextWrapping="Wrap"
                                            Foreground="#475569"
-                                           Text="本页面专用于 Modbus TCP 协议。控件专注于 PLC 寻址、数据转换和轮询。" />
+                                           Text="本页面支持 Modbus TCP 与 Modbus RTU（RS-485/RS-232）。RTU 模式会展示线上实际收发的完整标准报文与 CRC 校验结果。" />
                             </GroupBox>
                         </Grid>
                     </ScrollViewer>
@@ -773,6 +791,18 @@
                         </Grid>
                     </ScrollViewer>
                 </TabItem>
+                <TabItem Header="存储设置">
+                    <Grid Margin="24">
+                        <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                        <TextBlock FontSize="22" FontWeight="SemiBold" Foreground="#17324D" Text="本地数据目录" />
+                        <TextBlock Grid.Row="1" Margin="0,10,0,14" Foreground="#64748B" TextWrapping="Wrap" Text="日志、界面状态和缓存统一保存在该目录。禁止选择 C 盘；默认使用软件目录，若软件在 C 盘则自动选择第一个可用的非 C 固定磁盘。" />
+                        <Grid Grid.Row="2"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="120"/></Grid.ColumnDefinitions>
+                            <TextBox x:Name="DataDirectoryTextBox" Padding="8" FontFamily="Consolas" />
+                            <Button Grid.Column="1" Margin="10,0,0,0" Padding="10" Background="#2563EB" Foreground="White" BorderThickness="0" Click="ApplyDataDirectoryButton_Click" Content="应用目录" />
+                        </Grid>
+                        <TextBlock x:Name="DataDirectoryHintTextBlock" Grid.Row="3" Margin="0,14,0,0" Foreground="#0F766E" TextWrapping="Wrap" />
+                    </Grid>
+                </TabItem>
             </TabControl>
         </Border>
 
@@ -790,17 +820,14 @@
                     <TextBlock FontSize="20" FontWeight="SemiBold" Foreground="#17324D" Text="运行日志" />
                     <Button Grid.Column="1" Padding="8" Background="#E2E8F0" BorderBrush="#CBD5E1" Click="ClearLogButton_Click" Content="清空日志" />
                 </Grid>
-                <TextBox x:Name="LogTextBox"
-                         Grid.Row="1"
-                         Margin="0,14,0,0"
-                         IsReadOnly="True"
-                         TextWrapping="Wrap"
-                         VerticalScrollBarVisibility="Auto"
-                         AcceptsReturn="True"
-                         FontFamily="Consolas"
-                         Background="#0F172A"
-                         Foreground="#D4E4FF"
-                         BorderThickness="0" />
+                <TabControl x:Name="LogTabControl" Grid.Row="1" Margin="0,10,0,0">
+                    <TabItem Header="Demo Log">
+                        <TextBox x:Name="LogTextBox" IsReadOnly="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" AcceptsReturn="True" FontFamily="Consolas" Background="#0F172A" Foreground="#D4E4FF" BorderThickness="0" />
+                    </TabItem>
+                    <TabItem Header="SDK Log">
+                        <TextBox x:Name="SdkLogTextBox" IsReadOnly="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" AcceptsReturn="True" FontFamily="Consolas" Background="#111827" Foreground="#BAE6FD" BorderThickness="0" />
+                    </TabItem>
+                </TabControl>
             </Grid>
         </Border>
     </Grid>

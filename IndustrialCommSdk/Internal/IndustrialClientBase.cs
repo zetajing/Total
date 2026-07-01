@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using IndustrialCommSdk.Abstractions;
@@ -59,6 +61,8 @@ namespace IndustrialCommSdk.Internal
         /// <exception cref="OperationCanceledException">操作已被取消。</exception>
         public async Task ConnectAsync(CancellationToken cancellationToken)
         {
+            var stopwatch = Stopwatch.StartNew();
+            _logger.Info(string.Format("CONNECT begin | Device={0} | Protocol={1}", DeviceId, Kind));
             await _operationLock.WaitAsync(cancellationToken).ConfigureAwait(false);
             try
             {
@@ -67,7 +71,7 @@ namespace IndustrialCommSdk.Internal
                 await ConnectCoreAsync(cancellationToken).ConfigureAwait(false);
                 RecordSuccess();
                 _status = ConnectionStatus.Connected;
-                _logger.Info(string.Format("{0} connected.", DeviceId));
+                _logger.Info(string.Format("CONNECT completed | Device={0} | Protocol={1} | Elapsed={2}ms", DeviceId, Kind, stopwatch.ElapsedMilliseconds));
             }
             catch (Exception ex)
             {
@@ -87,12 +91,14 @@ namespace IndustrialCommSdk.Internal
         /// <exception cref="OperationCanceledException">操作已被取消。</exception>
         public async Task DisconnectAsync(CancellationToken cancellationToken)
         {
+            var stopwatch = Stopwatch.StartNew();
+            _logger.Info(string.Format("DISCONNECT begin | Device={0} | Protocol={1}", DeviceId, Kind));
             await _operationLock.WaitAsync(cancellationToken).ConfigureAwait(false);
             try
             {
                 await DisconnectCoreAsync(cancellationToken).ConfigureAwait(false);
                 _status = ConnectionStatus.Disconnected;
-                _logger.Info(string.Format("{0} disconnected.", DeviceId));
+                _logger.Info(string.Format("DISCONNECT completed | Device={0} | Protocol={1} | Elapsed={2}ms", DeviceId, Kind, stopwatch.ElapsedMilliseconds));
             }
             finally
             {
@@ -107,6 +113,9 @@ namespace IndustrialCommSdk.Internal
         /// <exception cref="OperationCanceledException">操作已被取消。</exception>
         public async Task<DataValue> ReadAsync(ReadRequest request, CancellationToken cancellationToken)
         {
+            if (request == null) throw new ArgumentNullException(nameof(request));
+            var stopwatch = Stopwatch.StartNew();
+            _logger.Info(string.Format("READ begin | Device={0} | Protocol={1} | Address={2} | Type={3} | Length={4}", DeviceId, Kind, request.Address, request.DataType, request.Length));
             await _operationLock.WaitAsync(cancellationToken).ConfigureAwait(false);
             try
             {
@@ -116,12 +125,14 @@ namespace IndustrialCommSdk.Internal
                     {
                         var value = await ReadCoreAsync(request, operationCts.Token).ConfigureAwait(false);
                         RecordSuccess();
+                        _logger.Info(string.Format("READ completed | Device={0} | Address={1} | Quality={2} | RawBytes={3} | Elapsed={4}ms", DeviceId, request.Address, value.Quality, value.RawData == null ? 0 : value.RawData.Length, stopwatch.ElapsedMilliseconds));
                         return value;
                     }
                     catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested && request.Timeout.HasValue)
                     {
                         var timeoutException = new IndustrialTimeoutException("Industrial read operation timed out.");
                         RecordFailure(timeoutException);
+                        _logger.Warn(string.Format("READ timeout | Device={0} | Address={1} | Elapsed={2}ms", DeviceId, request.Address, stopwatch.ElapsedMilliseconds));
                         return new DataValue(request.Address, request.DataType, null, null, QualityStatus.Bad, DateTimeOffset.UtcNow, timeoutException.Message);
                     }
                 }
@@ -148,11 +159,15 @@ namespace IndustrialCommSdk.Internal
         /// <exception cref="OperationCanceledException">操作已被取消。</exception>
         public async Task<BatchReadResult> ReadManyAsync(IReadOnlyCollection<ReadRequest> requests, CancellationToken cancellationToken)
         {
+            if (requests == null) throw new ArgumentNullException(nameof(requests));
+            var stopwatch = Stopwatch.StartNew();
+            _logger.Info(string.Format("READ MANY begin | Device={0} | Protocol={1} | Count={2} | Addresses=[{3}]", DeviceId, Kind, requests.Count, FormatAddresses(requests.Select(item => item.Address))));
             await _operationLock.WaitAsync(cancellationToken).ConfigureAwait(false);
             try
             {
                 var result = await ReadManyCoreAsync(requests, cancellationToken).ConfigureAwait(false);
                 RecordSuccess();
+                _logger.Info(string.Format("READ MANY completed | Device={0} | Count={1} | Good={2} | Bad={3} | Elapsed={4}ms", DeviceId, result.Values.Count, result.Values.Count(item => item.Quality == QualityStatus.Good), result.Values.Count(item => item.Quality != QualityStatus.Good), stopwatch.ElapsedMilliseconds));
                 return result;
             }
             catch (Exception ex)
@@ -176,6 +191,9 @@ namespace IndustrialCommSdk.Internal
         /// <exception cref="OperationCanceledException">操作已被取消。</exception>
         public async Task WriteAsync(WriteRequest request, CancellationToken cancellationToken)
         {
+            if (request == null) throw new ArgumentNullException(nameof(request));
+            var stopwatch = Stopwatch.StartNew();
+            _logger.Info(string.Format("WRITE begin | Device={0} | Protocol={1} | Address={2} | Type={3} | Length={4}", DeviceId, Kind, request.Address, request.DataType, request.Length));
             await _operationLock.WaitAsync(cancellationToken).ConfigureAwait(false);
             try
             {
@@ -185,6 +203,7 @@ namespace IndustrialCommSdk.Internal
                     {
                         await WriteCoreAsync(request, operationCts.Token).ConfigureAwait(false);
                         RecordSuccess();
+                        _logger.Info(string.Format("WRITE completed | Device={0} | Address={1} | Elapsed={2}ms", DeviceId, request.Address, stopwatch.ElapsedMilliseconds));
                     }
                     catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested && request.Timeout.HasValue)
                     {
@@ -210,11 +229,15 @@ namespace IndustrialCommSdk.Internal
         /// <exception cref="OperationCanceledException">操作已被取消。</exception>
         public async Task WriteManyAsync(IReadOnlyCollection<WriteRequest> requests, CancellationToken cancellationToken)
         {
+            if (requests == null) throw new ArgumentNullException(nameof(requests));
+            var stopwatch = Stopwatch.StartNew();
+            _logger.Info(string.Format("WRITE MANY begin | Device={0} | Protocol={1} | Count={2} | Addresses=[{3}]", DeviceId, Kind, requests.Count, FormatAddresses(requests.Select(item => item.Address))));
             await _operationLock.WaitAsync(cancellationToken).ConfigureAwait(false);
             try
             {
                 await WriteManyCoreAsync(requests, cancellationToken).ConfigureAwait(false);
                 RecordSuccess();
+                _logger.Info(string.Format("WRITE MANY completed | Device={0} | Count={1} | Elapsed={2}ms", DeviceId, requests.Count, stopwatch.ElapsedMilliseconds));
             }
             catch (Exception ex)
             {
@@ -235,6 +258,7 @@ namespace IndustrialCommSdk.Internal
         /// <exception cref="OperationCanceledException">操作已被取消。</exception>
         public Task<string> SubscribeAsync(SubscriptionRequest request, EventHandler<SubscriptionEvent> handler, CancellationToken cancellationToken)
         {
+            _logger.Info(string.Format("SUBSCRIBE requested | Device={0} | Key={1} | Items={2} | Interval={3}ms | ChangeOnly={4}", DeviceId, request.SubscriptionKey, request.Items.Count, request.Interval.TotalMilliseconds, request.ReportOnChangeOnly));
             return _pollingScheduler.SubscribeAsync(this, request, handler, cancellationToken);
         }
 
@@ -245,7 +269,15 @@ namespace IndustrialCommSdk.Internal
         /// <exception cref="OperationCanceledException">操作已被取消。</exception>
         public Task UnsubscribeAsync(string subscriptionId, CancellationToken cancellationToken)
         {
+            _logger.Info(string.Format("UNSUBSCRIBE requested | Device={0} | Subscription={1}", DeviceId, subscriptionId));
             return _pollingScheduler.UnsubscribeAsync(subscriptionId, cancellationToken);
+        }
+
+        private static string FormatAddresses(IEnumerable<string> addresses)
+        {
+            var items = addresses.Take(12).ToArray();
+            var text = string.Join(",", items);
+            return text.Length > 240 ? text.Substring(0, 240) + "..." : text;
         }
 
         /// <summary>
@@ -381,7 +413,7 @@ namespace IndustrialCommSdk.Internal
             _consecutiveFailures++;
             _lastError = ex == null ? null : ex.Message;
             _status = ConnectionStatus.Faulted;
-            _logger.Error("Operation failed.", ex);
+            _logger.Error(string.Format("Operation failed | Device={0} | Protocol={1}", DeviceId, Kind), ex);
         }
 
         /// <summary>检查实例是否已被释放，若是则抛出 <see cref="ObjectDisposedException"/>。</summary>

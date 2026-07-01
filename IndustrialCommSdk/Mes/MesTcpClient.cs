@@ -3,6 +3,7 @@ using System.Net.Sockets;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Diagnostics;
 using IndustrialCommSdk.Diagnostics;
 using IndustrialCommSdk.Exceptions;
 
@@ -41,6 +42,7 @@ namespace IndustrialCommSdk.Mes
         public async Task ConnectAsync(CancellationToken cancellationToken)
         {
             ThrowIfDisposed();
+            _logger.Info(string.Format("MES CONNECT begin | Endpoint={0}:{1} | Timeout={2}ms | AutoReconnect={3}", _options.Host, _options.Port, _options.ConnectTimeoutMilliseconds, _options.AutoReconnect));
             TaskCompletionSource<bool> firstConnection;
             lock (_lifecycleGate)
             {
@@ -56,10 +58,12 @@ namespace IndustrialCommSdk.Mes
 
             using (cancellationToken.Register(() => firstConnection.TrySetCanceled()))
                 await firstConnection.Task.ConfigureAwait(false);
+            _logger.Info("MES CONNECT completed | Endpoint=" + _options.Host + ":" + _options.Port);
         }
 
         public async Task DisconnectAsync(CancellationToken cancellationToken)
         {
+            _logger.Info("MES DISCONNECT begin.");
             Task task;
             CancellationTokenSource cancellation;
             lock (_lifecycleGate)
@@ -79,6 +83,7 @@ namespace IndustrialCommSdk.Mes
             }
             if (cancellation != null) cancellation.Dispose();
             ChangeState(MesConnectionState.Stopped, null);
+            _logger.Info("MES DISCONNECT completed.");
         }
 
         public Task SendOnlineAsync(CancellationToken cancellationToken)
@@ -102,6 +107,7 @@ namespace IndustrialCommSdk.Mes
             {
                 try
                 {
+                    _logger.Info(string.Format("MES connection attempt | Endpoint={0}:{1} | Mode={2}", _options.Host, _options.Port, firstAttempt ? "initial" : "reconnect"));
                     ChangeState(firstAttempt ? MesConnectionState.Connecting : MesConnectionState.Reconnecting, null);
                     await OpenSocketAsync(cancellationToken).ConfigureAwait(false);
                     ChangeState(MesConnectionState.Connected, null);
@@ -127,6 +133,7 @@ namespace IndustrialCommSdk.Mes
                         break;
                     }
                     firstAttempt = false;
+                    _logger.Info("MES reconnect scheduled | Delay=" + reconnectDelay + "ms");
                     try { await Task.Delay(reconnectDelay, cancellationToken).ConfigureAwait(false); }
                     catch (OperationCanceledException) { break; }
                     reconnectDelay = Math.Min(reconnectDelay * 2, _options.MaximumReconnectDelayMilliseconds);
@@ -140,6 +147,7 @@ namespace IndustrialCommSdk.Mes
         private async Task OpenSocketAsync(CancellationToken cancellationToken)
         {
             CloseSocket();
+            var stopwatch = Stopwatch.StartNew();
             var client = new TcpClient();
             var connectTask = client.ConnectAsync(_options.Host, _options.Port);
             var timeoutTask = Task.Delay(_options.ConnectTimeoutMilliseconds, cancellationToken);
@@ -156,6 +164,7 @@ namespace IndustrialCommSdk.Mes
                 _client = client;
                 _stream = client.GetStream();
             }
+            _logger.Info("MES socket opened | Elapsed=" + stopwatch.ElapsedMilliseconds + "ms");
         }
 
         private async Task ReceiveLoopAsync(CancellationToken cancellationToken)
@@ -169,6 +178,7 @@ namespace IndustrialCommSdk.Mes
                 var stream = GetConnectedStream();
                 var read = await stream.ReadAsync(bytes, 0, bytes.Length, cancellationToken).ConfigureAwait(false);
                 if (read == 0) return;
+                _logger.Trace("MES RX chunk | Bytes=" + read);
                 var charCount = decoder.GetChars(bytes, 0, read, chars, 0, false);
                 foreach (var frame in parser.Append(new string(chars, 0, charCount)))
                     ProcessFrame(frame);
@@ -181,6 +191,7 @@ namespace IndustrialCommSdk.Mes
             try
             {
                 var type = MesProtocolCodec.ReadType(frame);
+                _logger.Info(string.Format("MES RX frame | Type={0} | Characters={1}", type ?? "(missing)", frame.Length));
                 if (string.Equals(type, "FACHECK", StringComparison.OrdinalIgnoreCase))
                 {
                     var message = MesProtocolCodec.Deserialize<FaCheckMessage>(frame);
@@ -201,6 +212,9 @@ namespace IndustrialCommSdk.Mes
         {
             ThrowIfDisposed();
             var payload = Encoding.UTF8.GetBytes(text);
+            var messageType = GetMessageTypeForLog(text);
+            var stopwatch = Stopwatch.StartNew();
+            _logger.Info(string.Format("MES TX begin | Type={0} | Bytes={1}", messageType, payload.Length));
             await _sendGate.WaitAsync(cancellationToken).ConfigureAwait(false);
             try
             {
@@ -215,6 +229,7 @@ namespace IndustrialCommSdk.Mes
                 await write.ConfigureAwait(false);
                 await stream.FlushAsync(cancellationToken).ConfigureAwait(false);
                 RaiseRaw(text, true);
+                _logger.Info(string.Format("MES TX completed | Type={0} | Bytes={1} | Elapsed={2}ms", messageType, payload.Length, stopwatch.ElapsedMilliseconds));
             }
             finally { _sendGate.Release(); }
         }
@@ -227,6 +242,15 @@ namespace IndustrialCommSdk.Mes
             if (string.IsNullOrWhiteSpace(message.DeviceIp)) message.DeviceIp = _options.DeviceIp;
             if (string.IsNullOrWhiteSpace(message.DeviceMac)) message.DeviceMac = _options.DeviceMac;
             if (string.IsNullOrWhiteSpace(message.DeviceTime)) message.DeviceTime = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
+        }
+
+        private static string GetMessageTypeForLog(string text)
+        {
+            if (string.IsNullOrWhiteSpace(text)) return "(empty)";
+            if (text.StartsWith("START ", StringComparison.OrdinalIgnoreCase)) return "ONLINE";
+            if (text[0] != '{') return "(non-json)";
+            try { return MesProtocolCodec.ReadType(text) ?? "(missing)"; }
+            catch { return "(invalid-json)"; }
         }
 
         private NetworkStream GetConnectedStream()
@@ -258,6 +282,7 @@ namespace IndustrialCommSdk.Mes
         private void ChangeState(MesConnectionState state, string error)
         {
             Interlocked.Exchange(ref _state, (int)state);
+            _logger.Info("MES state changed | State=" + state + (string.IsNullOrWhiteSpace(error) ? string.Empty : " | Error=" + error));
             Raise(ConnectionStateChanged, new MesConnectionStateChangedEventArgs(state, error));
         }
 

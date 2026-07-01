@@ -5,7 +5,13 @@
     <TargetFramework>net472</TargetFramework>
     <LangVersion>latest</LangVersion>
     <UseWPF>true</UseWPF>
+    <ApplicationIcon>Assets\industrial-comm-icon.ico</ApplicationIcon>
   </PropertyGroup>
+
+  <ItemGroup>
+    <Resource Include="Assets\industrial-comm-icon.png" />
+    <Content Include="Assets\industrial-comm-icon.ico" />
+  </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\IndustrialCommSdk\IndustrialCommSdk.csproj" />

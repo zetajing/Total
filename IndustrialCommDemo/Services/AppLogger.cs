@@ -29,6 +29,7 @@ namespace IndustrialCommDemo.Services
         /// 将批量日志消息追加到 UI 显示的回调委托。
         /// </summary>
         private readonly Action<IReadOnlyList<string>> _appendBatch;
+        private readonly string _channel;
 
         /// <summary>
         /// 线程安全的队列，用于暂存待刷新到 UI 的日志消息行。
@@ -52,10 +53,11 @@ namespace IndustrialCommDemo.Services
         /// <param name="dispatcher">用于在 UI 线程上执行操作的 <see cref="Dispatcher"/> 对象。不能为 null。</param>
         /// <param name="appendBatch">将批量日志消息追加到 UI 显示的回调委托。不能为 null。</param>
         /// <exception cref="ArgumentNullException">当 <paramref name="dispatcher"/> 或 <paramref name="appendBatch"/> 为 null 时引发。</exception>
-        public AppLogger(Dispatcher dispatcher, Action<IReadOnlyList<string>> appendBatch)
+        public AppLogger(Dispatcher dispatcher, Action<IReadOnlyList<string>> appendBatch, string channel = "APP")
         {
             _dispatcher = dispatcher ?? throw new ArgumentNullException(nameof(dispatcher));
             _appendBatch = appendBatch ?? throw new ArgumentNullException(nameof(appendBatch));
+            _channel = string.IsNullOrWhiteSpace(channel) ? "APP" : channel.Trim().ToUpperInvariant();
         }
 
         /// <summary>
@@ -126,14 +128,14 @@ namespace IndustrialCommDemo.Services
                 return;
             }
 
-            var line = string.Format("[{0:HH:mm:ss}] {1} {2}", DateTime.Now, level, message ?? string.Empty);
+            var line = string.Format("[{0:HH:mm:ss}] [{1}] {2} {3}", DateTime.Now, _channel, level, message ?? string.Empty);
             if (exception != null && !string.IsNullOrWhiteSpace(exception.StackTrace))
             {
                 line = line + Environment.NewLine + exception.StackTrace;
             }
 
             _pendingUiMessages.Enqueue(line);
-            LogDisplayHelper.ShowMsg(line);
+            LogDisplayHelper.ShowMsg(_channel, line);
             ScheduleUiFlush();
         }
 

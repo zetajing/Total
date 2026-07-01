@@ -15,11 +15,13 @@ namespace IndustrialCommSdk.Protocols.Modbus
         private readonly IIndustrialLogger _logger;
         private readonly object _sync = new object();
         private readonly List<byte> _responseBuffer = new List<byte>();
+        private readonly Action<ModbusRtuFrameEventArgs> _frameTraced;
 
-        public ModbusRtuTracingStreamResource(SerialPort serialPort, IIndustrialLogger logger)
+        public ModbusRtuTracingStreamResource(SerialPort serialPort, IIndustrialLogger logger, Action<ModbusRtuFrameEventArgs> frameTraced = null)
         {
             _serialPort = serialPort ?? throw new ArgumentNullException(nameof(serialPort));
             _logger = logger ?? NullIndustrialLogger.Instance;
+            _frameTraced = frameTraced;
         }
 
         public int InfiniteTimeout => SerialPort.InfiniteTimeout;
@@ -43,6 +45,7 @@ namespace IndustrialCommSdk.Protocols.Modbus
                 _responseBuffer.Clear();
             }
             _serialPort.DiscardInBuffer();
+            _logger.Trace("Modbus RTU serial input buffer cleared.");
         }
 
         public void Dispose()
@@ -77,7 +80,9 @@ namespace IndustrialCommSdk.Protocols.Modbus
 
             // 先交给真实串口，只有写入成功后才将该帧记录为已发送。
             _serialPort.Write(buffer, offset, count);
-            _logger.Info("Modbus RTU TX | " + ToHex(buffer, offset, count));
+            var frame = CopyBytes(buffer, offset, count);
+            _logger.Info("Modbus RTU TX | " + ToHex(frame, 0, frame.Length));
+            _frameTraced?.Invoke(new ModbusRtuFrameEventArgs(ModbusRtuFrameDirection.Transmit, frame, ModbusRtuFrameCodec.HasValidCrc(frame)));
         }
 
         private void TraceResponseBytes(byte[] buffer, int offset, int count)
@@ -92,7 +97,10 @@ namespace IndustrialCommSdk.Protocols.Modbus
                 var expectedLength = GetExpectedResponseLength(_responseBuffer);
                 if (expectedLength > 0 && _responseBuffer.Count >= expectedLength)
                 {
-                    _logger.Info("Modbus RTU RX | " + ToHex(_responseBuffer.ToArray(), 0, expectedLength));
+                    var frame = _responseBuffer.GetRange(0, expectedLength).ToArray();
+                    var crcValid = ModbusRtuFrameCodec.HasValidCrc(frame);
+                    _logger.Info("Modbus RTU RX" + (crcValid ? "" : " (CRC invalid)") + " | " + ToHex(frame, 0, frame.Length));
+                    _frameTraced?.Invoke(new ModbusRtuFrameEventArgs(ModbusRtuFrameDirection.Receive, frame, crcValid));
                     _responseBuffer.RemoveRange(0, expectedLength);
                 }
             }
@@ -146,6 +154,13 @@ namespace IndustrialCommSdk.Protocols.Modbus
         private static string ToHex(byte[] bytes, int offset, int count)
         {
             return BitConverter.ToString(bytes, offset, count).Replace('-', ' ');
+        }
+
+        private static byte[] CopyBytes(byte[] bytes, int offset, int count)
+        {
+            var result = new byte[count];
+            Buffer.BlockCopy(bytes, offset, result, 0, count);
+            return result;
         }
     }
 }

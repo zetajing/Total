@@ -55,6 +55,7 @@ namespace IndustrialCommSdk.Polling
             }
 
             worker.Start();
+            _logger.Info(string.Format("SUBSCRIPTION started | Key={0} | Device={1} | Items={2} | Interval={3}ms", request.SubscriptionKey, client.DeviceId, request.Items.Count, request.Interval.TotalMilliseconds));
             return Task.FromResult(request.SubscriptionKey);
         }
 
@@ -72,6 +73,7 @@ namespace IndustrialCommSdk.Polling
             if (_subscriptions.TryRemove(subscriptionId, out worker))
             {
                 worker.Dispose();
+                _logger.Info("SUBSCRIPTION stopped | Key=" + subscriptionId);
             }
 
             return Task.CompletedTask;
@@ -150,6 +152,7 @@ namespace IndustrialCommSdk.Polling
             /// </summary>
             public void Start()
             {
+                _logger.Trace("SUBSCRIPTION loop starting | Key=" + _request.SubscriptionKey);
                 _loopTask = Task.Run(LoopAsync);
             }
 
@@ -174,6 +177,7 @@ namespace IndustrialCommSdk.Polling
                             _lastFingerprint = fingerprint;
                             var args = new SubscriptionEvent(_request.SubscriptionKey, values, DateTimeOffset.UtcNow);
                             _handler?.Invoke(_client, args);
+                            _logger.Trace(string.Format("SUBSCRIPTION reported | Key={0} | Values={1}", _request.SubscriptionKey, values.Count));
                         }
                     }
                     catch (OperationCanceledException)
@@ -212,6 +216,7 @@ namespace IndustrialCommSdk.Polling
             /// </summary>
             public void Dispose()
             {
+                _logger.Trace("SUBSCRIPTION loop stopping | Key=" + _request.SubscriptionKey);
                 _cts.Cancel();
                 try
                 {

@@ -4,13 +4,14 @@ using System.IO;
 using System.Runtime.Serialization;
 using System.Runtime.Serialization.Json;
 using System.Text;
+using LogHelper;
 
 namespace IndustrialCommDemo.Services
 {
     /// <summary>
     /// UI 状态存储类，负责将 <see cref="DemoUiState"/> 序列化为 JSON 文件并持久化到本地磁盘，
     /// 以及从磁盘加载反序列化为对象。使用 <see cref="DataContractJsonSerializer"/> 进行序列化。
-    /// 数据文件存储在 LocalApplicationData 目录下的 "IndustrialCommDemo/ui-state.json"。
+    /// 数据文件存储在 StoragePathProvider.StateRoot 目录下的 "ui-state.json"。
     /// </summary>
     internal sealed class UiStateStore
     {
@@ -26,13 +27,11 @@ namespace IndustrialCommDemo.Services
 
         /// <summary>
         /// 初始化 <see cref="UiStateStore"/> 类的新实例。
-        /// 在 LocalApplicationData 目录下创建 "IndustrialCommDemo" 子目录，并设置状态文件的完整路径。
+        /// 通过 StoragePathProvider.StateRoot 获取状态目录并设置状态文件的完整路径。
         /// </summary>
         public UiStateStore()
         {
-            var baseDirectory = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "IndustrialCommDemo");
+            var baseDirectory = StoragePathProvider.StateRoot;
             Directory.CreateDirectory(baseDirectory);
             _filePath = Path.Combine(baseDirectory, "ui-state.json");
         }

@@ -46,7 +46,8 @@ namespace IndustrialCommDemo
         private ModbusAddressParser _modbusAddressParser = new ModbusAddressParser(ModbusDeviceProfiles.InovanceEasyPlc);
         private IModbusDeviceProfile _modbusProfile = ModbusDeviceProfiles.InovanceEasyPlc;
         private readonly AppLogger _logger;
-        private readonly UiStateStore _uiStateStore;
+        private readonly AppLogger _sdkLogger;
+        private UiStateStore _uiStateStore;
         private DemoUiState _uiState;
         private readonly ObservableCollection<SubscriptionDisplayRow> _modbusSubscriptionRows = new ObservableCollection<SubscriptionDisplayRow>();
         private readonly ObservableCollection<DatabaseHistoryDisplayRow> _databaseHistoryRows = new ObservableCollection<DatabaseHistoryDisplayRow>();
@@ -77,9 +78,12 @@ namespace IndustrialCommDemo
         {
             InitializeComponent();
 
-            _logger = new AppLogger(Dispatcher, AppendLogBatch);
+            _logger = new AppLogger(Dispatcher, AppendLogBatch, "DEMO");
+            _sdkLogger = new AppLogger(Dispatcher, AppendSdkLogBatch, "SDK");
             _uiStateStore = new UiStateStore();
             _uiState = _uiStateStore.Load();
+            DataDirectoryTextBox.Text = LogHelper.StoragePathProvider.DataRoot;
+            DataDirectoryHintTextBlock.Text = "当前目录：" + LogHelper.StoragePathProvider.DataRoot;
 
             SelectDataType(ModbusDataTypeComboBox, DataType.Int16);
             ApplyModbusProfile();
@@ -117,11 +121,14 @@ namespace IndustrialCommDemo
                         DataBits = ParseIntValue(ModbusDataBitsComboBox.Text, "数据位"),
                         Parity = (Parity)Enum.Parse(typeof(Parity), ((ComboBoxItem)ModbusParityComboBox.SelectedItem).Tag.ToString()),
                         StopBits = (StopBits)Enum.Parse(typeof(StopBits), ((ComboBoxItem)ModbusStopBitsComboBox.SelectedItem).Tag.ToString()),
+                        ReadTimeout = ParseIntValue(ModbusRtuTimeoutTextBox.Text, "RTU 响应超时"),
+                        WriteTimeout = ParseIntValue(ModbusRtuTimeoutTextBox.Text, "RTU 发送超时"),
                         SlaveId = ParseByteValue(ModbusSlaveIdTextBox.Text, "Modbus 从站 ID"),
                         DeviceProfile = _modbusProfile,
                     };
 
-                    _modbusClient = IndustrialClientFactory.CreateModbusRtu(options, _logger);
+                    _modbusClient = IndustrialClientFactory.CreateModbusRtu(options, _sdkLogger);
+                    ((ModbusRtuClient)_modbusClient).FrameTraced += ModbusRtuClient_FrameTraced;
                     await _modbusClient.ConnectAsync(CancellationToken.None);
 
                     UpdateModbusStatus();
@@ -139,7 +146,7 @@ namespace IndustrialCommDemo
                         DeviceProfile = _modbusProfile,
                     };
 
-                    _modbusClient = IndustrialClientFactory.CreateModbus(options, _logger);
+                    _modbusClient = IndustrialClientFactory.CreateModbus(options, _sdkLogger);
                     await _modbusClient.ConnectAsync(CancellationToken.None);
 
                     UpdateModbusStatus();
@@ -180,6 +187,7 @@ namespace IndustrialCommDemo
             var isRtu = ModbusConnectionTypeComboBox.SelectedIndex == 1;
             var tcpVisibility = isRtu ? Visibility.Collapsed : Visibility.Visible;
             var rtuVisibility = isRtu ? Visibility.Visible : Visibility.Collapsed;
+            ModbusRtuFramePanel.Visibility = rtuVisibility;
 
             // TCP 控件
             ModbusHostLabel.Visibility = tcpVisibility;
@@ -198,11 +206,60 @@ namespace IndustrialCommDemo
             ModbusParityComboBox.Visibility = rtuVisibility;
             ModbusStopBitsLabel.Visibility = rtuVisibility;
             ModbusStopBitsComboBox.Visibility = rtuVisibility;
+            ModbusRtuTimeoutLabel.Visibility = rtuVisibility;
+            ModbusRtuTimeoutTextBox.Visibility = rtuVisibility;
 
             // 切换到 RTU 时刷新可用串口列表
             if (isRtu)
             {
                 RefreshModbusSerialPorts();
+            }
+        }
+
+        private void ModbusRtuClient_FrameTraced(object sender, ModbusRtuFrameEventArgs e)
+        {
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                var text = e.Hex + (e.CrcValid ? "  [CRC OK]" : "  [CRC 错误]");
+                if (e.Direction == ModbusRtuFrameDirection.Transmit)
+                    ModbusRtuTxTextBox.Text = text;
+                else
+                    ModbusRtuRxTextBox.Text = text;
+            }));
+        }
+
+        private async void ModbusRtuRawSendButton_Click(object sender, RoutedEventArgs e)
+        {
+            var client = _modbusClient as ModbusRtuClient;
+            if (client == null || !client.IsConnected)
+            {
+                MessageBox.Show(this, "请先使用 Modbus RTU（串口）方式连接。", "RTU 调试", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
+            try
+            {
+                var frame = ModbusRtuFrameCodec.ParseHex(ModbusRtuRawRequestTextBox.Text);
+                _logger.Info(string.Format("RTU 调试请求已解析：{0} 字节，自动 CRC={1}。", frame.Length, ModbusRtuAutoCrcCheckBox.IsChecked == true ? "是" : "否"));
+                if (ModbusRtuAutoCrcCheckBox.IsChecked == true)
+                {
+                    frame = ModbusRtuFrameCodec.AppendCrc(frame);
+                    _logger.Trace("RTU 调试请求已追加 CRC16（低字节在前）。");
+                }
+                var response = await client.TransceiveRawAsync(frame, CancellationToken.None);
+                ModbusResultTextBlock.Text = response.Length == 0
+                    ? "广播报文发送完成（站号 0 不返回响应）。"
+                    : "原始 RTU 报文收发完成，响应 CRC 正确。";
+            }
+            catch (IndustrialCommSdk.Exceptions.IndustrialTimeoutException ex)
+            {
+                ModbusRtuRxTextBox.Text = "接收超时 / 从站无响应";
+                ModbusResultTextBlock.Text = ex.Message;
+                HandleActionError("原始 RTU 接收超时。", ex, false);
+            }
+            catch (Exception ex)
+            {
+                HandleActionError("原始 RTU 报文发送失败。", ex, true);
             }
         }
 
@@ -590,7 +647,7 @@ namespace IndustrialCommDemo
                     CpuType = CpuType.S71200,
                 };
 
-                _s7Client = IndustrialClientFactory.CreateSiemensS7(options, _logger);
+                _s7Client = IndustrialClientFactory.CreateSiemensS7(options, _sdkLogger);
                 await _s7Client.ConnectAsync(CancellationToken.None);
 
                 UpdateS7Status();
@@ -682,7 +739,7 @@ namespace IndustrialCommDemo
                     Port = ParseIntValue(McPortTextBox.Text, "MC 端口"),
                 };
 
-                _mcClient = IndustrialClientFactory.CreateMitsubishiMc(options, _logger);
+                _mcClient = IndustrialClientFactory.CreateMitsubishiMc(options, _sdkLogger);
                 await _mcClient.ConnectAsync(CancellationToken.None);
 
                 UpdateMcStatus();
@@ -776,7 +833,7 @@ namespace IndustrialCommDemo
                     DeviceMac = RequireText(MesDeviceMacTextBox.Text, "MES 设备 MAC"),
                     AutoReconnect = true,
                 };
-                var client = new MesTcpClient(options, _logger);
+                var client = new MesTcpClient(options, _sdkLogger);
                 client.ConnectionStateChanged += MesClient_ConnectionStateChanged;
                 client.FaCheckReceived += MesClient_FaCheckReceived;
                 client.FaNumReceived += MesClient_FaNumReceived;
@@ -860,7 +917,7 @@ namespace IndustrialCommDemo
                         QueueCapacity = 1000,
                         RetryCount = 2,
                     },
-                    _logger);
+                    _sdkLogger);
 
                 try
                 {
@@ -1249,8 +1306,16 @@ namespace IndustrialCommDemo
 
         private void ClearLogButton_Click(object sender, RoutedEventArgs e)
         {
-            LogTextBox.Clear();
-            _logger.Info("日志已清空。");
+            if (LogTabControl.SelectedIndex == 1)
+            {
+                SdkLogTextBox.Clear();
+                _sdkLogger.Info("SDK 日志已清空。");
+            }
+            else
+            {
+                LogTextBox.Clear();
+                _logger.Info("Demo 日志已清空。");
+            }
         }
 
         protected override async void OnClosed(EventArgs e)
@@ -1267,6 +1332,7 @@ namespace IndustrialCommDemo
             await StopDatabaseRecorderAsync();
             if (_databaseManagementStore != null) { _databaseManagementStore.Dispose(); _databaseManagementStore = null; }
             _logger.Dispose();
+            _sdkLogger.Dispose();
             base.OnClosed(e);
         }
 
@@ -2863,6 +2929,33 @@ namespace IndustrialCommDemo
             }
 
             LogTextBox.ScrollToEnd();
+        }
+
+        private void ApplyDataDirectoryButton_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                SaveUiState();
+                LogHelper.StoragePathProvider.SetDataRoot(DataDirectoryTextBox.Text);
+                _uiStateStore = new UiStateStore();
+                _uiStateStore.Save(_uiState);
+                DataDirectoryTextBox.Text = LogHelper.StoragePathProvider.DataRoot;
+                DataDirectoryHintTextBlock.Text = "已应用：" + LogHelper.StoragePathProvider.DataRoot + "（后续日志、状态和缓存将写入此处）";
+                _logger.Info("本地数据目录已切换到 " + LogHelper.StoragePathProvider.DataRoot);
+            }
+            catch (Exception ex)
+            {
+                DataDirectoryHintTextBlock.Text = ex.Message;
+                DataDirectoryHintTextBlock.Foreground = Brushes.OrangeRed;
+                HandleActionError("数据目录设置失败。", ex, true);
+            }
+        }
+
+        private void AppendSdkLogBatch(IReadOnlyList<string> messages)
+        {
+            foreach (var message in messages)
+                SdkLogTextBox.AppendText(message + Environment.NewLine);
+            SdkLogTextBox.ScrollToEnd();
         }
 
         private void HandleActionError(string summary, Exception exception, bool showDialog)

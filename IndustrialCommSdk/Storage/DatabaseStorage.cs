@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Data;
 using System.Data.SqlClient;
 using System.Globalization;
+using System.Diagnostics;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -879,6 +880,7 @@ FROM Latest WHERE rn=1 ORDER BY [Timestamp] DESC,[Id] DESC;", _table.QuotedName,
             try
             {
                 await _store.InitializeAsync(cancellationToken).ConfigureAwait(false);
+                _logger.Info(string.Format(CultureInfo.InvariantCulture, "DATABASE recorder started | QueueCapacity={0} | BatchSize={1} | Retries={2}", _options.QueueCapacity, _options.BatchSize, _options.RetryCount));
 
                 // Task.Run 把持续运行的队列消费者放到线程池，不占用 WPF UI 线程。
                 _worker = Task.Run(() => ProcessQueueAsync(_stopSource.Token));
@@ -910,6 +912,7 @@ FROM Latest WHERE rn=1 ORDER BY [Timestamp] DESC,[Id] DESC;", _table.QuotedName,
             if (_queue.TryAdd(records))
             {
                 Interlocked.Add(ref _acceptedRecordCount, records.Length);
+                _logger.Trace(string.Format(CultureInfo.InvariantCulture, "DATABASE batch queued | Records={0} | QueuedBatches={1}", records.Length, _queue.Count));
                 return true;
             }
 
@@ -948,6 +951,7 @@ FROM Latest WHERE rn=1 ORDER BY [Timestamp] DESC,[Id] DESC;", _table.QuotedName,
                 if (completed != _worker) cancellationToken.ThrowIfCancellationRequested();
                 await _worker.ConfigureAwait(false);
             }
+            _logger.Info(string.Format(CultureInfo.InvariantCulture, "DATABASE recorder stopped | Accepted={0} | Written={1} | Dropped={2} | Failures={3}", Interlocked.Read(ref _acceptedRecordCount), Interlocked.Read(ref _writtenRecordCount), Interlocked.Read(ref _droppedRecordCount), Interlocked.Read(ref _writeFailureCount)));
         }
 
         /// <inheritdoc />
@@ -1008,10 +1012,12 @@ FROM Latest WHERE rn=1 ORDER BY [Timestamp] DESC,[Id] DESC;", _table.QuotedName,
             {
                 try
                 {
+                    var stopwatch = Stopwatch.StartNew();
                     await _store.WriteAsync(records, cancellationToken).ConfigureAwait(false);
                     Interlocked.Add(ref _writtenRecordCount, records.Count);
                     Interlocked.Exchange(ref _lastSuccessfulWriteUtcTicks, DateTimeOffset.UtcNow.UtcTicks);
                     Volatile.Write(ref _lastError, null);
+                    _logger.Trace(string.Format(CultureInfo.InvariantCulture, "DATABASE batch written | Records={0} | Attempt={1} | Elapsed={2}ms", records.Count, attempt + 1, stopwatch.ElapsedMilliseconds));
                     return;
                 }
                 catch (Exception ex) when (!(ex is OperationCanceledException) && attempt < _options.RetryCount)
