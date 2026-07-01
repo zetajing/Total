@@ -13,6 +13,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using Microsoft.Win32;
+using System.IO.Ports;
 using IndustrialCommDemo.Services;
 using IndustrialCommDemo.SocketDebug;
 using IndustrialCommSdk;
@@ -104,21 +105,47 @@ namespace IndustrialCommDemo
             {
                 await ResetModbusClientAsync();
 
-                var options = new ModbusTcpClientOptions
+                var isRtu = ModbusConnectionTypeComboBox.SelectedIndex == 1;
+
+                if (isRtu)
                 {
-                    DeviceId = RequireText(ModbusDeviceIdTextBox.Text, "Modbus 设备 ID"),
-                    Host = RequireText(ModbusHostTextBox.Text, "Modbus 主机"),
-                    Port = ParseIntValue(ModbusPortTextBox.Text, "Modbus 端口"),
-                    SlaveId = ParseByteValue(ModbusSlaveIdTextBox.Text, "Modbus 从站 ID"),
-                    DeviceProfile = _modbusProfile,
-                };
+                    var options = new ModbusRtuClientOptions
+                    {
+                        DeviceId = RequireText(ModbusDeviceIdTextBox.Text, "Modbus 设备 ID"),
+                        PortName = RequireText(ModbusPortNameComboBox.Text, "串口号"),
+                        BaudRate = ParseIntValue(ModbusBaudRateComboBox.Text, "波特率"),
+                        DataBits = ParseIntValue(ModbusDataBitsComboBox.Text, "数据位"),
+                        Parity = (Parity)Enum.Parse(typeof(Parity), ((ComboBoxItem)ModbusParityComboBox.SelectedItem).Tag.ToString()),
+                        StopBits = (StopBits)Enum.Parse(typeof(StopBits), ((ComboBoxItem)ModbusStopBitsComboBox.SelectedItem).Tag.ToString()),
+                        SlaveId = ParseByteValue(ModbusSlaveIdTextBox.Text, "Modbus 从站 ID"),
+                        DeviceProfile = _modbusProfile,
+                    };
 
-                _modbusClient = IndustrialClientFactory.CreateModbus(options, _logger);
-                await _modbusClient.ConnectAsync(CancellationToken.None);
+                    _modbusClient = IndustrialClientFactory.CreateModbusRtu(options, _logger);
+                    await _modbusClient.ConnectAsync(CancellationToken.None);
 
-                UpdateModbusStatus();
-                SetHeaderStatus("Modbus 已连接", Brushes.LightGreen);
-                _logger.Info(string.Format("Modbus 已连接到 {0}:{1}。", options.Host, options.Port));
+                    UpdateModbusStatus();
+                    SetHeaderStatus("Modbus RTU 已连接", Brushes.LightGreen);
+                    _logger.Info(string.Format("Modbus RTU 已连接到 {0}。", options.PortName));
+                }
+                else
+                {
+                    var options = new ModbusTcpClientOptions
+                    {
+                        DeviceId = RequireText(ModbusDeviceIdTextBox.Text, "Modbus 设备 ID"),
+                        Host = RequireText(ModbusHostTextBox.Text, "Modbus 主机"),
+                        Port = ParseIntValue(ModbusPortTextBox.Text, "Modbus 端口"),
+                        SlaveId = ParseByteValue(ModbusSlaveIdTextBox.Text, "Modbus 从站 ID"),
+                        DeviceProfile = _modbusProfile,
+                    };
+
+                    _modbusClient = IndustrialClientFactory.CreateModbus(options, _logger);
+                    await _modbusClient.ConnectAsync(CancellationToken.None);
+
+                    UpdateModbusStatus();
+                    SetHeaderStatus("Modbus 已连接", Brushes.LightGreen);
+                    _logger.Info(string.Format("Modbus 已连接到 {0}:{1}。", options.Host, options.Port));
+                }
             }
             catch (Exception ex)
             {
@@ -141,6 +168,72 @@ namespace IndustrialCommDemo
             catch (Exception ex)
             {
                 HandleActionError("Modbus 断开失败。", ex, false);
+            }
+        }
+
+        private void ModbusConnectionTypeComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            // InitializeComponent 期间 SelectedIndex="0" 会触发此事件，
+            // 此时其他命名控件可能尚未创建，需要提前返回避免空引用。
+            if (ModbusHostLabel == null) return;
+
+            var isRtu = ModbusConnectionTypeComboBox.SelectedIndex == 1;
+            var tcpVisibility = isRtu ? Visibility.Collapsed : Visibility.Visible;
+            var rtuVisibility = isRtu ? Visibility.Visible : Visibility.Collapsed;
+
+            // TCP 控件
+            ModbusHostLabel.Visibility = tcpVisibility;
+            ModbusHostTextBox.Visibility = tcpVisibility;
+            ModbusPortLabel.Visibility = tcpVisibility;
+            ModbusPortTextBox.Visibility = tcpVisibility;
+
+            // RTU 控件
+            ModbusPortNameLabel.Visibility = rtuVisibility;
+            ModbusPortNameComboBox.Visibility = rtuVisibility;
+            ModbusBaudRateLabel.Visibility = rtuVisibility;
+            ModbusBaudRateComboBox.Visibility = rtuVisibility;
+            ModbusDataBitsLabel.Visibility = rtuVisibility;
+            ModbusDataBitsComboBox.Visibility = rtuVisibility;
+            ModbusParityLabel.Visibility = rtuVisibility;
+            ModbusParityComboBox.Visibility = rtuVisibility;
+            ModbusStopBitsLabel.Visibility = rtuVisibility;
+            ModbusStopBitsComboBox.Visibility = rtuVisibility;
+
+            // 切换到 RTU 时刷新可用串口列表
+            if (isRtu)
+            {
+                RefreshModbusSerialPorts();
+            }
+        }
+
+        private void RefreshModbusSerialPorts()
+        {
+            var currentText = ModbusPortNameComboBox.Text;
+            ModbusPortNameComboBox.Items.Clear();
+            try
+            {
+                foreach (var port in SerialPort.GetPortNames())
+                {
+                    ModbusPortNameComboBox.Items.Add(port);
+                }
+            }
+            catch
+            {
+                // GetPortNames 在某些环境下可能失败，忽略
+            }
+
+            // 恢复之前的选择或默认值
+            if (!string.IsNullOrEmpty(currentText) && ModbusPortNameComboBox.Items.Contains(currentText))
+            {
+                ModbusPortNameComboBox.Text = currentText;
+            }
+            else if (ModbusPortNameComboBox.Items.Count > 0)
+            {
+                ModbusPortNameComboBox.SelectedIndex = 0;
+            }
+            else
+            {
+                ModbusPortNameComboBox.Text = "COM1";
             }
         }
 
@@ -1562,6 +1655,12 @@ namespace IndustrialCommDemo
             _uiState.Modbus.Length = ModbusLengthTextBox.Text;
             _uiState.Modbus.WriteValue = ModbusWriteValueTextBox.Text;
             _uiState.Modbus.PollInterval = ModbusPollIntervalTextBox.Text;
+            _uiState.Modbus.ConnectionType = ModbusConnectionTypeComboBox.SelectedIndex == 1 ? "Rtu" : "Tcp";
+            _uiState.Modbus.PortName = ModbusPortNameComboBox.Text;
+            _uiState.Modbus.BaudRate = ModbusBaudRateComboBox.Text;
+            _uiState.Modbus.DataBits = ModbusDataBitsComboBox.Text;
+            _uiState.Modbus.Parity = (ModbusParityComboBox.SelectedItem as ComboBoxItem)?.Tag?.ToString();
+            _uiState.Modbus.StopBits = (ModbusStopBitsComboBox.SelectedItem as ComboBoxItem)?.Tag?.ToString();
 
             _uiState.Socket.ServerIp = SocketServerIpTextBox.Text;
             _uiState.Socket.ServerPort = SocketServerPortTextBox.Text;
@@ -1626,6 +1725,23 @@ namespace IndustrialCommDemo
             SetIfNotEmpty(ModbusLengthTextBox, state.Length);
             SetIfNotEmpty(ModbusWriteValueTextBox, state.WriteValue);
             SetIfNotEmpty(ModbusPollIntervalTextBox, state.PollInterval);
+
+            // RTU 状态恢复
+            if (string.Equals(state.ConnectionType, "Rtu", StringComparison.OrdinalIgnoreCase))
+            {
+                ModbusConnectionTypeComboBox.SelectedIndex = 1;
+            }
+            if (!string.IsNullOrEmpty(state.PortName))
+            {
+                ModbusPortNameComboBox.Text = state.PortName;
+            }
+            if (!string.IsNullOrEmpty(state.BaudRate))
+            {
+                ModbusBaudRateComboBox.Text = state.BaudRate;
+            }
+            SelectComboBoxByContent(ModbusDataBitsComboBox, state.DataBits);
+            SelectComboBoxByTag(ModbusParityComboBox, state.Parity);
+            SelectComboBoxByTag(ModbusStopBitsComboBox, state.StopBits);
         }
 
         private IModbusDeviceProfile GetSelectedModbusProfile()
@@ -1634,11 +1750,11 @@ namespace IndustrialCommDemo
             var key = selectedItem != null ? selectedItem.Tag as string : null;
             if (string.IsNullOrWhiteSpace(key))
             {
-                return ModbusDeviceProfiles.InovanceEasyPlc;
+                return ModbusDeviceProfiles.Generic;
             }
 
             return ModbusDeviceProfiles.All.FirstOrDefault(profile => string.Equals(profile.Key, key, StringComparison.OrdinalIgnoreCase))
-                ?? ModbusDeviceProfiles.InovanceEasyPlc;
+                ?? ModbusDeviceProfiles.Generic;
         }
 
         private void SelectModbusModel(string modelKey)
@@ -1794,7 +1910,7 @@ namespace IndustrialCommDemo
                     CultureInfo.InvariantCulture,
                     "{0}，{1}。{2}",
                     modeText,
-                    analysis.IsBitFamily ? "位地址模式，只允许 Bool" : "寄存器地址模式，可读写寄存器类型",
+                    analysis.IsBitFamily ? "位地址模式，只允许 Bool 解析" : "寄存器地址模式，可选择值的解析方式",
                     analysis.AddressCount > 1 ? "读取、订阅、写入都支持批量。" : "可直接读取、写入或订阅。");
             }
 
@@ -1813,7 +1929,7 @@ namespace IndustrialCommDemo
             if (analysis.AddressCount == 1)
             {
                 ModbusWriteHintTextBlock.Foreground = Brushes.DimGray;
-                ModbusWriteHintTextBlock.Text = "单地址写入沿用当前数据类型和长度。";
+                ModbusWriteHintTextBlock.Text = "单地址写入沿用当前解析类型和长度。";
                 return;
             }
 
@@ -2396,6 +2512,32 @@ namespace IndustrialCommDemo
             if (!string.IsNullOrWhiteSpace(value))
             {
                 textBox.Text = value;
+            }
+        }
+
+        private static void SelectComboBoxByContent(ComboBox comboBox, string content)
+        {
+            if (string.IsNullOrWhiteSpace(content)) return;
+            foreach (var item in comboBox.Items.OfType<ComboBoxItem>())
+            {
+                if (string.Equals(item.Content?.ToString(), content, StringComparison.Ordinal))
+                {
+                    comboBox.SelectedItem = item;
+                    return;
+                }
+            }
+        }
+
+        private static void SelectComboBoxByTag(ComboBox comboBox, string tag)
+        {
+            if (string.IsNullOrWhiteSpace(tag)) return;
+            foreach (var item in comboBox.Items.OfType<ComboBoxItem>())
+            {
+                if (string.Equals(item.Tag?.ToString(), tag, StringComparison.OrdinalIgnoreCase))
+                {
+                    comboBox.SelectedItem = item;
+                    return;
+                }
             }
         }
 

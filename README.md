@@ -5,7 +5,7 @@
 
 ## 当前能力
 
-- `Modbus TCP`
+- `Modbus TCP / Modbus RTU（RS-485 / RS-232）`
 - `TCP Socket` 传输桥接骨架
 - `Siemens S7` 基础客户端骨架
 - `Mitsubishi MC 3E` 基础客户端骨架
@@ -50,6 +50,16 @@ dotnet test Total.sln
 5. 点击“读取”验证是否能拿到值
 
 如果只是想看 SDK 调用方式，可以直接参考下面的最小代码示例。
+
+### Modbus RTU / RS-485 实机验证
+
+1. 在 Modbus 页将连接类型切换为 `Modbus RTU（串口）`
+2. 选择串口号，并按设备手册设置波特率、数据位、校验位、停止位和从站 ID
+3. 普通仪表、变频器、温控器等选择 `通用 Modbus` 地址类型
+4. 输入 `HR0`、`IR0`、`40001` 等地址后连接并读取
+5. 在日志窗口核对 `Modbus RTU TX` 和 `Modbus RTU RX` 原始十六进制帧
+
+注意：RS-485 是物理接口，不代表设备一定使用 Modbus RTU。设备协议、站号、功能码和寄存器表必须以设备手册为准。
 
 ## 最小代码示例
 
@@ -107,6 +117,40 @@ await client.WriteAsync("D100", (short)123);
 await client.WriteStringAsync("D300", "ABC", 2);
 
 await client.DisconnectAsync();
+```
+
+### Modbus RTU 写法
+
+```csharp
+using System.IO.Ports;
+using System.Threading;
+using IndustrialCommSdk;
+using IndustrialCommSdk.Abstractions;
+using IndustrialCommSdk.Protocols.Modbus;
+
+var client = IndustrialClientFactory.CreateModbusRtu(new ModbusRtuClientOptions
+{
+    DeviceId = "meter-1",
+    PortName = "COM3",
+    BaudRate = 9600,
+    DataBits = 8,
+    Parity = Parity.Even,
+    StopBits = StopBits.One,
+    SlaveId = 1,
+    ReadTimeout = 3000,
+    WriteTimeout = 3000,
+    Retries = 2,
+    DeviceProfile = ModbusDeviceProfiles.Generic
+});
+
+await client.ConnectAsync(CancellationToken.None);
+
+// HR0 是零基保持寄存器 0；40001 是同一地址的一基引用写法。
+var value = await client.ReadAsync(
+    new ReadRequest("meter-1", "HR0", DataType.UInt16, 1),
+    CancellationToken.None);
+
+await client.DisconnectAsync(CancellationToken.None);
 ```
 
 ### 通用快捷 API
@@ -338,12 +382,52 @@ dotnet build .\IndustrialCommDemo\IndustrialCommDemo.csproj
 
 - [IndustrialCommDemo.exe](C:/Users/75881/Documents/Total/IndustrialCommDemo/bin/Debug/net472/IndustrialCommDemo.exe)
 
-## Modbus TCP 现状
+## Modbus TCP / RTU 现状
 
-当前 `Modbus TCP` 已内置两个设备 profile：
+当前 Modbus 已内置三个设备 profile：
 
+- 通用 `Modbus`，适用于普通 RTU/TCP 设备
 - 汇川 `EasyPLC`
 - 三菱 `Modbus TCP`
+
+### 通用 Modbus 地址格式
+
+通用 profile 不套用任何 PLC 品牌地址映射，支持以下两类写法：
+
+- 零基协议地址：`C0`、`DI0`、`IR0`、`HR0`
+- 一基引用地址：`00001`、`10001`、`30001`、`40001`
+
+对应关系：
+
+| 地址 | 区域 | 协议偏移 | 常用功能码 |
+| --- | --- | ---: | --- |
+| `C0` / `00001` | Coil | 0 | `0x01`、`0x05`、`0x0F` |
+| `DI0` / `10001` | Discrete Input | 0 | `0x02` |
+| `IR0` / `30001` | Input Register | 0 | `0x04` |
+| `HR0` / `40001` | Holding Register | 0 | `0x03`、`0x06`、`0x10` |
+
+设备手册若直接给出“协议地址 100”，应使用 `HR100`；若写的是引用地址 `40101`，其协议偏移同样为 100。
+
+### RTU 串口与原始帧日志
+
+- 默认串口格式为规范推荐的 `9600-8-E-1`，也可以按设备手册配置 `8-N-1`、`8-N-2` 等格式。
+- RTU 操作由客户端公共锁串行执行，避免半双工总线同时发送多个请求。
+- 默认读写超时均为 `3000 ms`，失败重试 `2` 次，参数均可配置。
+- CRC16、RTU 帧封装和响应校验由 NModbus 处理。
+- 每次成功写入串口后记录完整请求帧，例如：
+
+```text
+Modbus RTU TX | 01 03 00 00 00 01 84 0A
+```
+
+- 收到完整响应后记录响应帧；超时前只收到部分数据时标记为 `partial`：
+
+```text
+Modbus RTU RX | 01 03 02 00 7B F8 67
+Modbus RTU RX (partial) | 01 03 02
+```
+
+日志包含从站地址、功能码、数据和 CRC，可直接与设备手册、串口抓包工具进行逐字节比较。
 
 ### 最近一轮优化
 
@@ -398,7 +482,7 @@ await s7Client.WriteDbClassAsync(db200, 200);
 
 ### 批量读日志
 
-当前 `ModbusTcpClient` 在批量读取时会输出两类日志：
+当前 Modbus 公共客户端在批量读取时会输出两类日志：
 
 - 每个合并批次的明细
   - 原始请求数
@@ -444,6 +528,7 @@ await s7Client.WriteDbClassAsync(db200, 200);
 
 - [InovanceEasyPlcModbusProfile.cs](C:/Users/75881/Documents/Total/IndustrialCommSdk/Protocols/Modbus/InovanceEasyPlcModbusProfile.cs)
 - [MitsubishiModbusTcpProfile.cs](C:/Users/75881/Documents/Total/IndustrialCommSdk/Protocols/Modbus/MitsubishiModbusTcpProfile.cs)
+- [GenericModbusProfile.cs](C:/Users/75881/Documents/Total/IndustrialCommSdk/Protocols/Modbus/GenericModbusProfile.cs)
 
 统一接口在：
 
@@ -465,12 +550,15 @@ await s7Client.WriteDbClassAsync(db200, 200);
 4. 实现 `NormalizeRegistersForWrite`
 5. 注册到 `ModbusDeviceProfiles`
 
-这样可以把“地址映射”和“字序差异”都隔离在品牌类内部，不会污染 `ModbusTcpClient` 主流程。
+这样可以把“地址映射”和“字序差异”都隔离在 profile 内部，不会污染 Modbus TCP/RTU 主流程。
 
 ## 当前关键文件
 
 - [IndustrialClientBase.cs](C:/Users/75881/Documents/Total/IndustrialCommSdk/Internal/IndustrialClientBase.cs)
 - [ModbusTcpClient.cs](C:/Users/75881/Documents/Total/IndustrialCommSdk/Protocols/Modbus/ModbusTcpClient.cs)
+- [ModbusRtuClient.cs](C:/Users/75881/Documents/Total/IndustrialCommSdk/Protocols/Modbus/ModbusRtuClient.cs)
+- [ModbusRtuTracingStreamResource.cs](C:/Users/75881/Documents/Total/IndustrialCommSdk/Protocols/Modbus/ModbusRtuTracingStreamResource.cs)
+- [GenericModbusProfile.cs](C:/Users/75881/Documents/Total/IndustrialCommSdk/Protocols/Modbus/GenericModbusProfile.cs)
 - [ModbusAddressing.cs](C:/Users/75881/Documents/Total/IndustrialCommSdk/Protocols/Modbus/ModbusAddressing.cs)
 - [InovanceEasyPlcModbusProfile.cs](C:/Users/75881/Documents/Total/IndustrialCommSdk/Protocols/Modbus/InovanceEasyPlcModbusProfile.cs)
 - [SiemensS7Client.cs](C:/Users/75881/Documents/Total/IndustrialCommSdk/Protocols/S7/SiemensS7Client.cs)
@@ -486,5 +574,5 @@ await s7Client.WriteDbClassAsync(db200, 200);
 
 最近一次测试结果：
 
-- `19 / 19` 通过
+- `86 / 86` 通过
 - `0` 失败

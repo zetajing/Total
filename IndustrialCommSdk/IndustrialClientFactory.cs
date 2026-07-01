@@ -35,6 +35,18 @@ namespace IndustrialCommSdk
         }
 
         /// <summary>
+        /// 创建一个 Modbus RTU 串口协议客户端。
+        /// </summary>
+        /// <param name="options">Modbus RTU 客户端配置选项，包含串口名称、波特率等参数。</param>
+        /// <param name="logger">可选的工业通信日志记录器实例，用于记录通信过程中的日志信息。</param>
+        /// <returns>返回配置好的 <see cref="ModbusRtuClient"/> 实例。</returns>
+        /// <exception cref="ArgumentNullException">当 <paramref name="options"/> 为 null 时抛出。</exception>
+        public static ModbusRtuClient CreateModbusRtu(ModbusRtuClientOptions options, IIndustrialLogger logger = null)
+        {
+            return new ModbusRtuClient(options, logger);
+        }
+
+        /// <summary>
         /// 创建一个西门子 S7 协议客户端（用于与 SIMATIC S7 系列 PLC 通信）。
         /// </summary>
         /// <param name="options">西门子 S7 客户端配置选项，包含 IP 地址、机架号、槽号等参数。</param>

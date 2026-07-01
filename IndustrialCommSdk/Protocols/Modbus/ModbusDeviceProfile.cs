@@ -110,6 +110,9 @@ namespace IndustrialCommSdk.Protocols.Modbus
     /// </remarks>
     public static class ModbusDeviceProfiles
     {
+        /// <summary>获取不含品牌地址映射的通用 Modbus 配置。</summary>
+        public static GenericModbusProfile Generic { get; } = new GenericModbusProfile();
+
         /// <summary>
         /// 获取汇川 EasyPLC（Inovance EasyPLC）的设备配置文件实例。
         /// </summary>
@@ -147,6 +150,7 @@ namespace IndustrialCommSdk.Protocols.Modbus
         /// </remarks>
         public static IReadOnlyList<IModbusDeviceProfile> All { get; } = new IModbusDeviceProfile[]
         {
+            Generic,
             InovanceEasyPlc,
             MitsubishiModbusTcp,
         };

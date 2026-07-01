@@ -63,34 +63,75 @@
                                         <RowDefinition Height="Auto" />
                                         <RowDefinition Height="Auto" />
                                         <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
                                     </Grid.RowDefinitions>
-                                    <TextBlock Grid.Row="0" Grid.Column="0" Margin="0,8" VerticalAlignment="Center" Text="设备 ID" />
-                                    <TextBox x:Name="ModbusDeviceIdTextBox" Grid.Row="0" Grid.Column="1" Margin="0,6,0,6" Text="modbus-1" />
-                                    <TextBlock Grid.Row="1" Grid.Column="0" Margin="0,8" VerticalAlignment="Center" Text="主机" />
-                                    <TextBox x:Name="ModbusHostTextBox" Grid.Row="1" Grid.Column="1" Margin="0,6,0,6" Text="127.0.0.1" />
-                                    <TextBlock Grid.Row="2" Grid.Column="0" Margin="0,8" VerticalAlignment="Center" Text="端口" />
-                                    <TextBox x:Name="ModbusPortTextBox" Grid.Row="2" Grid.Column="1" Margin="0,6,0,6" Text="502" />
-                                    <TextBlock Grid.Row="3" Grid.Column="0" Margin="0,8" VerticalAlignment="Center" Text="从站 ID" />
-                                    <TextBox x:Name="ModbusSlaveIdTextBox" Grid.Row="3" Grid.Column="1" Margin="0,6,0,6" Text="1" />
-                                    <TextBlock Grid.Row="4" Grid.Column="0" Margin="0,8" VerticalAlignment="Center" Text="PLC 型号" />
+                                    <TextBlock Grid.Row="0" Grid.Column="0" Margin="0,8" VerticalAlignment="Center" Text="连接方式" />
+                                    <ComboBox x:Name="ModbusConnectionTypeComboBox" Grid.Row="0" Grid.Column="1" Margin="0,6,0,6" SelectedIndex="0" SelectionChanged="ModbusConnectionTypeComboBox_SelectionChanged">
+                                        <ComboBoxItem Content="Modbus TCP" Tag="Tcp" />
+                                        <ComboBoxItem Content="Modbus RTU (串口)" Tag="Rtu" />
+                                    </ComboBox>
+                                    <TextBlock Grid.Row="1" Grid.Column="0" Margin="0,8" VerticalAlignment="Center" Text="设备 ID" />
+                                    <TextBox x:Name="ModbusDeviceIdTextBox" Grid.Row="1" Grid.Column="1" Margin="0,6,0,6" Text="modbus-1" />
+                                    <!-- TCP 参数面板 -->
+                                    <TextBlock x:Name="ModbusHostLabel" Grid.Row="2" Grid.Column="0" Margin="0,8" VerticalAlignment="Center" Text="主机" />
+                                    <TextBox x:Name="ModbusHostTextBox" Grid.Row="2" Grid.Column="1" Margin="0,6,0,6" Text="127.0.0.1" />
+                                    <TextBlock x:Name="ModbusPortLabel" Grid.Row="3" Grid.Column="0" Margin="0,8" VerticalAlignment="Center" Text="端口" />
+                                    <TextBox x:Name="ModbusPortTextBox" Grid.Row="3" Grid.Column="1" Margin="0,6,0,6" Text="502" />
+                                    <!-- RTU 参数面板（默认隐藏） -->
+                                    <TextBlock x:Name="ModbusPortNameLabel" Grid.Row="2" Grid.Column="0" Margin="0,8" VerticalAlignment="Center" Text="串口号" Visibility="Collapsed" />
+                                    <ComboBox x:Name="ModbusPortNameComboBox" Grid.Row="2" Grid.Column="1" Margin="0,6,0,6" IsEditable="True" Text="COM1" Visibility="Collapsed" />
+                                    <TextBlock x:Name="ModbusBaudRateLabel" Grid.Row="3" Grid.Column="0" Margin="0,8" VerticalAlignment="Center" Text="波特率" Visibility="Collapsed" />
+                                    <ComboBox x:Name="ModbusBaudRateComboBox" Grid.Row="3" Grid.Column="1" Margin="0,6,0,6" IsEditable="True" Text="9600" Visibility="Collapsed">
+                                        <ComboBoxItem Content="2400" />
+                                        <ComboBoxItem Content="4800" />
+                                        <ComboBoxItem Content="9600" IsSelected="True" />
+                                        <ComboBoxItem Content="19200" />
+                                        <ComboBoxItem Content="38400" />
+                                        <ComboBoxItem Content="57600" />
+                                        <ComboBoxItem Content="115200" />
+                                    </ComboBox>
+                                    <TextBlock x:Name="ModbusDataBitsLabel" Grid.Row="4" Grid.Column="0" Margin="0,8" VerticalAlignment="Center" Text="数据位" Visibility="Collapsed" />
+                                    <ComboBox x:Name="ModbusDataBitsComboBox" Grid.Row="4" Grid.Column="1" Margin="0,6,0,6" Visibility="Collapsed">
+                                        <ComboBoxItem Content="8" IsSelected="True" />
+                                    </ComboBox>
+                                    <TextBlock x:Name="ModbusParityLabel" Grid.Row="5" Grid.Column="0" Margin="0,8" VerticalAlignment="Center" Text="校验位" Visibility="Collapsed" />
+                                    <ComboBox x:Name="ModbusParityComboBox" Grid.Row="5" Grid.Column="1" Margin="0,6,0,6" Visibility="Collapsed">
+                                        <ComboBoxItem Content="None" Tag="None" />
+                                        <ComboBoxItem Content="Odd" Tag="Odd" />
+                                        <ComboBoxItem Content="Even" IsSelected="True" Tag="Even" />
+                                    </ComboBox>
+                                    <TextBlock x:Name="ModbusStopBitsLabel" Grid.Row="6" Grid.Column="0" Margin="0,8" VerticalAlignment="Center" Text="停止位" Visibility="Collapsed" />
+                                    <ComboBox x:Name="ModbusStopBitsComboBox" Grid.Row="6" Grid.Column="1" Margin="0,6,0,6" Visibility="Collapsed">
+                                        <ComboBoxItem Content="1" IsSelected="True" Tag="One" />
+                                        <ComboBoxItem Content="1.5" Tag="OnePointFive" />
+                                        <ComboBoxItem Content="2" Tag="Two" />
+                                    </ComboBox>
+                                    <TextBlock x:Name="ModbusSlaveIdLabel" Grid.Row="7" Grid.Column="0" Margin="0,8" VerticalAlignment="Center" Text="从站 ID" />
+                                    <TextBox x:Name="ModbusSlaveIdTextBox" Grid.Row="7" Grid.Column="1" Margin="0,6,0,6" Text="1" />
+                                    <TextBlock x:Name="ModbusModelLabel" Grid.Row="8" Grid.Column="0" Margin="0,8" VerticalAlignment="Center" Text="地址类型" />
                                     <ComboBox x:Name="ModbusModelComboBox"
-                                              Grid.Row="4"
+                                              Grid.Row="8"
                                               Grid.Column="1"
                                               Margin="0,6,0,6"
                                               SelectedIndex="0"
                                               SelectionChanged="ModbusModelComboBox_SelectionChanged">
+                                        <ComboBoxItem Content="通用 Modbus" Tag="generic-modbus" />
                                         <ComboBoxItem Content="汇川 EasyPLC" Tag="inovance-easyplc" />
                                         <ComboBoxItem Content="三菱 Modbus TCP" Tag="mitsubishi-modbus-tcp" />
                                     </ComboBox>
-                                    <TextBlock Grid.Row="5" Grid.Column="0" Margin="0,8" VerticalAlignment="Top" Text="示例" />
+                                    <TextBlock x:Name="ModbusExampleLabel" Grid.Row="9" Grid.Column="0" Margin="0,8" VerticalAlignment="Top" Text="示例" />
                                     <TextBlock x:Name="ModbusExampleAddressTextBlock"
-                                               Grid.Row="5"
+                                               Grid.Row="9"
                                                Grid.Column="1"
                                                Margin="0,8,0,0"
                                                TextWrapping="Wrap"
                                                Foreground="#5B6F82"
                                                Text="D100, R200, M0, S10, B5, X17, Y20" />
-                                    <StackPanel Grid.Row="6" Grid.ColumnSpan="2" Orientation="Horizontal" Margin="0,16,0,0">
+                                    <StackPanel Grid.Row="10" Grid.ColumnSpan="2" Orientation="Horizontal" Margin="0,16,0,0">
                                         <Button Width="120" Margin="0,0,12,0" Padding="10" Background="#1D4ED8" Foreground="White" BorderThickness="0" Click="ModbusConnectButton_Click" Content="连接" />
                                         <Button Width="120" Margin="0,0,12,0" Padding="10" Background="#334155" Foreground="White" BorderThickness="0" Click="ModbusDisconnectButton_Click" Content="断开" />
                                         <TextBlock Margin="8,0,0,0" VerticalAlignment="Center" FontWeight="SemiBold" Text="状态：" />
@@ -117,7 +158,7 @@
                                     </Grid.RowDefinitions>
                                     <TextBlock Grid.Row="0" Grid.Column="0" Margin="0,8" VerticalAlignment="Center" Text="地址" />
                                     <StackPanel Grid.Row="0" Grid.Column="1">
-                                        <TextBox x:Name="ModbusAddressTextBox" Margin="0,6,0,6" Text="D100" TextChanged="ModbusAddressTextBox_TextChanged" />
+                                        <TextBox x:Name="ModbusAddressTextBox" Margin="0,6,0,6" Text="HR0" TextChanged="ModbusAddressTextBox_TextChanged" />
                                         <ComboBox x:Name="ModbusAddressHistoryComboBox"
                                                   Margin="0,0,0,6"
                                                   SelectionChanged="ModbusAddressHistoryComboBox_SelectionChanged" />
@@ -127,18 +168,24 @@
                                                    Foreground="#64748B"
                                                    Text="支持逗号、分号、换行输入多个地址。" />
                                     </StackPanel>
-                                    <TextBlock Grid.Row="1" Grid.Column="0" Margin="0,8" VerticalAlignment="Center" Text="数据类型" />
-                                    <ComboBox x:Name="ModbusDataTypeComboBox" Grid.Row="1" Grid.Column="1" Margin="0,6,0,6" SelectedIndex="2" SelectionChanged="ModbusDataTypeComboBox_SelectionChanged">
-                                        <ComboBoxItem Content="Bool" />
-                                        <ComboBoxItem Content="Int16" />
-                                        <ComboBoxItem Content="UInt16" />
-                                        <ComboBoxItem Content="Int32" />
-                                        <ComboBoxItem Content="UInt32" />
-                                        <ComboBoxItem Content="Float" />
-                                        <ComboBoxItem Content="Double" />
-                                        <ComboBoxItem Content="String" />
-                                        <ComboBoxItem Content="ByteArray" />
-                                    </ComboBox>
+                                    <TextBlock Grid.Row="1" Grid.Column="0" Margin="0,8" VerticalAlignment="Center" Text="解析类型" />
+                                    <StackPanel Grid.Row="1" Grid.Column="1">
+                                        <ComboBox x:Name="ModbusDataTypeComboBox" Margin="0,6,0,3" SelectedIndex="2" SelectionChanged="ModbusDataTypeComboBox_SelectionChanged">
+                                            <ComboBoxItem Content="Bool" />
+                                            <ComboBoxItem Content="Int16" />
+                                            <ComboBoxItem Content="UInt16" />
+                                            <ComboBoxItem Content="Int32" />
+                                            <ComboBoxItem Content="UInt32" />
+                                            <ComboBoxItem Content="Float" />
+                                            <ComboBoxItem Content="Double" />
+                                            <ComboBoxItem Content="String" />
+                                            <ComboBoxItem Content="ByteArray" />
+                                        </ComboBox>
+                                        <TextBlock Margin="0,0,0,3"
+                                                   FontSize="12"
+                                                   Foreground="#64748B"
+                                                   Text="仅决定如何解释位或 16 位寄存器，不属于 Modbus 报文。" />
+                                    </StackPanel>
                                     <TextBlock Grid.Row="2" Grid.Column="0" Margin="0,8" VerticalAlignment="Center" Text="长度" />
                                     <TextBox x:Name="ModbusLengthTextBox" Grid.Row="2" Grid.Column="1" Margin="0,6,0,6" Text="1" />
                                     <TextBlock Grid.Row="3" Grid.Column="0" Margin="0,8" VerticalAlignment="Center" Text="写入值" />
@@ -175,7 +222,7 @@
                                                       MinHeight="220">
                                                 <DataGrid.Columns>
                                                     <DataGridTextColumn Header="地址" Binding="{Binding Address}" Width="110" />
-                                                    <DataGridTextColumn Header="类型" Binding="{Binding DataType}" Width="90" />
+                                                    <DataGridTextColumn Header="解析类型" Binding="{Binding DataType}" Width="90" />
                                                     <DataGridTextColumn Header="值" Binding="{Binding ValueText}" Width="*" />
                                                     <DataGridTextColumn Header="质量" Binding="{Binding QualityText}" Width="110" />
                                                     <DataGridTextColumn Header="时间" Binding="{Binding TimestampText}" Width="150" />

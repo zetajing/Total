@@ -258,6 +258,42 @@ namespace IndustrialCommDemo.Services
         /// </summary>
         [DataMember(Order = 10)]
         public List<string> RecentAddresses { get; set; } = new List<string>();
+
+        /// <summary>
+        /// 获取或设置连接类型（"Tcp" 或 "Rtu"）。
+        /// </summary>
+        [DataMember(Order = 11)]
+        public string ConnectionType { get; set; }
+
+        /// <summary>
+        /// 获取或设置 RTU 串口名称（如 COM1）。
+        /// </summary>
+        [DataMember(Order = 12)]
+        public string PortName { get; set; }
+
+        /// <summary>
+        /// 获取或设置 RTU 波特率。
+        /// </summary>
+        [DataMember(Order = 13)]
+        public string BaudRate { get; set; }
+
+        /// <summary>
+        /// 获取或设置 RTU 数据位。
+        /// </summary>
+        [DataMember(Order = 14)]
+        public string DataBits { get; set; }
+
+        /// <summary>
+        /// 获取或设置 RTU 校验位名称（None/Odd/Even）。
+        /// </summary>
+        [DataMember(Order = 15)]
+        public string Parity { get; set; }
+
+        /// <summary>
+        /// 获取或设置 RTU 停止位名称（One/OnePointFive/Two）。
+        /// </summary>
+        [DataMember(Order = 16)]
+        public string StopBits { get; set; }
     }
 
     /// <summary>

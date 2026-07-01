@@ -11,6 +11,8 @@ namespace IndustrialCommSdk.Abstractions
         SiemensS7 = 3,
         /// <summary>三菱 MC 3E 协议。</summary>
         MitsubishiMc = 4,
+        /// <summary>Modbus RTU 串口协议。</summary>
+        ModbusRtu = 5,
     }
 
     /// <summary>读写请求中使用的数据类型。</summary>
