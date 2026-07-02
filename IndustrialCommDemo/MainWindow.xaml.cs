@@ -77,6 +77,7 @@ namespace IndustrialCommDemo
         public MainWindow()
         {
             InitializeComponent();
+            ArrangeMainTabs();
 
             _logger = new AppLogger(Dispatcher, AppendLogBatch, "DEMO");
             _sdkLogger = new AppLogger(Dispatcher, AppendSdkLogBatch, "SDK");

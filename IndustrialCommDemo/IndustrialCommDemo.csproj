@@ -18,4 +18,8 @@
     <ProjectReference Include="..\LogHelper\LogHelper.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Reference Include="System.Management" />
+  </ItemGroup>
+
 </Project>
