@@ -197,6 +197,42 @@ var subscriptionId = await client.SubscribeAsync(
 await client.UnsubscribeAsync(subscriptionId, default);
 ```
 
+## 原始 TCP Socket 收发
+
+`TcpTransportClient` 同时支持定长协议和服务端主动推送：
+
+```csharp
+using IndustrialCommSdk.Transport;
+
+using (var socket = new TcpTransportClient(new TcpTransportOptions
+{
+    Host = "192.168.1.20",
+    Port = 9000,
+    AutoReconnect = true,
+}))
+{
+    await socket.ConnectAsync(cancellationToken);
+    await socket.SendAsync(requestBytes, cancellationToken);
+
+    // 已知响应长度时使用，超时覆盖整个报文的接收过程。
+    byte[] response = await socket.ReceiveExactAsync(32, cancellationToken);
+
+    // 长度未知或服务端主动推送时使用；一次返回最多 4096 字节。
+    byte[] pushed = await socket.ReceiveAsync(4096, cancellationToken);
+}
+```
+
+TCP 是字节流，`ReceiveAsync` 的一次返回不等于一个完整业务报文。JSON、行文本或自定义二进制协议仍应按各自的长度字段或分隔符处理拆包、粘包。
+
+服务端接收后如果需要异步回复或写库，应订阅可等待的异步事件，避免使用 `async void`：
+
+```csharp
+var server = new TcpTransportServer(IPAddress.Any, 9000);
+server.DataReceivedAsync += (sender, e) =>
+    e.Session.SendAsync(e.Payload, CancellationToken.None);
+await server.StartAsync(cancellationToken);
+```
+
 ## SQL Server 历史数据（可选）
 
 数据库能力是旁路功能，不参与 PLC 实时控制。SDK 使用后台有界队列把通信回调与 SQL Server 写入隔离：

@@ -1,6 +1,7 @@
 using System;
 using System.Net;
 using System.Net.Sockets;
+using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
 using IndustrialCommSdk.Exceptions;
@@ -11,7 +12,7 @@ namespace IndustrialCommSdk.Transport
     /// TCP 传输客户端。实现 <see cref="ITransportClient"/> 接口，提供基于 TCP 协议的客户端连接、断开、发送和接收数据的完整功能。
     /// 支持自动重连、连接超时和并发访问控制。
     /// </summary>
-    public sealed class TcpTransportClient : ITransportClient
+    public sealed class TcpTransportClient : IStreamingTransportClient
     {
         /// <summary>
         /// TCP 传输选项，包含主机地址、端口号及各种超时设置。
@@ -22,6 +23,8 @@ namespace IndustrialCommSdk.Transport
         /// 用于控制并发访问的信号量，确保同一时刻只有一个操作在执行。
         /// </summary>
         private readonly SemaphoreSlim _gate = new SemaphoreSlim(1, 1);
+        private readonly SemaphoreSlim _sendGate = new SemaphoreSlim(1, 1);
+        private readonly SemaphoreSlim _receiveGate = new SemaphoreSlim(1, 1);
 
         /// <summary>
         /// 底层的 TCP 客户端实例。
@@ -32,6 +35,7 @@ namespace IndustrialCommSdk.Transport
         /// 与 TCP 客户端关联的网络流，用于发送和接收数据。
         /// </summary>
         private NetworkStream _stream;
+        private int _disposed;
 
         /// <summary>
         /// 使用指定的传输选项初始化 <see cref="TcpTransportClient"/> 类的新实例。
@@ -41,6 +45,8 @@ namespace IndustrialCommSdk.Transport
         public TcpTransportClient(TcpTransportOptions options)
         {
             _options = options ?? throw new ArgumentNullException(nameof(options));
+            if (string.IsNullOrWhiteSpace(_options.Host)) throw new ArgumentException("TCP host is required.", nameof(options));
+            if (_options.Port < 1 || _options.Port > 65535) throw new ArgumentOutOfRangeException(nameof(options), "TCP port must be between 1 and 65535.");
             if (_options.ConnectTimeoutMilliseconds <= 0) throw new ArgumentOutOfRangeException(nameof(options), "Connect timeout must be greater than zero.");
             if (_options.SendTimeoutMilliseconds <= 0) throw new ArgumentOutOfRangeException(nameof(options), "Send timeout must be greater than zero.");
             if (_options.ReceiveTimeoutMilliseconds <= 0) throw new ArgumentOutOfRangeException(nameof(options), "Receive timeout must be greater than zero.");
@@ -89,9 +95,11 @@ namespace IndustrialCommSdk.Transport
         /// <exception cref="IndustrialConnectionException">TCP 连接失败时抛出，内部包含原始的 <see cref="SocketException"/>。</exception>
         public async Task ConnectAsync(CancellationToken cancellationToken)
         {
+            ThrowIfDisposed();
             await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
             try
             {
+                ThrowIfDisposed();
                 if (IsConnected)
                 {
                     return;
@@ -99,6 +107,7 @@ namespace IndustrialCommSdk.Transport
 
                 DisposeClient();
                 _client = new TcpClient();
+                _client.NoDelay = true;
                 _client.SendTimeout = _options.SendTimeoutMilliseconds;
                 _client.ReceiveTimeout = _options.ReceiveTimeoutMilliseconds;
 
@@ -140,9 +149,11 @@ namespace IndustrialCommSdk.Transport
         /// <returns>表示异步断开操作的任务。</returns>
         public async Task DisconnectAsync(CancellationToken cancellationToken)
         {
+            ThrowIfDisposed();
             await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
             try
             {
+                ThrowIfDisposed();
                 DisposeClient();
             }
             finally
@@ -162,17 +173,22 @@ namespace IndustrialCommSdk.Transport
         public async Task SendAsync(byte[] payload, CancellationToken cancellationToken)
         {
             if (payload == null) throw new ArgumentNullException(nameof(payload));
-            await EnsureConnectedAsync(cancellationToken).ConfigureAwait(false);
-            await AwaitIoAsync(
-                _stream.WriteAsync(payload, 0, payload.Length, cancellationToken),
-                _options.SendTimeoutMilliseconds,
-                "TCP send timeout.",
-                cancellationToken).ConfigureAwait(false);
-            await AwaitIoAsync(
-                _stream.FlushAsync(cancellationToken),
-                _options.SendTimeoutMilliseconds,
-                "TCP flush timeout.",
-                cancellationToken).ConfigureAwait(false);
+            ThrowIfDisposed();
+            await _sendGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+            try
+            {
+                ThrowIfDisposed();
+                await EnsureConnectedAsync(cancellationToken).ConfigureAwait(false);
+                await AwaitIoAsync(
+                    _stream.WriteAsync(payload, 0, payload.Length, cancellationToken),
+                    _options.SendTimeoutMilliseconds,
+                    "TCP send timeout.",
+                    cancellationToken).ConfigureAwait(false);
+            }
+            finally
+            {
+                _sendGate.Release();
+            }
         }
 
         /// <summary>
@@ -186,14 +202,62 @@ namespace IndustrialCommSdk.Transport
         public async Task<byte[]> ReceiveExactAsync(int length, CancellationToken cancellationToken)
         {
             if (length < 0) throw new ArgumentOutOfRangeException(nameof(length));
-            await EnsureConnectedAsync(cancellationToken).ConfigureAwait(false);
-
-            var buffer = new byte[length];
-            var offset = 0;
-            while (offset < length)
+            ThrowIfDisposed();
+            await _receiveGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+            try
             {
+                ThrowIfDisposed();
+                await EnsureConnectedAsync(cancellationToken).ConfigureAwait(false);
+
+                var buffer = new byte[length];
+                var offset = 0;
+                var stopwatch = Stopwatch.StartNew();
+                while (offset < length)
+                {
+                    var remainingTimeout = _options.ReceiveTimeoutMilliseconds - (int)stopwatch.ElapsedMilliseconds;
+                    if (remainingTimeout <= 0)
+                    {
+                        DisposeClient();
+                        throw new IndustrialTimeoutException("TCP receive timeout.");
+                    }
+
+                    var read = await AwaitIoAsync(
+                        _stream.ReadAsync(buffer, offset, length - offset, cancellationToken),
+                        remainingTimeout,
+                        "TCP receive timeout.",
+                        cancellationToken).ConfigureAwait(false);
+                    if (read == 0)
+                    {
+                        DisposeClient();
+                        throw new IndustrialConnectionException("Remote peer closed the connection.");
+                    }
+                    offset += read;
+                }
+                return buffer;
+            }
+            finally
+            {
+                _receiveGate.Release();
+            }
+        }
+
+        /// <summary>
+        /// 接收一批不定长原始数据。适用于服务端主动推送或长度未知的 Socket 协议；
+        /// TCP 是字节流，本方法返回的是一次网络读取结果，不代表完整业务报文边界。
+        /// </summary>
+        public async Task<byte[]> ReceiveAsync(int maxLength, CancellationToken cancellationToken)
+        {
+            if (maxLength <= 0) throw new ArgumentOutOfRangeException(nameof(maxLength));
+            ThrowIfDisposed();
+
+            await _receiveGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+            try
+            {
+                ThrowIfDisposed();
+                await EnsureConnectedAsync(cancellationToken).ConfigureAwait(false);
+                var buffer = new byte[maxLength];
                 var read = await AwaitIoAsync(
-                    _stream.ReadAsync(buffer, offset, length - offset, cancellationToken),
+                    _stream.ReadAsync(buffer, 0, buffer.Length, cancellationToken),
                     _options.ReceiveTimeoutMilliseconds,
                     "TCP receive timeout.",
                     cancellationToken).ConfigureAwait(false);
@@ -202,9 +266,20 @@ namespace IndustrialCommSdk.Transport
                     DisposeClient();
                     throw new IndustrialConnectionException("Remote peer closed the connection.");
                 }
-                offset += read;
+
+                if (read == buffer.Length)
+                {
+                    return buffer;
+                }
+
+                var result = new byte[read];
+                Buffer.BlockCopy(buffer, 0, result, 0, read);
+                return result;
             }
-            return buffer;
+            finally
+            {
+                _receiveGate.Release();
+            }
         }
 
         private async Task AwaitIoAsync(Task operation, int timeoutMilliseconds, string timeoutMessage, CancellationToken cancellationToken)
@@ -260,6 +335,7 @@ namespace IndustrialCommSdk.Transport
         /// <exception cref="IndustrialConnectionException">客户端未连接且自动重连已禁用时抛出。</exception>
         private async Task EnsureConnectedAsync(CancellationToken cancellationToken)
         {
+            ThrowIfDisposed();
             if (IsConnected)
             {
                 return;
@@ -296,8 +372,31 @@ namespace IndustrialCommSdk.Transport
         /// </summary>
         public void Dispose()
         {
+            if (Interlocked.Exchange(ref _disposed, 1) != 0)
+            {
+                return;
+            }
+
+            // 关闭流会解除挂起的异步 I/O；随后等待各方向当前操作退出。
+            // 信号量本身不释放，使 Dispose 前已排队的调用仍可获得锁、检查状态并安全失败。
             DisposeClient();
-            _gate.Dispose();
+            WaitForGate(_gate);
+            WaitForGate(_sendGate);
+            WaitForGate(_receiveGate);
+        }
+
+        private void ThrowIfDisposed()
+        {
+            if (Volatile.Read(ref _disposed) != 0)
+            {
+                throw new ObjectDisposedException(nameof(TcpTransportClient));
+            }
+        }
+
+        private static void WaitForGate(SemaphoreSlim gate)
+        {
+            gate.Wait();
+            gate.Release();
         }
     }
 }

@@ -150,6 +150,12 @@ namespace IndustrialCommSdk.Protocols.Socket
             _server = new TcpTransportServer(address, port);
         }
 
+        /// <summary>获取服务器是否正在监听。</summary>
+        public bool IsRunning { get { return _server.IsRunning; } }
+
+        /// <summary>获取当前活动客户端会话数。</summary>
+        public int SessionCount { get { return _server.SessionCount; } }
+
         /// <summary>
         /// 当有新的客户端会话连接时触发。
         /// </summary>
@@ -175,6 +181,13 @@ namespace IndustrialCommSdk.Protocols.Socket
         {
             add { _server.DataReceived += value; }
             remove { _server.DataReceived -= value; }
+        }
+
+        /// <summary>收到数据时触发的可等待异步事件；异步回复和持久化逻辑应优先使用此事件。</summary>
+        public event TransportDataReceivedAsyncEventHandler DataReceivedAsync
+        {
+            add { _server.DataReceivedAsync += value; }
+            remove { _server.DataReceivedAsync -= value; }
         }
 
         /// <summary>

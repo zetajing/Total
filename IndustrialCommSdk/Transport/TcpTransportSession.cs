@@ -1,4 +1,5 @@
 using System;
+using System.Net;
 using System.Net.Sockets;
 using System.Threading;
 using System.Threading.Tasks;
@@ -25,6 +26,11 @@ namespace IndustrialCommSdk.Transport
         /// 与 TCP 客户端关联的网络流，用于读写数据。
         /// </summary>
         private readonly NetworkStream _stream;
+        private readonly SemaphoreSlim _sendGate = new SemaphoreSlim(1, 1);
+        private Task _receiveLoopTask;
+        private int _started;
+        private int _closed;
+        private int _disposed;
 
         /// <summary>
         /// 使用指定的 TCP 客户端初始化 <see cref="TcpTransportSession"/> 类的新实例。
@@ -35,6 +41,7 @@ namespace IndustrialCommSdk.Transport
         public TcpTransportSession(TcpClient client)
         {
             _client = client ?? throw new ArgumentNullException(nameof(client));
+            _client.NoDelay = true;
             _stream = client.GetStream();
             SessionId = Guid.NewGuid();
         }
@@ -49,10 +56,16 @@ namespace IndustrialCommSdk.Transport
         /// </summary>
         public bool IsConnected { get { return _client.Connected; } }
 
+        public EndPoint RemoteEndPoint { get { return _client.Client.RemoteEndPoint; } }
+
+        internal Task Completion { get { return _receiveLoopTask ?? Task.CompletedTask; } }
+
         /// <summary>
         /// 当从对端接收到数据时触发。事件参数包含接收到的原始字节数据。
         /// </summary>
         public event EventHandler<byte[]> DataReceived;
+
+        internal event Func<TcpTransportSession, byte[], Task> DataReceivedAsync;
 
         /// <summary>
         /// 当会话因连接关闭或发生错误而终止时触发。
@@ -64,7 +77,12 @@ namespace IndustrialCommSdk.Transport
         /// </summary>
         public void Start()
         {
-            Task.Run(ReceiveLoopAsync);
+            if (Interlocked.Exchange(ref _started, 1) != 0)
+            {
+                return;
+            }
+
+            _receiveLoopTask = Task.Run(() => ReceiveLoopAsync(_cts.Token));
         }
 
         /// <summary>
@@ -75,8 +93,19 @@ namespace IndustrialCommSdk.Transport
         /// <returns>表示异步发送操作的任务。</returns>
         public async Task SendAsync(byte[] payload, CancellationToken cancellationToken)
         {
-            await _stream.WriteAsync(payload, 0, payload.Length, cancellationToken).ConfigureAwait(false);
-            await _stream.FlushAsync(cancellationToken).ConfigureAwait(false);
+            if (payload == null) throw new ArgumentNullException(nameof(payload));
+            if (Volatile.Read(ref _disposed) != 0) throw new ObjectDisposedException(nameof(TcpTransportSession));
+
+            await _sendGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+            try
+            {
+                if (Volatile.Read(ref _disposed) != 0) throw new ObjectDisposedException(nameof(TcpTransportSession));
+                await _stream.WriteAsync(payload, 0, payload.Length, cancellationToken).ConfigureAwait(false);
+            }
+            finally
+            {
+                _sendGate.Release();
+            }
         }
 
         /// <summary>
@@ -85,14 +114,14 @@ namespace IndustrialCommSdk.Transport
         /// 当对端关闭连接或取消令牌被触发时退出循环，并在 finally 块中触发 <see cref="Closed"/> 事件。
         /// </summary>
         /// <returns>表示异步接收循环的任务。</returns>
-        private async Task ReceiveLoopAsync()
+        private async Task ReceiveLoopAsync(CancellationToken cancellationToken)
         {
             var buffer = new byte[4096];
             try
             {
-                while (!_cts.Token.IsCancellationRequested)
+                while (!cancellationToken.IsCancellationRequested)
                 {
-                    var read = await _stream.ReadAsync(buffer, 0, buffer.Length, _cts.Token).ConfigureAwait(false);
+                    var read = await _stream.ReadAsync(buffer, 0, buffer.Length, cancellationToken).ConfigureAwait(false);
                     if (read == 0)
                     {
                         break;
@@ -100,15 +129,19 @@ namespace IndustrialCommSdk.Transport
 
                     var data = new byte[read];
                     Buffer.BlockCopy(buffer, 0, data, 0, read);
-                    DataReceived?.Invoke(this, data);
+                    await InvokeDataReceivedSafelyAsync(data).ConfigureAwait(false);
                 }
             }
             catch
             {
+                // 接收循环无法把异常返回给调用方；会话关闭事件统一负责通知服务器清理连接。
             }
             finally
             {
-                Closed?.Invoke(this, EventArgs.Empty);
+                if (Interlocked.Exchange(ref _closed, 1) == 0)
+                {
+                    InvokeClosedSafely();
+                }
             }
         }
 
@@ -118,6 +151,11 @@ namespace IndustrialCommSdk.Transport
         /// </summary>
         public void Dispose()
         {
+            if (Interlocked.Exchange(ref _disposed, 1) != 0)
+            {
+                return;
+            }
+
             _cts.Cancel();
             try
             {
@@ -135,6 +173,58 @@ namespace IndustrialCommSdk.Transport
             {
             }
             _cts.Dispose();
+        }
+
+        private async Task InvokeDataReceivedSafelyAsync(byte[] data)
+        {
+            var handlers = DataReceived;
+            if (handlers != null)
+            {
+                foreach (EventHandler<byte[]> handler in handlers.GetInvocationList())
+                {
+                    try
+                    {
+                        handler(this, data);
+                    }
+                    catch
+                    {
+                        // 单个同步业务回调失败不能中断该会话的后续接收。
+                    }
+                }
+            }
+
+            var asyncHandlers = DataReceivedAsync;
+            if (asyncHandlers == null)
+            {
+                return;
+            }
+
+            foreach (Func<TcpTransportSession, byte[], Task> handler in asyncHandlers.GetInvocationList())
+            {
+                try { await handler(this, data).ConfigureAwait(false); }
+                catch { /* 异步业务回调失败同样不能关闭 Socket 会话。 */ }
+            }
+        }
+
+        private void InvokeClosedSafely()
+        {
+            var handlers = Closed;
+            if (handlers == null)
+            {
+                return;
+            }
+
+            foreach (EventHandler handler in handlers.GetInvocationList())
+            {
+                try
+                {
+                    handler(this, EventArgs.Empty);
+                }
+                catch
+                {
+                    // 关闭通知必须尽量送达所有订阅者。
+                }
+            }
         }
     }
 }

@@ -91,27 +91,34 @@ namespace IndustrialCommSdk.Protocols.Modbus
         protected override async Task ConnectCoreAsync(CancellationToken cancellationToken)
         {
             DisconnectInternal();
+            var client = new TcpClient();
             try
             {
-                _tcpClient = new TcpClient();
                 using var timeoutCts = new CancellationTokenSource(_options.ConnectTimeoutMilliseconds);
                 using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutCts.Token);
 
-                var connectTask = _tcpClient.ConnectAsync(_options.Host, _options.Port);
+                var connectTask = client.ConnectAsync(_options.Host, _options.Port);
                 var waitTask = Task.Delay(Timeout.Infinite, linkedCts.Token);
                 var completed = await Task.WhenAny(connectTask, waitTask).ConfigureAwait(false);
 
                 if (completed == waitTask)
                 {
+                    client.Close();
+                    try { await connectTask.ConfigureAwait(false); } catch { }
                     cancellationToken.ThrowIfCancellationRequested();
                     throw new IndustrialTimeoutException("Modbus TCP connect timeout.");
                 }
 
                 await connectTask.ConfigureAwait(false);
-                _master = ModbusIpMaster.CreateIp(_tcpClient);
+                var master = ModbusIpMaster.CreateIp(client);
+                _tcpClient = client;
+                _master = master;
             }
+            catch (IndustrialTimeoutException) { client.Close(); throw; }
+            catch (OperationCanceledException) { client.Close(); throw; }
             catch (Exception ex) when (!(ex is IndustrialConnectionException) && !(ex is IndustrialTimeoutException) && !(ex is OperationCanceledException))
             {
+                client.Close();
                 throw new IndustrialConnectionException("Failed to connect Modbus TCP device.", ex);
             }
         }

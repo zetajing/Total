@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Concurrent;
+using System.Linq;
 using System.Net;
 using System.Net.Sockets;
 using System.Threading;
@@ -11,7 +12,7 @@ namespace IndustrialCommSdk.Transport
     /// TCP 传输服务器。实现 <see cref="ITransportServer"/> 接口，提供基于 TCP 协议的服务器功能，
     /// 包括启动监听、接受客户端连接、管理会话生命周期以及转发接收到的数据。
     /// </summary>
-    public sealed class TcpTransportServer : ITransportServer
+    public sealed class TcpTransportServer : IAsyncTransportServer
     {
         /// <summary>
         /// 服务器监听的 IP 地址。
@@ -37,6 +38,8 @@ namespace IndustrialCommSdk.Transport
         /// 用于控制服务器生命周期和取消操作的取消令牌源。
         /// </summary>
         private CancellationTokenSource _cts;
+        private Task _acceptLoopTask;
+        private readonly SemaphoreSlim _lifecycleGate = new SemaphoreSlim(1, 1);
 
         /// <summary>
         /// 使用指定的 IP 地址和端口号初始化 <see cref="TcpTransportServer"/> 类的新实例。
@@ -54,6 +57,9 @@ namespace IndustrialCommSdk.Transport
         /// </summary>
         public bool IsRunning { get; private set; }
 
+        /// <summary>获取当前活动客户端会话数。</summary>
+        public int SessionCount { get { return _sessions.Count; } }
+
         /// <summary>
         /// 当有新客户端会话建立连接时触发。事件参数包含新建立的会话实例。
         /// </summary>
@@ -70,23 +76,37 @@ namespace IndustrialCommSdk.Transport
         public event EventHandler<TransportDataReceivedEventArgs> DataReceived;
 
         /// <summary>
+        /// 当收到数据时触发的可等待异步事件。需要 await 发送、写库等异步工作的订阅者应使用此事件，
+        /// 避免把 async lambda 绑定到同步 <see cref="DataReceived"/> 后形成无法观察异常的 async void。
+        /// </summary>
+        public event TransportDataReceivedAsyncEventHandler DataReceivedAsync;
+
+        /// <summary>
         /// 异步启动服务器。初始化 TCP 监听器并开始接受客户端连接。如果服务器已在运行，则直接返回。
         /// </summary>
         /// <param name="cancellationToken">用于取消启动操作的取消令牌。服务器内部会创建链接的取消令牌源。</param>
         /// <returns>表示异步启动操作的任务。</returns>
-        public Task StartAsync(CancellationToken cancellationToken)
+        public async Task StartAsync(CancellationToken cancellationToken)
         {
-            if (IsRunning)
+            await _lifecycleGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+            try
             {
-                return Task.CompletedTask;
-            }
+                if (IsRunning)
+                {
+                    return;
+                }
 
-            _cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            _listener = new TcpListener(_address, _port);
-            _listener.Start();
-            IsRunning = true;
-            Task.Run(() => AcceptLoopAsync(_cts.Token), _cts.Token);
-            return Task.CompletedTask;
+                _cts?.Dispose();
+                _cts = new CancellationTokenSource();
+                _listener = new TcpListener(_address, _port);
+                _listener.Start();
+                IsRunning = true;
+                _acceptLoopTask = Task.Run(() => AcceptLoopAsync(_cts.Token));
+            }
+            finally
+            {
+                _lifecycleGate.Release();
+            }
         }
 
         /// <summary>
@@ -94,29 +114,43 @@ namespace IndustrialCommSdk.Transport
         /// </summary>
         /// <param name="cancellationToken">用于取消停止操作的取消令牌。</param>
         /// <returns>表示异步停止操作的任务。</returns>
-        public Task StopAsync(CancellationToken cancellationToken)
+        public async Task StopAsync(CancellationToken cancellationToken)
         {
-            if (!IsRunning)
-            {
-                return Task.CompletedTask;
-            }
-
-            _cts.Cancel();
+            await _lifecycleGate.WaitAsync(cancellationToken).ConfigureAwait(false);
             try
             {
-                _listener.Stop();
-            }
-            catch
-            {
-            }
+                if (!IsRunning)
+                {
+                    return;
+                }
 
-            foreach (var session in _sessions.Values)
-            {
-                session.Dispose();
+                IsRunning = false;
+                _cts.Cancel();
+                try
+                {
+                    _listener.Stop();
+                }
+                catch
+                {
+                }
+
+                if (_acceptLoopTask != null)
+                {
+                    await _acceptLoopTask.ConfigureAwait(false);
+                    _acceptLoopTask = null;
+                }
+
+                foreach (var session in _sessions.Values)
+                {
+                    UnsubscribeAndDispose(session);
+                }
+                await Task.WhenAll(_sessions.Values.Select(session => session.Completion)).ConfigureAwait(false);
+                _sessions.Clear();
             }
-            _sessions.Clear();
-            IsRunning = false;
-            return Task.CompletedTask;
+            finally
+            {
+                _lifecycleGate.Release();
+            }
         }
 
         /// <summary>
@@ -155,9 +189,9 @@ namespace IndustrialCommSdk.Transport
                 var session = new TcpTransportSession(client);
                 if (_sessions.TryAdd(session.SessionId, session))
                 {
-                    session.DataReceived += OnSessionDataReceived;
+                    session.DataReceivedAsync += OnSessionDataReceivedAsync;
                     session.Closed += OnSessionClosed;
-                    SessionConnected?.Invoke(this, new TransportSessionEventArgs(session));
+                    InvokeSafely(SessionConnected, new TransportSessionEventArgs(session));
                     session.Start();
                 }
             }
@@ -173,7 +207,10 @@ namespace IndustrialCommSdk.Transport
             var session = (TcpTransportSession)sender;
             TcpTransportSession removed;
             _sessions.TryRemove(session.SessionId, out removed);
-            SessionClosed?.Invoke(this, new TransportSessionEventArgs(session));
+            session.DataReceivedAsync -= OnSessionDataReceivedAsync;
+            session.Closed -= OnSessionClosed;
+            InvokeSafely(SessionClosed, new TransportSessionEventArgs(session));
+            session.Dispose();
         }
 
         /// <summary>
@@ -181,10 +218,10 @@ namespace IndustrialCommSdk.Transport
         /// </summary>
         /// <param name="sender">触发事件的会话对象。</param>
         /// <param name="payload">从会话接收到的二进制数据负载。</param>
-        private void OnSessionDataReceived(object sender, byte[] payload)
+        private async Task OnSessionDataReceivedAsync(TcpTransportSession session, byte[] payload)
         {
-            var session = (TcpTransportSession)sender;
-            DataReceived?.Invoke(this, new TransportDataReceivedEventArgs(session, payload));
+            InvokeSafely(DataReceived, new TransportDataReceivedEventArgs(session, payload));
+            await InvokeAsyncSafely(DataReceivedAsync, new TransportDataReceivedEventArgs(session, payload)).ConfigureAwait(false);
         }
 
         /// <summary>
@@ -194,6 +231,49 @@ namespace IndustrialCommSdk.Transport
         {
             StopAsync(CancellationToken.None).GetAwaiter().GetResult();
             _cts?.Dispose();
+            _lifecycleGate.Dispose();
+        }
+
+        private void UnsubscribeAndDispose(TcpTransportSession session)
+        {
+            session.DataReceivedAsync -= OnSessionDataReceivedAsync;
+            session.Closed -= OnSessionClosed;
+            session.Dispose();
+        }
+
+        private void InvokeSafely<TEventArgs>(EventHandler<TEventArgs> handlers, TEventArgs args)
+            where TEventArgs : EventArgs
+        {
+            if (handlers == null)
+            {
+                return;
+            }
+
+            foreach (EventHandler<TEventArgs> handler in handlers.GetInvocationList())
+            {
+                try
+                {
+                    handler(this, args);
+                }
+                catch
+                {
+                    // 业务订阅者的同步异常不能终止监听或接收循环。
+                }
+            }
+        }
+
+        private async Task InvokeAsyncSafely(TransportDataReceivedAsyncEventHandler handlers, TransportDataReceivedEventArgs args)
+        {
+            if (handlers == null)
+            {
+                return;
+            }
+
+            foreach (TransportDataReceivedAsyncEventHandler handler in handlers.GetInvocationList())
+            {
+                try { await handler(this, args).ConfigureAwait(false); }
+                catch { /* 单个异步订阅者失败不能中断其他订阅者和接收循环。 */ }
+            }
         }
     }
 }

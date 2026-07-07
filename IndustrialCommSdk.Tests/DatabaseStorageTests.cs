@@ -108,6 +108,32 @@ namespace IndustrialCommSdk.Tests
             Assert.That(store.Records.Single().ValueText, Is.EqualTo("42"));
         }
 
+        [Test]
+        public async Task BufferedRecorder_Can_Resume_Waiting_After_Stop_Wait_Is_Canceled()
+        {
+            var store = new BlockingDataStore();
+            using (var recorder = new BufferedIndustrialDataRecorder(
+                store,
+                new BufferedDataRecorderOptions { BatchSize = 10, QueueCapacity = 10, RetryCount = 0 }))
+            {
+                await recorder.StartAsync(CancellationToken.None);
+                var value = new DataValue("D0", DataType.UInt16, (ushort)1, new byte[] { 0, 1 }, QualityStatus.Good, DateTimeOffset.UtcNow, null);
+                Assert.That(recorder.TryRecord(ProtocolKind.ModbusTcp, "device", new[] { value }), Is.True);
+                await store.WriteStarted.Task;
+
+                using (var cancellation = new CancellationTokenSource())
+                {
+                    cancellation.Cancel();
+                    Assert.ThrowsAsync<OperationCanceledException>(async () =>
+                        await recorder.StopAsync(cancellation.Token));
+                }
+
+                store.AllowWrite.TrySetResult(true);
+                await recorder.StopAsync(CancellationToken.None);
+                Assert.That(recorder.GetSnapshot().WrittenRecordCount, Is.EqualTo(1));
+            }
+        }
+
         /// <summary>
         /// 验证按设备标识过滤查询能正确返回匹配记录。
         /// </summary>
@@ -333,6 +359,24 @@ namespace IndustrialCommSdk.Tests
             public void Dispose()
             {
             }
+        }
+
+        private sealed class BlockingDataStore : IIndustrialDataStore
+        {
+            public TaskCompletionSource<bool> WriteStarted { get; } = new TaskCompletionSource<bool>();
+            public TaskCompletionSource<bool> AllowWrite { get; } = new TaskCompletionSource<bool>();
+            public Task InitializeAsync(CancellationToken cancellationToken) { return Task.CompletedTask; }
+            public async Task WriteAsync(IReadOnlyCollection<IndustrialDataRecord> records, CancellationToken cancellationToken)
+            {
+                WriteStarted.TrySetResult(true);
+                await AllowWrite.Task.ConfigureAwait(false);
+            }
+            public Task<IReadOnlyList<IndustrialDataRecord>> QueryAsync(HistoryQueryFilter filter, CancellationToken cancellationToken)
+            {
+                return Task.FromResult<IReadOnlyList<IndustrialDataRecord>>(new IndustrialDataRecord[0]);
+            }
+            public Task<int> DeleteAsync(HistoryQueryFilter filter, CancellationToken cancellationToken) { return Task.FromResult(0); }
+            public void Dispose() { }
         }
     }
 }

@@ -21,7 +21,7 @@ namespace IndustrialCommSdk.Mes
         private TcpClient _client;
         private NetworkStream _stream;
         private int _state = (int)MesConnectionState.Disconnected;
-        private bool _disposed;
+        private int _disposed;
 
         public MesTcpClient(MesClientOptions options, IIndustrialLogger logger = null)
         {
@@ -42,6 +42,7 @@ namespace IndustrialCommSdk.Mes
         public async Task ConnectAsync(CancellationToken cancellationToken)
         {
             ThrowIfDisposed();
+            cancellationToken.ThrowIfCancellationRequested();
             _logger.Info(string.Format("MES CONNECT begin | Endpoint={0}:{1} | Timeout={2}ms | AutoReconnect={3}", _options.Host, _options.Port, _options.ConnectTimeoutMilliseconds, _options.AutoReconnect));
             TaskCompletionSource<bool> firstConnection;
             lock (_lifecycleGate)
@@ -56,8 +57,18 @@ namespace IndustrialCommSdk.Mes
                 _runTask = RunAsync(firstConnection, _runCancellation.Token);
             }
 
-            using (cancellationToken.Register(() => firstConnection.TrySetCanceled()))
-                await firstConnection.Task.ConfigureAwait(false);
+            try
+            {
+                using (cancellationToken.Register(() => firstConnection.TrySetCanceled()))
+                    await firstConnection.Task.ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                // ConnectAsync 的取消必须同时停止本次后台连接/重连任务，否则调用方已经
+                // 收到“已取消”后，客户端仍可能连上 MES 并自动发送上线报文。
+                await DisconnectAsync(CancellationToken.None).ConfigureAwait(false);
+                throw;
+            }
             _logger.Info("MES CONNECT completed | Endpoint=" + _options.Host + ":" + _options.Port);
         }
 
@@ -218,6 +229,7 @@ namespace IndustrialCommSdk.Mes
             await _sendGate.WaitAsync(cancellationToken).ConfigureAwait(false);
             try
             {
+                ThrowIfDisposed();
                 var stream = GetConnectedStream();
                 var write = stream.WriteAsync(payload, 0, payload.Length, cancellationToken);
                 if (await Task.WhenAny(write, Task.Delay(_options.SendTimeoutMilliseconds, cancellationToken)).ConfigureAwait(false) != write)
@@ -296,8 +308,11 @@ namespace IndustrialCommSdk.Mes
         private void Raise<T>(EventHandler<T> handler, T args) where T : EventArgs
         {
             if (handler == null) return;
-            try { handler(this, args); }
-            catch (Exception ex) { _logger.Error("MES event handler failed.", ex); }
+            foreach (EventHandler<T> subscriber in handler.GetInvocationList())
+            {
+                try { subscriber(this, args); }
+                catch (Exception ex) { _logger.Error("MES event handler failed.", ex); }
+            }
         }
 
         private static void ValidateOptions(MesClientOptions options)
@@ -313,16 +328,34 @@ namespace IndustrialCommSdk.Mes
                 options.MaximumMessageCharacters <= 0) throw new ArgumentOutOfRangeException(nameof(options), "MES timeout, reconnect and message-size values must be positive and consistent.");
         }
 
-        private void ThrowIfDisposed() { if (_disposed) throw new ObjectDisposedException(nameof(MesTcpClient)); }
+        private void ThrowIfDisposed() { if (Volatile.Read(ref _disposed) != 0) throw new ObjectDisposedException(nameof(MesTcpClient)); }
 
         public void Dispose()
         {
-            if (_disposed) return;
-            _disposed = true;
-            var cancellation = _runCancellation;
+            if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
+
+            Task runTask;
+            CancellationTokenSource cancellation;
+            lock (_lifecycleGate)
+            {
+                runTask = _runTask;
+                cancellation = _runCancellation;
+                _runTask = null;
+                _runCancellation = null;
+            }
             if (cancellation != null) cancellation.Cancel();
             CloseSocket();
-            // 接收循环可能刚因关闭 Socket 而退出；不在这里释放发送门，避免与尾部 finally 竞争。
+            try { runTask?.GetAwaiter().GetResult(); }
+            catch (OperationCanceledException) { }
+            catch (Exception ex) { _logger.Error("MES background task failed during dispose.", ex); }
+            cancellation?.Dispose();
+
+            // 等待已开始的发送退出后再释放发送门，避免 SendTextAsync 的 finally
+            // 对一个已释放的 SemaphoreSlim 执行 Release。
+            _sendGate.Wait();
+            _sendGate.Release();
+            // 不释放信号量：Dispose 前已经通过第一次状态检查、尚在排队的发送
+            // 仍需获得它并在第二次检查中安全退出。
         }
     }
 }

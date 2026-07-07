@@ -130,6 +130,7 @@ namespace IndustrialCommSdk.Polling
             /// 轮询循环的后台任务引用，用于在释放时等待循环结束。
             /// </summary>
             private Task _loopTask;
+            private int _disposed;
 
             /// <summary>
             /// 上次轮询的数据指纹，用于在 <see cref="SubscriptionRequest.ReportOnChangeOnly"/> 启用时判断数据是否发生变化。
@@ -259,16 +260,36 @@ namespace IndustrialCommSdk.Polling
             /// </summary>
             public void Dispose()
             {
+                if (Interlocked.Exchange(ref _disposed, 1) != 0)
+                {
+                    return;
+                }
+
                 _logger.Trace("SUBSCRIPTION loop stopping | Key=" + _request.SubscriptionKey);
                 _cts.Cancel();
+                var completed = false;
                 try
                 {
-                    _loopTask?.Wait(TimeSpan.FromSeconds(1));
+                    completed = _loopTask == null || _loopTask.Wait(TimeSpan.FromSeconds(1));
                 }
                 catch
                 {
                 }
-                _cts.Dispose();
+
+                if (completed)
+                {
+                    _cts.Dispose();
+                }
+                else
+                {
+                    // 第三方客户端可能暂时不响应取消。不能提前释放仍被循环读取的 CTS；
+                    // 让任务真正退出后再回收，避免后台出现 ObjectDisposedException。
+                    _loopTask.ContinueWith(
+                        _ => _cts.Dispose(),
+                        CancellationToken.None,
+                        TaskContinuationOptions.ExecuteSynchronously,
+                        TaskScheduler.Default);
+                }
             }
         }
     }

@@ -14,6 +14,9 @@ namespace IndustrialCommDemo.SocketDebug
     /// </summary>
     internal sealed class LineBasedTcpClient : IDisposable
     {
+        private const int UnframedMessageIdleMilliseconds = 100;
+        private const int MaxPendingBytes = 1024 * 1024;
+
         /// <summary>
         /// 发送操作专用的信号量锁，保证同一时间只有一个发送操作进行。
         /// </summary>
@@ -43,6 +46,7 @@ namespace IndustrialCommDemo.SocketDebug
         /// 后台接收循环任务。
         /// </summary>
         private Task _receiveLoopTask;
+        private int _disposed;
 
         /// <summary>
         /// 获取一个值，指示当前客户端是否已成功连接到远程终结点并处于可用状态。
@@ -106,6 +110,7 @@ namespace IndustrialCommDemo.SocketDebug
         /// <exception cref="OperationCanceledException">连接操作被 <paramref name="cancellationToken"/> 取消时引发。</exception>
         public async Task ConnectAsync(string host, int port, CancellationToken cancellationToken)
         {
+            ThrowIfDisposed();
             await DisconnectAsync(CancellationToken.None).ConfigureAwait(false);
 
             var client = new TcpClient();
@@ -128,7 +133,7 @@ namespace IndustrialCommDemo.SocketDebug
                 _cts = new CancellationTokenSource();
                 _pendingBytes.Clear();
                 _receiveLoopTask = Task.Run(() => ReceiveLoopAsync(_cts.Token), _cts.Token);
-                Connected?.Invoke(this, EventArgs.Empty);
+                RaiseSafely(Connected, EventArgs.Empty);
             }
             catch
             {
@@ -187,6 +192,7 @@ namespace IndustrialCommDemo.SocketDebug
         /// <exception cref="InvalidOperationException">客户端未连接时引发。</exception>
         public async Task SendAsync(string message, CancellationToken cancellationToken)
         {
+            ThrowIfDisposed();
             if (!IsConnected)
             {
                 throw new InvalidOperationException("TCP client is not connected.");
@@ -197,8 +203,8 @@ namespace IndustrialCommDemo.SocketDebug
             await _sendLock.WaitAsync(cancellationToken).ConfigureAwait(false);
             try
             {
+                ThrowIfDisposed();
                 await _stream.WriteAsync(payload, 0, payload.Length, cancellationToken).ConfigureAwait(false);
-                await _stream.FlushAsync(cancellationToken).ConfigureAwait(false);
             }
             finally
             {
@@ -211,8 +217,11 @@ namespace IndustrialCommDemo.SocketDebug
         /// </summary>
         public void Dispose()
         {
+            if (Interlocked.Exchange(ref _disposed, 1) != 0)
+            {
+                return;
+            }
             DisconnectAsync(CancellationToken.None).GetAwaiter().GetResult();
-            _sendLock.Dispose();
         }
 
         /// <summary>
@@ -229,28 +238,44 @@ namespace IndustrialCommDemo.SocketDebug
             {
                 while (!cancellationToken.IsCancellationRequested)
                 {
-                    int read;
+                    Task<int> readTask;
                     try
                     {
-                        read = await _stream.ReadAsync(buffer, 0, buffer.Length, cancellationToken).ConfigureAwait(false);
+                        readTask = _stream.ReadAsync(buffer, 0, buffer.Length, cancellationToken);
+
+                        // 有些设备发送的是无 CRLF 的裸文本。TCP 本身没有消息边界，因此在已有
+                        // 未完成数据时等待一个很短的静默窗口；窗口内没有后续字节，就把当前
+                        // 缓冲区作为一条消息提交，避免数据已收到却一直不显示。
+                        if (_pendingBytes.Count > 0)
+                        {
+                            var completed = await Task.WhenAny(
+                                readTask,
+                                Task.Delay(UnframedMessageIdleMilliseconds, cancellationToken)).ConfigureAwait(false);
+                            if (completed != readTask)
+                            {
+                                DispatchPendingMessage();
+                            }
+                        }
+
+                        var read = await readTask.ConfigureAwait(false);
+                        if (read <= 0)
+                        {
+                            break;
+                        }
+
+                        AppendAndDispatch(buffer, read);
                     }
                     catch
                     {
                         break;
                     }
-
-                    if (read <= 0)
-                    {
-                        break;
-                    }
-
-                    AppendAndDispatch(buffer, read);
                 }
             }
             finally
             {
+                DispatchPendingMessage();
                 CloseClient();
-                Disconnected?.Invoke(this, EventArgs.Empty);
+                RaiseSafely(Disconnected, EventArgs.Empty);
             }
         }
 
@@ -266,19 +291,65 @@ namespace IndustrialCommDemo.SocketDebug
             for (var index = 0; index < count; index++)
             {
                 _pendingBytes.Add(buffer[index]);
+                if (_pendingBytes.Count >= MaxPendingBytes)
+                {
+                    DispatchPendingMessage();
+                }
             }
 
             while (true)
             {
-                var lineEndIndex = FindLineEnding(_pendingBytes);
+                int delimiterLength;
+                var lineEndIndex = FindLineEnding(_pendingBytes, out delimiterLength);
                 if (lineEndIndex < 0)
                 {
                     return;
                 }
 
                 var lineBytes = _pendingBytes.GetRange(0, lineEndIndex).ToArray();
-                _pendingBytes.RemoveRange(0, lineEndIndex + 2);
-                MessageReceived?.Invoke(this, new SocketTextMessageEventArgs(Guid.Empty, RemoteEndPoint, Encoding.UTF8.GetString(lineBytes)));
+                _pendingBytes.RemoveRange(0, lineEndIndex + delimiterLength);
+                RaiseSafely(MessageReceived, new SocketTextMessageEventArgs(Guid.Empty, RemoteEndPoint, Encoding.UTF8.GetString(lineBytes)));
+            }
+        }
+
+        private void DispatchPendingMessage()
+        {
+            if (_pendingBytes.Count == 0)
+            {
+                return;
+            }
+
+            var messageBytes = _pendingBytes.ToArray();
+            _pendingBytes.Clear();
+            RaiseSafely(MessageReceived, new SocketTextMessageEventArgs(Guid.Empty, RemoteEndPoint, Encoding.UTF8.GetString(messageBytes)));
+        }
+
+        private void RaiseSafely<TEventArgs>(EventHandler<TEventArgs> handlers, TEventArgs args)
+            where TEventArgs : EventArgs
+        {
+            if (handlers == null) return;
+            foreach (EventHandler<TEventArgs> handler in handlers.GetInvocationList())
+            {
+                try { handler(this, args); }
+                catch { /* 单个 UI/业务订阅者失败不能终止 Socket 接收循环。 */ }
+            }
+        }
+
+        private void RaiseSafely(EventHandler handlers, EventArgs args)
+        {
+            if (handlers == null) return;
+            foreach (EventHandler handler in handlers.GetInvocationList())
+            {
+                try { handler(this, args); }
+                catch { /* 单个 UI/业务订阅者失败不能终止 Socket 接收循环。 */ }
+            }
+        }
+
+        private void ThrowIfDisposed()
+        {
+            if (Volatile.Read(ref _disposed) != 0)
+            {
+                throw new ObjectDisposedException(nameof(LineBasedTcpClient));
             }
         }
 
@@ -320,16 +391,26 @@ namespace IndustrialCommDemo.SocketDebug
         /// </summary>
         /// <param name="buffer">要搜索的字节列表。</param>
         /// <returns>找到的行结束符起始索引（'\r' 的位置）；如果未找到则返回 -1。</returns>
-        private static int FindLineEnding(List<byte> buffer)
+        private static int FindLineEnding(List<byte> buffer, out int delimiterLength)
         {
-            for (var index = 0; index < buffer.Count - 1; index++)
+            for (var index = 0; index < buffer.Count; index++)
             {
-                if (buffer[index] == '\r' && buffer[index + 1] == '\n')
+                if (buffer[index] != '\n')
                 {
-                    return index;
+                    continue;
                 }
+
+                delimiterLength = 1;
+                if (index > 0 && buffer[index - 1] == '\r')
+                {
+                    delimiterLength = 2;
+                    return index - 1;
+                }
+
+                return index;
             }
 
+            delimiterLength = 0;
             return -1;
         }
     }

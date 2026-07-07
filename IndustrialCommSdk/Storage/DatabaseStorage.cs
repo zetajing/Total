@@ -839,6 +839,8 @@ FROM Latest WHERE rn=1 ORDER BY [Timestamp] DESC,[Id] DESC;", _table.QuotedName,
         // Dispose 才会取消仍在等待的任务。
         private readonly CancellationTokenSource _stopSource = new CancellationTokenSource();
         private Task _worker;
+        private readonly object _stopGate = new object();
+        private Task _stopTask;
 
         // 使用整数配合 Interlocked/Volatile 代替普通 bool，确保多线程能看到一致的启动状态。
         private int _started;
@@ -848,6 +850,7 @@ FROM Latest WHERE rn=1 ORDER BY [Timestamp] DESC,[Id] DESC;", _table.QuotedName,
         private long _writeFailureCount;
         private long _lastSuccessfulWriteUtcTicks;
         private string _lastError;
+        private int _disposed;
 
         /// <summary>
         /// 创建后台记录器，但此时还没有连接数据库或启动后台任务。
@@ -875,6 +878,7 @@ FROM Latest WHERE rn=1 ORDER BY [Timestamp] DESC,[Id] DESC;", _table.QuotedName,
         /// </summary>
         public async Task StartAsync(CancellationToken cancellationToken)
         {
+            if (Volatile.Read(ref _disposed) != 0) throw new ObjectDisposedException(nameof(BufferedIndustrialDataRecorder));
             // CompareExchange 保证并发调用 StartAsync 时只有第一个调用真正执行启动逻辑。
             if (Interlocked.CompareExchange(ref _started, 1, 0) != 0) return;
             try
@@ -902,7 +906,7 @@ FROM Latest WHERE rn=1 ORDER BY [Timestamp] DESC,[Id] DESC;", _table.QuotedName,
         /// </summary>
         public bool TryRecord(ProtocolKind protocol, string deviceId, IReadOnlyCollection<DataValue> values)
         {
-            if (Volatile.Read(ref _started) == 0 || values == null || values.Count == 0 || _queue.IsAddingCompleted)
+            if (Volatile.Read(ref _disposed) != 0 || Volatile.Read(ref _started) == 0 || values == null || values.Count == 0 || _queue.IsAddingCompleted)
             {
                 return false;
             }
@@ -939,32 +943,41 @@ FROM Latest WHERE rn=1 ORDER BY [Timestamp] DESC,[Id] DESC;", _table.QuotedName,
         /// </summary>
         public async Task StopAsync(CancellationToken cancellationToken)
         {
-            // Exchange 同时完成状态切换和并发保护，重复停止不会再次操作已完成队列。
-            if (Interlocked.Exchange(ref _started, 0) == 0) return;
-
-            // CompleteAdding 不会清空队列；它只是告诉消费者“以后不会再有新数据”。
-            _queue.CompleteAdding();
-            if (_worker != null)
+            Task stopTask;
+            lock (_stopGate)
             {
-                // Task.WhenAny 让调用方提供的取消令牌仍然能够中断“等待停止”这一动作。
-                var completed = await Task.WhenAny(_worker, Task.Delay(Timeout.Infinite, cancellationToken)).ConfigureAwait(false);
-                if (completed != _worker) cancellationToken.ThrowIfCancellationRequested();
-                await _worker.ConfigureAwait(false);
+                if (_stopTask == null)
+                {
+                    if (Interlocked.Exchange(ref _started, 0) == 0)
+                    {
+                        return;
+                    }
+
+                    // 取消调用方的等待不会取消实际排空过程；后续 StopAsync 或 Dispose
+                    // 仍可取得同一个任务并继续等待，避免队列处于“已停止但无人收尾”的状态。
+                    _queue.CompleteAdding();
+                    _stopTask = CompleteStopAsync();
+                }
+                stopTask = _stopTask;
             }
-            _logger.Info(string.Format(CultureInfo.InvariantCulture, "DATABASE recorder stopped | Accepted={0} | Written={1} | Dropped={2} | Failures={3}", Interlocked.Read(ref _acceptedRecordCount), Interlocked.Read(ref _writtenRecordCount), Interlocked.Read(ref _droppedRecordCount), Interlocked.Read(ref _writeFailureCount)));
+
+            var completed = await Task.WhenAny(stopTask, Task.Delay(Timeout.Infinite, cancellationToken)).ConfigureAwait(false);
+            if (completed != stopTask) cancellationToken.ThrowIfCancellationRequested();
+            await stopTask.ConfigureAwait(false);
         }
 
         /// <inheritdoc />
         public void Dispose()
         {
-            if (Volatile.Read(ref _started) != 0)
+            if (Interlocked.Exchange(ref _disposed, 1) != 0)
             {
-                // IDisposable 不能声明为 async。若调用方忘了先 StopAsync，只能同步等待队列排空。
-                // 正常业务应优先显式调用 StopAsync，避免关闭窗口时长时间同步等待。
-                _queue.CompleteAdding();
-                try { if (_worker != null) _worker.GetAwaiter().GetResult(); }
-                catch (Exception ex) { _logger.Error("停止数据库记录器失败。", ex); }
+                return;
             }
+
+            // 即使先前 StopAsync 的“等待”被取消，实际排空任务仍保存在 _stopTask 中，
+            // Dispose 必须重新等待它，不能直接释放队列和存储对象。
+            try { StopAsync(CancellationToken.None).GetAwaiter().GetResult(); }
+            catch (Exception ex) { _logger.Error("停止数据库记录器失败。", ex); }
 
             // 释放顺序：通知任务取消 → 释放队列/令牌源 → 释放具体数据库存储。
             _stopSource.Cancel();
@@ -972,6 +985,15 @@ FROM Latest WHERE rn=1 ORDER BY [Timestamp] DESC,[Id] DESC;", _table.QuotedName,
             _stopSource.Dispose();
             _store.Dispose();
             Interlocked.Exchange(ref _started, 0);
+        }
+
+        private async Task CompleteStopAsync()
+        {
+            if (_worker != null)
+            {
+                await _worker.ConfigureAwait(false);
+            }
+            _logger.Info(string.Format(CultureInfo.InvariantCulture, "DATABASE recorder stopped | Accepted={0} | Written={1} | Dropped={2} | Failures={3}", Interlocked.Read(ref _acceptedRecordCount), Interlocked.Read(ref _writtenRecordCount), Interlocked.Read(ref _droppedRecordCount), Interlocked.Read(ref _writeFailureCount)));
         }
 
         private async Task ProcessQueueAsync(CancellationToken cancellationToken)

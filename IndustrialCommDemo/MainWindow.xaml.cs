@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Collections.ObjectModel;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Globalization;
 using System.IO;
 using System.Linq;
@@ -69,6 +70,8 @@ namespace IndustrialCommDemo
         private SqlServerIndustrialDataStore _databaseManagementStore;
         private int _databaseQueryPage = 1;
         private long _databaseQueryTotal;
+        private bool _closeCleanupStarted;
+        private bool _closeCleanupCompleted;
 
         // Modbus 轮询回调可能运行在非 UI 线程，因此不能通过读取 WPF CheckBox 判断状态。
         // 使用 Interlocked/Volatile 管理这个整数标志，可以安全地跨线程读写启用状态。
@@ -1324,22 +1327,46 @@ namespace IndustrialCommDemo
             }
         }
 
-        protected override async void OnClosed(EventArgs e)
+        protected override async void OnClosing(CancelEventArgs e)
         {
-            // 先保存非敏感 UI 配置，再断开设备，使通信回调不再产生新的数据库记录。
-            SaveUiState();
-            await ResetModbusClientAsync();
-            await ResetS7ClientAsync();
-            await ResetMcClientAsync();
-            await ResetSocketClientAsync();
-            await ResetSocketServerAsync();
-            await ResetMesClientAsync();
-            // 设备都停止后再排空写库队列，保证退出前尽量保存最后一批采集值。
-            await StopDatabaseRecorderAsync();
-            if (_databaseManagementStore != null) { _databaseManagementStore.Dispose(); _databaseManagementStore = null; }
-            _logger.Dispose();
-            _sdkLogger.Dispose();
-            base.OnClosed(e);
+            if (_closeCleanupCompleted)
+            {
+                base.OnClosing(e);
+                return;
+            }
+
+            // WPF 不会等待 async void OnClosed。第一次关闭先取消，窗口继续存活；
+            // 清理完成后再次 Close，第二次才允许框架真正关闭最后一个窗口。
+            e.Cancel = true;
+            if (_closeCleanupStarted)
+            {
+                return;
+            }
+
+            _closeCleanupStarted = true;
+            try
+            {
+                SaveUiState();
+                await ResetModbusClientAsync();
+                await ResetS7ClientAsync();
+                await ResetMcClientAsync();
+                await ResetSocketClientAsync();
+                await ResetSocketServerAsync();
+                await ResetMesClientAsync();
+                await StopDatabaseRecorderAsync();
+                if (_databaseManagementStore != null) { _databaseManagementStore.Dispose(); _databaseManagementStore = null; }
+            }
+            catch (Exception ex)
+            {
+                try { _logger.Error("程序关闭清理失败。", ex); } catch { }
+            }
+            finally
+            {
+                try { _logger.Dispose(); } catch { }
+                try { _sdkLogger.Dispose(); } catch { }
+                _closeCleanupCompleted = true;
+                Close();
+            }
         }
 
         private void OnModbusSubscriptionReceived(object sender, SubscriptionEvent e)
@@ -1385,7 +1412,7 @@ namespace IndustrialCommDemo
             });
         }
 
-        private void SocketServer_MessageReceived(object sender, SocketTextMessageEventArgs e)
+        private async void SocketServer_MessageReceived(object sender, SocketTextMessageEventArgs e)
         {
             var shouldEcho = Dispatcher.CheckAccess()
                 ? SocketServerEchoCheckBox.IsChecked == true
@@ -1399,7 +1426,14 @@ namespace IndustrialCommDemo
 
             if (shouldEcho && _socketServer != null)
             {
-                _ = _socketServer.SendToAsync(e.SessionId, "echo: " + e.Message, CancellationToken.None);
+                try
+                {
+                    await _socketServer.SendToAsync(e.SessionId, "echo: " + e.Message, CancellationToken.None);
+                }
+                catch (Exception ex)
+                {
+                    RunOnUi(() => HandleActionError("Socket 服务端回显失败。", ex, false));
+                }
             }
         }
 

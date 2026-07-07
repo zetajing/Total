@@ -28,7 +28,7 @@ namespace IndustrialCommSdk.Internal
         /// <summary>当前连接状态。</summary>
         private ConnectionStatus _status;
         /// <summary>指示当前实例是否已释放。</summary>
-        private bool _disposed;
+        private int _disposed;
 
         /// <summary>使用指定的设备标识、协议类型、轮询调度器和日志记录器初始化工业客户端基类。</summary>
         /// <param name="deviceId">设备标识。</param>
@@ -420,7 +420,7 @@ namespace IndustrialCommSdk.Internal
         /// <exception cref="ObjectDisposedException">当前实例已被释放。</exception>
         protected void ThrowIfDisposed()
         {
-            if (_disposed)
+            if (Volatile.Read(ref _disposed) != 0)
             {
                 throw new ObjectDisposedException(GetType().FullName);
             }
@@ -429,15 +429,26 @@ namespace IndustrialCommSdk.Internal
         /// <summary>执行托管资源的释放操作。可被多次调用，只有首次调用执行实际释放逻辑。</summary>
         public void Dispose()
         {
-            if (_disposed)
+            if (Interlocked.Exchange(ref _disposed, 1) != 0)
             {
                 return;
             }
 
-            _disposed = true;
+            // 先停止轮询，阻止它继续排队新的客户端操作；再等待当前独占操作退出，
+            // 避免在读写过程中关闭底层 Socket/串口或释放仍会在 finally 中 Release 的锁。
             _pollingScheduler.Dispose();
-            _operationLock.Dispose();
-            DisposeCore();
+            _operationLock.Wait();
+            try
+            {
+                DisposeCore();
+            }
+            finally
+            {
+                _operationLock.Release();
+            }
+
+            // SemaphoreSlim 不在这里 Dispose：调用 Dispose 前已经排队的操作仍需获得锁、
+            // 观察 disposed 状态并安全退出。它不持有非托管资源。
         }
 
         /// <summary>由派生类实现的额外的资源释放逻辑。基类实现为空。</summary>

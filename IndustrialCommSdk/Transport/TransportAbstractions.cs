@@ -5,6 +5,9 @@ using System.Threading.Tasks;
 
 namespace IndustrialCommSdk.Transport
 {
+    /// <summary>可等待的 TCP 数据接收回调，适合需要执行异步回复或持久化的订阅者。</summary>
+    public delegate Task TransportDataReceivedAsyncEventHandler(object sender, TransportDataReceivedEventArgs e);
+
     /// <summary>
     /// TCP 传输选项。提供用于配置 TCP 客户端连接行为的参数，包括主机地址、端口号以及各种超时设置。
     /// </summary>
@@ -88,6 +91,19 @@ namespace IndustrialCommSdk.Transport
     }
 
     /// <summary>
+    /// 支持不定长流式接收的传输客户端。独立于 <see cref="ITransportClient"/> 定义，
+    /// 避免现有自定义传输实现因新增能力而产生二进制兼容问题。
+    /// </summary>
+    public interface IStreamingTransportClient : ITransportClient
+    {
+        /// <summary>
+        /// 异步接收当前 TCP 流中的一批数据。该方法在至少收到一个字节后返回，
+        /// 返回长度不超过 <paramref name="maxLength"/>；TCP 不保证一次调用对应一个完整业务报文。
+        /// </summary>
+        Task<byte[]> ReceiveAsync(int maxLength, CancellationToken cancellationToken);
+    }
+
+    /// <summary>
     /// 传输服务器接口。定义 TCP 服务器的基本操作，包括启动、停止监听以及会话连接、关闭和数据接收事件。
     /// </summary>
     public interface ITransportServer : IDisposable
@@ -125,6 +141,13 @@ namespace IndustrialCommSdk.Transport
         /// <param name="cancellationToken">用于取消停止操作的取消令牌。</param>
         /// <returns>表示异步停止操作的任务。</returns>
         Task StopAsync(CancellationToken cancellationToken);
+    }
+
+    /// <summary>支持可等待异步数据回调的传输服务器。</summary>
+    public interface IAsyncTransportServer : ITransportServer
+    {
+        /// <summary>收到数据时触发；服务器会等待每个处理程序完成并隔离单个处理程序异常。</summary>
+        event TransportDataReceivedAsyncEventHandler DataReceivedAsync;
     }
 
     /// <summary>

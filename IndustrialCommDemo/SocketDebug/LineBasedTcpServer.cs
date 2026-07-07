@@ -20,6 +20,7 @@ namespace IndustrialCommDemo.SocketDebug
         /// 当前所有活跃会话的字典，以会话 GUID 为键，<see cref="ServerSession"/> 实例为值。
         /// </summary>
         private readonly ConcurrentDictionary<Guid, ServerSession> _sessions = new ConcurrentDictionary<Guid, ServerSession>();
+        private readonly ConcurrentDictionary<Guid, Task> _sessionTasks = new ConcurrentDictionary<Guid, Task>();
 
         /// <summary>
         /// 底层的 <see cref="TcpListener"/>，用于监听传入的 TCP 连接。
@@ -128,6 +129,14 @@ namespace IndustrialCommDemo.SocketDebug
             }
 
             _sessions.Clear();
+
+            var sessionTasks = new List<Task>(_sessionTasks.Values);
+            if (sessionTasks.Count > 0)
+            {
+                try { await Task.WhenAll(sessionTasks).ConfigureAwait(false); }
+                catch { }
+            }
+            _sessionTasks.Clear();
 
             if (_acceptLoopTask != null)
             {
@@ -242,8 +251,9 @@ namespace IndustrialCommDemo.SocketDebug
                 var session = new ServerSession(client);
                 if (_sessions.TryAdd(session.SessionId, session))
                 {
-                    ClientConnected?.Invoke(this, new SocketSessionEventArgs(session.SessionId, session.RemoteEndPoint, SessionCount));
-                    _ = Task.Run(() => RunSessionAsync(session, cancellationToken), cancellationToken);
+                    RaiseSafely(ClientConnected, new SocketSessionEventArgs(session.SessionId, session.RemoteEndPoint, SessionCount));
+                    var sessionTask = Task.Run(() => RunSessionAsync(session, cancellationToken), cancellationToken);
+                    _sessionTasks[session.SessionId] = sessionTask;
                 }
                 else
                 {
@@ -261,18 +271,32 @@ namespace IndustrialCommDemo.SocketDebug
         /// <returns>表示异步会话运行任务。</returns>
         private async Task RunSessionAsync(ServerSession session, CancellationToken cancellationToken)
         {
+            var remoteEndPoint = session.RemoteEndPoint;
             try
             {
                 await session.ReceiveLoopAsync(
-                    (currentSession, message) => MessageReceived?.Invoke(this, new SocketTextMessageEventArgs(currentSession.SessionId, currentSession.RemoteEndPoint, message)),
+                    (currentSession, message) => RaiseSafely(MessageReceived, new SocketTextMessageEventArgs(currentSession.SessionId, currentSession.RemoteEndPoint, message)),
                     cancellationToken).ConfigureAwait(false);
             }
             finally
             {
                 ServerSession removed;
                 _sessions.TryRemove(session.SessionId, out removed);
+                Task ignored;
+                _sessionTasks.TryRemove(session.SessionId, out ignored);
                 session.Dispose();
-                ClientDisconnected?.Invoke(this, new SocketSessionEventArgs(session.SessionId, session.RemoteEndPoint, SessionCount));
+                RaiseSafely(ClientDisconnected, new SocketSessionEventArgs(session.SessionId, remoteEndPoint, SessionCount));
+            }
+        }
+
+        private void RaiseSafely<TEventArgs>(EventHandler<TEventArgs> handlers, TEventArgs args)
+            where TEventArgs : EventArgs
+        {
+            if (handlers == null) return;
+            foreach (EventHandler<TEventArgs> handler in handlers.GetInvocationList())
+            {
+                try { handler(this, args); }
+                catch { /* 调试界面的单个订阅者失败不能终止 Socket 接收。 */ }
             }
         }
 
@@ -292,6 +316,8 @@ namespace IndustrialCommDemo.SocketDebug
         /// </summary>
         private sealed class ServerSession : IDisposable
         {
+            private const int UnframedMessageIdleMilliseconds = 100;
+            private const int MaxPendingBytes = 1024 * 1024;
             /// <summary>
             /// 底层 TCP 客户端实例。
             /// </summary>
@@ -311,6 +337,7 @@ namespace IndustrialCommDemo.SocketDebug
             /// 接收字节缓冲区，用于暂存尚未拼成完整行的数据。
             /// </summary>
             private readonly List<byte> _pendingBytes = new List<byte>();
+            private int _disposed;
 
             /// <summary>
             /// 初始化 <see cref="ServerSession"/> 类的新实例。
@@ -348,24 +375,42 @@ namespace IndustrialCommDemo.SocketDebug
             public async Task ReceiveLoopAsync(Action<ServerSession, string> onMessage, CancellationToken cancellationToken)
             {
                 var buffer = new byte[4096];
-                while (!cancellationToken.IsCancellationRequested)
+                try
                 {
-                    int read;
-                    try
+                    while (!cancellationToken.IsCancellationRequested)
                     {
-                        read = await _stream.ReadAsync(buffer, 0, buffer.Length, cancellationToken).ConfigureAwait(false);
-                    }
-                    catch
-                    {
-                        break;
-                    }
+                        Task<int> readTask;
+                        try
+                        {
+                            readTask = _stream.ReadAsync(buffer, 0, buffer.Length, cancellationToken);
+                            if (_pendingBytes.Count > 0)
+                            {
+                                var completed = await Task.WhenAny(
+                                    readTask,
+                                    Task.Delay(UnframedMessageIdleMilliseconds, cancellationToken)).ConfigureAwait(false);
+                                if (completed != readTask)
+                                {
+                                    DispatchPending(onMessage);
+                                }
+                            }
 
-                    if (read <= 0)
-                    {
-                        break;
-                    }
+                            var read = await readTask.ConfigureAwait(false);
+                            if (read <= 0)
+                            {
+                                break;
+                            }
 
-                    AppendAndDispatch(buffer, read, onMessage);
+                            AppendAndDispatch(buffer, read, onMessage);
+                        }
+                        catch
+                        {
+                            break;
+                        }
+                    }
+                }
+                finally
+                {
+                    DispatchPending(onMessage);
                 }
             }
 
@@ -378,11 +423,12 @@ namespace IndustrialCommDemo.SocketDebug
             /// <returns>表示异步发送操作的任务。</returns>
             public async Task SendAsync(byte[] payload, CancellationToken cancellationToken)
             {
+                if (Volatile.Read(ref _disposed) != 0) throw new ObjectDisposedException(nameof(ServerSession));
                 await _sendLock.WaitAsync(cancellationToken).ConfigureAwait(false);
                 try
                 {
+                    if (Volatile.Read(ref _disposed) != 0) throw new ObjectDisposedException(nameof(ServerSession));
                     await _stream.WriteAsync(payload, 0, payload.Length, cancellationToken).ConfigureAwait(false);
-                    await _stream.FlushAsync(cancellationToken).ConfigureAwait(false);
                 }
                 finally
                 {
@@ -396,6 +442,11 @@ namespace IndustrialCommDemo.SocketDebug
             /// </summary>
             public void Dispose()
             {
+                if (Interlocked.Exchange(ref _disposed, 1) != 0)
+                {
+                    return;
+                }
+
                 try
                 {
                     _stream.Dispose();
@@ -411,8 +462,7 @@ namespace IndustrialCommDemo.SocketDebug
                 catch
                 {
                 }
-
-                _sendLock.Dispose();
+                // 不释放发送锁，保证 Dispose 前已经排队的发送能够获得锁并安全检查释放状态。
             }
 
             /// <summary>
@@ -428,20 +478,37 @@ namespace IndustrialCommDemo.SocketDebug
                 for (var index = 0; index < count; index++)
                 {
                     _pendingBytes.Add(buffer[index]);
+                    if (_pendingBytes.Count >= MaxPendingBytes)
+                    {
+                        DispatchPending(onMessage);
+                    }
                 }
 
                 while (true)
                 {
-                    var lineEndIndex = FindLineEnding(_pendingBytes);
+                    int delimiterLength;
+                    var lineEndIndex = FindLineEnding(_pendingBytes, out delimiterLength);
                     if (lineEndIndex < 0)
                     {
                         return;
                     }
 
                     var lineBytes = _pendingBytes.GetRange(0, lineEndIndex).ToArray();
-                    _pendingBytes.RemoveRange(0, lineEndIndex + 2);
+                    _pendingBytes.RemoveRange(0, lineEndIndex + delimiterLength);
                     onMessage?.Invoke(this, Encoding.UTF8.GetString(lineBytes));
                 }
+            }
+
+            private void DispatchPending(Action<ServerSession, string> onMessage)
+            {
+                if (_pendingBytes.Count == 0)
+                {
+                    return;
+                }
+
+                var bytes = _pendingBytes.ToArray();
+                _pendingBytes.Clear();
+                onMessage?.Invoke(this, Encoding.UTF8.GetString(bytes));
             }
 
             /// <summary>
@@ -449,16 +516,26 @@ namespace IndustrialCommDemo.SocketDebug
             /// </summary>
             /// <param name="buffer">要搜索的字节列表。</param>
             /// <returns>找到的行结束符起始索引（'\r' 的位置）；如果未找到则返回 -1。</returns>
-            private static int FindLineEnding(List<byte> buffer)
+            private static int FindLineEnding(List<byte> buffer, out int delimiterLength)
             {
-                for (var index = 0; index < buffer.Count - 1; index++)
+                for (var index = 0; index < buffer.Count; index++)
                 {
-                    if (buffer[index] == '\r' && buffer[index + 1] == '\n')
+                    if (buffer[index] != '\n')
                     {
-                        return index;
+                        continue;
                     }
+
+                    delimiterLength = 1;
+                    if (index > 0 && buffer[index - 1] == '\r')
+                    {
+                        delimiterLength = 2;
+                        return index - 1;
+                    }
+
+                    return index;
                 }
 
+                delimiterLength = 0;
                 return -1;
             }
         }

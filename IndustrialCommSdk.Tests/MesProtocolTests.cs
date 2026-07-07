@@ -85,6 +85,7 @@ namespace IndustrialCommSdk.Tests
 
             using (var client = new MesTcpClient(Options(port)))
             {
+                client.FaCheckReceived += (s, e) => throw new InvalidOperationException("subscriber failure");
                 client.FaCheckReceived += (s, e) => checkReceived.TrySetResult(e.Message);
                 client.FaNumReceived += (s, e) => numReceived.TrySetResult(e.Message);
                 await client.ConnectAsync(CancellationToken.None);
@@ -97,6 +98,19 @@ namespace IndustrialCommSdk.Tests
             listener.Stop();
             StringAssert.StartsWith("START D01,Machine,D.IP,D:MAC,", online);
             Assert.That(MesProtocolCodec.ReadType(track), Is.EqualTo("FATRACK"));
+        }
+
+        [Test]
+        public void Client_Does_Not_Start_When_Connect_Is_Already_Canceled()
+        {
+            using (var cancellation = new CancellationTokenSource())
+            using (var client = new MesTcpClient(Options(1)))
+            {
+                cancellation.Cancel();
+                Assert.ThrowsAsync<OperationCanceledException>(async () =>
+                    await client.ConnectAsync(cancellation.Token));
+                Assert.That(client.State, Is.EqualTo(MesConnectionState.Disconnected));
+            }
         }
 
         [Test]
