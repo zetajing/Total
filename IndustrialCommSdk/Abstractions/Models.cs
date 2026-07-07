@@ -14,8 +14,8 @@ namespace IndustrialCommSdk.Abstractions
         /// <param name="timeout">本次操作的可选超时时间；为空时使用客户端默认值。</param>
         public ReadRequest(string deviceId, string address, DataType dataType, ushort length = 1, TimeSpan? timeout = null)
         {
-            if (string.IsNullOrWhiteSpace(deviceId)) throw new ArgumentNullException(nameof(deviceId));
-            if (string.IsNullOrWhiteSpace(address)) throw new ArgumentNullException(nameof(address));
+            if (string.IsNullOrWhiteSpace(deviceId)) throw new ArgumentException("Device ID cannot be null or empty.", nameof(deviceId));
+            if (string.IsNullOrWhiteSpace(address)) throw new ArgumentException("Address cannot be null or empty.", nameof(address));
             if (timeout.HasValue && timeout.Value <= TimeSpan.Zero) throw new ArgumentOutOfRangeException(nameof(timeout));
 
             DeviceId = deviceId;
@@ -49,8 +49,8 @@ namespace IndustrialCommSdk.Abstractions
         /// <param name="timeout">本次操作的可选超时时间；为空时使用客户端默认值。</param>
         public WriteRequest(string deviceId, string address, DataType dataType, object value, ushort length = 1, TimeSpan? timeout = null)
         {
-            if (string.IsNullOrWhiteSpace(deviceId)) throw new ArgumentNullException(nameof(deviceId));
-            if (string.IsNullOrWhiteSpace(address)) throw new ArgumentNullException(nameof(address));
+            if (string.IsNullOrWhiteSpace(deviceId)) throw new ArgumentException("Device ID cannot be null or empty.", nameof(deviceId));
+            if (string.IsNullOrWhiteSpace(address)) throw new ArgumentException("Address cannot be null or empty.", nameof(address));
             if (value == null) throw new ArgumentNullException(nameof(value));
             if (timeout.HasValue && timeout.Value <= TimeSpan.Zero) throw new ArgumentOutOfRangeException(nameof(timeout));
 
@@ -87,8 +87,8 @@ namespace IndustrialCommSdk.Abstractions
         /// <param name="reportOnChangeOnly">是否仅在读取结果变化时上报事件。</param>
         public SubscriptionRequest(string subscriptionKey, string deviceId, IReadOnlyCollection<ReadRequest> items, TimeSpan interval, bool reportOnChangeOnly)
         {
-            if (string.IsNullOrWhiteSpace(subscriptionKey)) throw new ArgumentNullException(nameof(subscriptionKey));
-            if (string.IsNullOrWhiteSpace(deviceId)) throw new ArgumentNullException(nameof(deviceId));
+            if (string.IsNullOrWhiteSpace(subscriptionKey)) throw new ArgumentException("Subscription key cannot be null or empty.", nameof(subscriptionKey));
+            if (string.IsNullOrWhiteSpace(deviceId)) throw new ArgumentException("Device ID cannot be null or empty.", nameof(deviceId));
             if (items == null) throw new ArgumentNullException(nameof(items));
             if (interval <= TimeSpan.Zero) throw new ArgumentOutOfRangeException(nameof(interval));
 

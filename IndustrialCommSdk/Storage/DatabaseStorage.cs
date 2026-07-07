@@ -54,7 +54,7 @@ namespace IndustrialCommSdk.Storage
         /// </summary>
         public static IndustrialDataRecord FromDataValue(ProtocolKind protocol, string deviceId, DataValue value)
         {
-            if (string.IsNullOrWhiteSpace(deviceId)) throw new ArgumentNullException(nameof(deviceId));
+            if (string.IsNullOrWhiteSpace(deviceId)) throw new ArgumentException("Device ID cannot be null or empty.", nameof(deviceId));
             if (value == null) throw new ArgumentNullException(nameof(value));
 
             return new IndustrialDataRecord
@@ -70,6 +70,15 @@ namespace IndustrialCommSdk.Storage
                 Timestamp = value.Timestamp,
                 ErrorMessage = value.ErrorMessage,
             };
+        }
+
+        /// <summary>
+        /// 将任意值对象转换为适合显示或存储的字符串。
+        /// 这是 SDK 提供的统一格式化入口，供外部调用（例如 Demo 的 FormatHelper）。
+        /// </summary>
+        public static string FormatValueStatic(object value)
+        {
+            return FormatValue(value);
         }
 
         private static string FormatValue(object value)

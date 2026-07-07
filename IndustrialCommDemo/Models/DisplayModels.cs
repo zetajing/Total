@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using IndustrialCommSdk.Abstractions;
 using IndustrialCommSdk.Storage;
+using IndustrialCommDemo.Helpers;
 
 namespace IndustrialCommDemo
 {
@@ -38,21 +39,10 @@ namespace IndustrialCommDemo
                 Address = record.Address,
                 DataType = record.DataType.ToString(),
                 ValueText = record.ValueText ?? string.Empty,
-                Quality = FormatQuality(record.Quality),
+                Quality = FormatHelper.FormatQualityLabel(record.Quality),
                 Timestamp = record.Timestamp.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss.fff", CultureInfo.InvariantCulture),
                 ErrorMessage = record.ErrorMessage ?? string.Empty,
             };
-        }
-
-        private static string FormatQuality(QualityStatus quality)
-        {
-            switch (quality)
-            {
-                case QualityStatus.Good: return "正常 (Good)";
-                case QualityStatus.Bad: return "失败 (Bad)";
-                case QualityStatus.Stale: return "过期 (Stale)";
-                default: return "未知 (Unknown)";
-            }
         }
     }
 

@@ -11,7 +11,7 @@ namespace IndustrialCommSdk.Protocols.Common
     /// 寄存器值编解码器。提供静态方法，用于在不同数据类型与 Modbus 寄存器值之间进行双向转换，
     /// 包括字节与寄存器的互转、数据值的编码与解码、位打包以及字节序转换等操作。
     /// </summary>
-    internal static class RegisterValueCodec
+    public static class RegisterValueCodec
     {
         /// <summary>
         /// 获取指定数据类型在 Modbus 寄存器中所需要的长度（以 16 位寄存器为单位）。
@@ -26,6 +26,8 @@ namespace IndustrialCommSdk.Protocols.Common
             switch (dataType)
             {
                 case DataType.Bool:
+                case DataType.Byte:
+                case DataType.Char:
                 case DataType.Int16:
                 case DataType.UInt16:
                     return 1;
