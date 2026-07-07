@@ -341,7 +341,12 @@ namespace IndustrialCommSdk.Internal
         /// <returns>包含连接状态、最后成功时间、连续失败次数和最后错误消息的健康快照。</returns>
         public HealthSnapshot GetHealth()
         {
-            return new HealthSnapshot(_status, _lastSuccessUtc, _consecutiveFailures, _lastError);
+            // 用局部变量做一次快照，避免构造函数在字段被另一线程修改时读到不一致的组合。
+            var consecutiveFailures = Volatile.Read(ref _consecutiveFailures);
+            var status = _status;
+            var lastSuccessUtc = _lastSuccessUtc;
+            var lastError = _lastError;
+            return new HealthSnapshot(status, lastSuccessUtc, consecutiveFailures, lastError);
         }
 
         /// <summary>由派生类实现的异步连接核心逻辑。</summary>

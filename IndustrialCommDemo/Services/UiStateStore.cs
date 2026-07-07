@@ -13,7 +13,7 @@ namespace IndustrialCommDemo.Services
     /// 以及从磁盘加载反序列化为对象。使用 <see cref="DataContractJsonSerializer"/> 进行序列化。
     /// 数据文件存储在 StoragePathProvider.StateRoot 目录下的 "ui-state.json"。
     /// </summary>
-    internal sealed class UiStateStore
+    public sealed class UiStateStore
     {
         /// <summary>
         /// <see cref="DataContractJsonSerializer"/> 静态实例，用于序列化和反序列化 <see cref="DemoUiState"/>。
@@ -112,7 +112,7 @@ namespace IndustrialCommDemo.Services
     /// 使用 <see cref="DataContractAttribute"/> 标记，支持 JSON 序列化。
     /// </summary>
     [DataContract]
-    internal sealed class DemoUiState
+    public sealed class DemoUiState
     {
         /// <summary>
         /// 获取或设置 Modbus 协议的 UI 状态。
@@ -148,7 +148,7 @@ namespace IndustrialCommDemo.Services
 
     /// <summary>MES 联调页保存的非敏感连接和报工输入。</summary>
     [DataContract]
-    internal sealed class MesUiState
+    public sealed class MesUiState
     {
         [DataMember(Order = 1)] public string Host { get; set; }
         [DataMember(Order = 2)] public string Port { get; set; }
@@ -171,7 +171,7 @@ namespace IndustrialCommDemo.Services
     /// </para>
     /// </summary>
     [DataContract]
-    internal sealed class DatabaseUiState
+    public sealed class DatabaseUiState
     {
         /// <summary>
         /// 获取或设置连接字符串。Demo 默认使用 Windows 身份验证；不要在此处保存 SQL 登录密码。
@@ -199,7 +199,7 @@ namespace IndustrialCommDemo.Services
     /// 轮询间隔及最近使用地址列表等属性。
     /// </summary>
     [DataContract]
-    internal sealed class ModbusUiState
+    public sealed class ModbusUiState
     {
         /// <summary>
         /// 获取或设置设备标识。
@@ -303,7 +303,7 @@ namespace IndustrialCommDemo.Services
     /// 回声模式开关以及服务端/客户端消息内容。
     /// </summary>
     [DataContract]
-    internal sealed class SocketUiState
+    public sealed class SocketUiState
     {
         /// <summary>
         /// 获取或设置 Socket 服务端的监听 IP 地址。
@@ -353,7 +353,7 @@ namespace IndustrialCommDemo.Services
     /// 插槽或长度、地址、长度、写值及最近使用地址列表等属性。
     /// </summary>
     [DataContract]
-    internal sealed class ProtocolUiState
+    public sealed class ProtocolUiState
     {
         /// <summary>
         /// 获取或设置设备标识。

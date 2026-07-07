@@ -1,0 +1,116 @@
+<UserControl x:Class="IndustrialCommDemo.Views.NetworkSettingsTab"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <Grid Margin="14" HorizontalAlignment="Stretch">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="0.9*" />
+                <ColumnDefinition Width="1.1*" />
+            </Grid.ColumnDefinitions>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <Border Grid.Row="0" Grid.Column="0" Padding="18" CornerRadius="14" Background="#F8FAFC" BorderBrush="#D8E2EE" BorderThickness="1">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="105" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+
+                    <TextBlock Grid.Row="0" VerticalAlignment="Center" Text="网卡" />
+                    <Grid Grid.Row="0" Grid.Column="1">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="100"/></Grid.ColumnDefinitions>
+                        <ComboBox x:Name="NetworkAdapterComboBox"
+                                  Margin="0,5,8,5"
+                                  DisplayMemberPath="DisplayName"
+                                  SelectionChanged="NetworkAdapterComboBox_SelectionChanged" />
+                        <Button x:Name="RefreshNetworkAdaptersButton"
+                                Grid.Column="1"
+                                Margin="0,5"
+                                Padding="8"
+                                Click="RefreshNetworkAdaptersButton_Click"
+                                Content="刷新" />
+                    </Grid>
+
+                    <TextBlock Grid.Row="1" VerticalAlignment="Center" Text="网卡描述" />
+                    <TextBlock x:Name="NetworkAdapterDescriptionTextBlock" Grid.Row="1" Grid.Column="1" Margin="0,8" TextWrapping="Wrap" Text="--" />
+                    <TextBlock Grid.Row="2" VerticalAlignment="Center" Text="MAC 地址" />
+                    <TextBlock x:Name="NetworkAdapterMacTextBlock" Grid.Row="2" Grid.Column="1" Margin="0,8" Text="--" />
+                    <TextBlock Grid.Row="3" VerticalAlignment="Center" Text="当前模式" />
+                    <TextBlock x:Name="NetworkAdapterModeTextBlock" Grid.Row="3" Grid.Column="1" Margin="0,8" FontWeight="SemiBold" Text="--" />
+                    <TextBlock Grid.Row="4" VerticalAlignment="Center" Text="状态" />
+                    <TextBlock x:Name="NetworkSettingsStatusTextBlock" Grid.Row="4" Grid.Column="1" Margin="0,8" Foreground="#475569" Text="等待读取..." />
+                </Grid>
+            </Border>
+
+            <Border Grid.Row="0" Grid.Column="1" Margin="14,0,0,0" Padding="18" CornerRadius="14" Background="White" BorderBrush="#D8E2EE" BorderThickness="1">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="105" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+
+                    <TextBlock Grid.ColumnSpan="2" Margin="0,0,0,10" FontSize="17" FontWeight="SemiBold" Foreground="#17324D" Text="IPv4 静态配置" />
+                    <TextBlock Grid.Row="1" VerticalAlignment="Center" Text="IP 地址" />
+                    <TextBox x:Name="NetworkIpAddressTextBox" Grid.Row="1" Grid.Column="1" Margin="0,5" />
+                    <TextBlock Grid.Row="2" VerticalAlignment="Center" Text="子网掩码" />
+                    <TextBox x:Name="NetworkSubnetMaskTextBox" Grid.Row="2" Grid.Column="1" Margin="0,5" />
+                    <TextBlock Grid.Row="3" VerticalAlignment="Center" Text="默认网关" />
+                    <TextBox x:Name="NetworkGatewayTextBox" Grid.Row="3" Grid.Column="1" Margin="0,5" />
+                    <TextBlock Grid.Row="4" VerticalAlignment="Center" Text="DNS" />
+                    <TextBox x:Name="NetworkDnsTextBox" Grid.Row="4" Grid.Column="1" Margin="0,5" ToolTip="多个 DNS 使用逗号分隔" />
+                </Grid>
+            </Border>
+
+            <Border Grid.Row="1" Grid.ColumnSpan="2" Margin="0,14,0,0" Padding="16" CornerRadius="12" Background="#FFF7ED" BorderBrush="#FED7AA" BorderThickness="1">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                <StackPanel Grid.Column="0" Orientation="Horizontal">
+                    <Button x:Name="ApplyStaticNetworkButton"
+                            Width="150"
+                            Padding="12,8"
+                            Background="#2563EB"
+                            Foreground="White"
+                            BorderThickness="0"
+                            Click="ApplyStaticNetworkButton_Click"
+                            Content="应用静态 IP" />
+                    <Button x:Name="EnableDhcpButton"
+                            Width="150"
+                            Margin="12,0,0,0"
+                            Padding="12,8"
+                            Background="#334155"
+                            Foreground="White"
+                            BorderThickness="0"
+                            Click="EnableDhcpButton_Click"
+                            Content="恢复 DHCP" />
+                </StackPanel>
+                <TextBlock Grid.Column="1"
+                           Margin="20,0,0,0"
+                           VerticalAlignment="Center"
+                           Foreground="#9A3412"
+                           TextWrapping="Wrap"
+                           Text="修改网络配置需要管理员权限，并可能立即中断当前连接。请确认 IP、掩码和网关属于同一网络后再应用。" />
+                </Grid>
+            </Border>
+        </Grid>
+    </ScrollViewer>
+</UserControl>

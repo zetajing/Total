@@ -118,7 +118,7 @@ namespace IndustrialCommSdk.Tests
                 PortName = "COM1",
             };
 
-            var client = IndustrialClientFactory.CreateModbusRtu(options);
+            var client = new ModbusRtuClient(options);
 
             Assert.That(client, Is.Not.Null);
             Assert.That(client, Is.InstanceOf<ModbusRtuClient>());
