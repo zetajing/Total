@@ -111,7 +111,21 @@ namespace IndustrialCommDemo.Services
             }
 
             _disposed = true;
-            FlushUiQueue();
+            try
+            {
+                if (!_dispatcher.CheckAccess())
+                {
+                    _dispatcher.Invoke(new Action(FlushUiQueue));
+                }
+                else
+                {
+                    FlushUiQueue();
+                }
+            }
+            catch
+            {
+                // 窗口可能已关闭，忽略 Dispatcher 异常
+            }
         }
 
         /// <summary>
@@ -156,7 +170,14 @@ namespace IndustrialCommDemo.Services
                 try
                 {
                     await Task.Delay(UiFlushDelayMilliseconds).ConfigureAwait(false);
-                    _ = _dispatcher.BeginInvoke(new Action(FlushUiQueue));
+                    if (!_disposed)
+                    {
+                        _ = _dispatcher.BeginInvoke(new Action(FlushUiQueue));
+                    }
+                    else
+                    {
+                        Interlocked.Exchange(ref _flushScheduled, 0);
+                    }
                 }
                 catch
                 {
@@ -173,6 +194,12 @@ namespace IndustrialCommDemo.Services
         /// </summary>
         private void FlushUiQueue()
         {
+            if (_disposed)
+            {
+                Interlocked.Exchange(ref _flushScheduled, 0);
+                return;
+            }
+
             var batch = new List<string>();
             string line;
             while (_pendingUiMessages.TryDequeue(out line))

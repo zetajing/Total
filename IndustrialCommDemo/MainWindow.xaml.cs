@@ -227,14 +227,14 @@ namespace IndustrialCommDemo
 
         private void ModbusRtuClient_FrameTraced(object sender, ModbusRtuFrameEventArgs e)
         {
-            Dispatcher.BeginInvoke(new Action(() =>
+            RunOnUi(() =>
             {
                 var text = e.Hex + (e.CrcValid ? "  [CRC OK]" : "  [CRC 错误]");
                 if (e.Direction == ModbusRtuFrameDirection.Transmit)
                     ModbusRtuTxTextBox.Text = text;
                 else
                     ModbusRtuRxTextBox.Text = text;
-            }));
+            });
         }
 
         private async void ModbusRtuRawSendButton_Click(object sender, RoutedEventArgs e)
@@ -1344,6 +1344,7 @@ namespace IndustrialCommDemo
             }
 
             _closeCleanupStarted = true;
+            IsEnabled = false;
             try
             {
                 SaveUiState();
@@ -1365,7 +1366,7 @@ namespace IndustrialCommDemo
                 try { _logger.Dispose(); } catch { }
                 try { _sdkLogger.Dispose(); } catch { }
                 _closeCleanupCompleted = true;
-                Close();
+                _ = Dispatcher.BeginInvoke(new Action(() => Close()));
             }
         }
 
@@ -1530,6 +1531,11 @@ namespace IndustrialCommDemo
                 _modbusSubscriptionId = null;
             }
 
+            if (client is ModbusRtuClient rtuClient)
+            {
+                rtuClient.FrameTraced -= ModbusRtuClient_FrameTraced;
+            }
+
             try
             {
                 await client.DisconnectAsync(CancellationToken.None);
@@ -1599,6 +1605,10 @@ namespace IndustrialCommDemo
             var server = _socketServer;
             _socketServer = null;
 
+            server.ClientConnected -= SocketServer_ClientConnected;
+            server.ClientDisconnected -= SocketServer_ClientDisconnected;
+            server.MessageReceived -= SocketServer_MessageReceived;
+
             try
             {
                 await server.StopAsync(CancellationToken.None);
@@ -1607,9 +1617,6 @@ namespace IndustrialCommDemo
             {
             }
 
-            server.ClientConnected -= SocketServer_ClientConnected;
-            server.ClientDisconnected -= SocketServer_ClientDisconnected;
-            server.MessageReceived -= SocketServer_MessageReceived;
             server.Dispose();
 
             UpdateSocketServerStatus();
@@ -3027,7 +3034,7 @@ namespace IndustrialCommDemo
             _logger.Error(summary, exception);
             SetHeaderStatus(summary, Brushes.OrangeRed);
 
-            if (showDialog)
+            if (showDialog && !_closeCleanupStarted)
             {
                 MessageBox.Show(this, exception.Message, summary, MessageBoxButton.OK, MessageBoxImage.Warning);
             }
@@ -3041,6 +3048,11 @@ namespace IndustrialCommDemo
 
         private void RunOnUi(Action action)
         {
+            if (_closeCleanupStarted)
+            {
+                return;
+            }
+
             if (Dispatcher.CheckAccess())
             {
                 action();
