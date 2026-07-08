@@ -28,7 +28,7 @@
                          TextWrapping="NoWrap" />
             </GroupBox>
 
-            <GroupBox Grid.Row="2" Header="points.json">
+            <GroupBox x:Name="PointConfigGroupBox" Grid.Row="2" Header="points/*.json">
                 <TextBox x:Name="PointJsonTextBox"
                          AcceptsReturn="True"
                          AcceptsTab="True"
@@ -61,7 +61,12 @@
 
                     <TextBlock Grid.ColumnSpan="2" Margin="0,0,0,10" FontSize="17" FontWeight="SemiBold" Foreground="#17324D" Text="JSON 快速部署示例" />
                     <TextBlock Grid.Row="1" VerticalAlignment="Center" Text="设备名" />
-                    <TextBox x:Name="DeviceNameTextBox" Grid.Row="1" Grid.Column="1" Margin="0,4" Text="plc1" />
+                    <TextBox x:Name="DeviceNameTextBox"
+                             Grid.Row="1"
+                             Grid.Column="1"
+                             Margin="0,4"
+                             Text="plc1"
+                             LostKeyboardFocus="DeviceNameTextBox_LostKeyboardFocus" />
                     <StackPanel Grid.Row="2" Grid.ColumnSpan="2" Margin="0,12,0,0" Orientation="Horizontal">
                         <Button Width="110" Click="ReloadConfigButton_Click" Content="重新加载" />
                         <Button Width="110" Margin="10,0,0,0" Click="SaveConfigButton_Click" Content="保存配置" />

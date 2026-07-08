@@ -51,14 +51,31 @@ namespace IndustrialCommSdk
             return LoadCsv(filePath);
         }
 
+        public static TagTable LoadForDevice(string configFilePath, string deviceName)
+        {
+            if (string.IsNullOrWhiteSpace(configFilePath)) throw new ArgumentException("Config file path cannot be null or empty.", nameof(configFilePath));
+
+            var fullConfigPath = Path.GetFullPath(configFilePath);
+            var config = IndustrialSdkConfig.Load(fullConfigPath);
+            var device = config.FindDevice(deviceName);
+            return Load(device.ResolvePointsFile(Path.GetDirectoryName(fullConfigPath)));
+        }
+
         public static TagTable LoadJson(string filePath)
         {
             if (string.IsNullOrWhiteSpace(filePath)) throw new ArgumentException("Tag table file path cannot be null or empty.", nameof(filePath));
 
-            using (var stream = File.OpenRead(filePath))
+            try
             {
-                var dto = (TagTableDto)new DataContractJsonSerializer(typeof(TagTableDto)).ReadObject(stream);
-                return FromDto(dto);
+                using (var stream = File.OpenRead(filePath))
+                {
+                    var dto = (TagTableDto)new DataContractJsonSerializer(typeof(TagTableDto)).ReadObject(stream);
+                    return FromDto(dto);
+                }
+            }
+            catch (SerializationException ex)
+            {
+                throw new FormatException(BuildJsonFormatMessage(filePath), ex);
             }
         }
 
@@ -66,10 +83,17 @@ namespace IndustrialCommSdk
         {
             if (string.IsNullOrWhiteSpace(json)) throw new ArgumentException("Tag table JSON cannot be null or empty.", nameof(json));
 
-            using (var stream = new MemoryStream(Encoding.UTF8.GetBytes(json)))
+            try
             {
-                var dto = (TagTableDto)new DataContractJsonSerializer(typeof(TagTableDto)).ReadObject(stream);
-                return FromDto(dto);
+                using (var stream = new MemoryStream(Encoding.UTF8.GetBytes(json)))
+                {
+                    var dto = (TagTableDto)new DataContractJsonSerializer(typeof(TagTableDto)).ReadObject(stream);
+                    return FromDto(dto);
+                }
+            }
+            catch (SerializationException ex)
+            {
+                throw new FormatException(BuildJsonFormatMessage("points JSON"), ex);
             }
         }
 
@@ -325,6 +349,13 @@ namespace IndustrialCommSdk
             }
 
             return rows;
+        }
+
+        private static string BuildJsonFormatMessage(string source)
+        {
+            return string.Format(
+                "{0} 格式错误。请检查 tags 数组中每个点位对象之间是否有英文逗号，并且最后一个点位对象后面不要带尾逗号。",
+                source);
         }
 
         [DataContract]

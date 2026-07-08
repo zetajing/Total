@@ -1,0 +1,9 @@
+{
+  "tags": [
+    { "name": "Speed", "address": "D100", "type": "Int16" },
+    { "name": "Running", "address": "M10", "type": "Bool" },
+    { "name": "Title", "address": "D200", "type": "String", "length": 12 },
+    { "name": "Run", "address": "M100", "type": "Bool" },
+    { "name": "Y7", "address": "Y7", "type": "Bool" }
+  ]
+}

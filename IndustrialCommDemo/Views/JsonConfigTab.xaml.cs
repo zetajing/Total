@@ -27,7 +27,6 @@ namespace IndustrialCommDemo.Views
         {
             _ctx = ctx ?? throw new ArgumentNullException(nameof(ctx));
             _deviceConfigPath = ResolveConfigPath("devices.json");
-            _pointConfigPath = ResolveConfigPath("points.json");
             LoadConfigFiles();
         }
 
@@ -48,6 +47,19 @@ namespace IndustrialCommDemo.Views
             {
                 SetStatus("保存配置失败：" + ex.Message, Brushes.IndianRed);
                 _ctx.HandleError("保存 JSON 配置失败。", ex, true);
+            }
+        }
+
+        private void DeviceNameTextBox_LostKeyboardFocus(object sender, System.Windows.Input.KeyboardFocusChangedEventArgs e)
+        {
+            try
+            {
+                LoadSelectedPointConfig();
+                SetStatus("已切换点位表：" + _pointConfigPath, Brushes.ForestGreen);
+            }
+            catch (Exception ex)
+            {
+                SetStatus("切换设备失败：" + ex.Message, Brushes.IndianRed);
             }
         }
 
@@ -104,20 +116,29 @@ namespace IndustrialCommDemo.Views
 
         private IIndustrialClient CreateClientFromJson()
         {
-            SaveConfigFiles();
+            SaveDeviceConfig();
             return IndustrialClientFactory.FromConfig(_deviceConfigPath, DeviceNameTextBox.Text, _ctx.SdkLogger);
         }
 
         private void SaveConfigFiles()
         {
+            SaveDeviceConfig();
+            _pointConfigPath = ResolveSelectedPointConfigPath();
+            Directory.CreateDirectory(Path.GetDirectoryName(_pointConfigPath));
+            File.WriteAllText(_pointConfigPath, PointJsonTextBox.Text);
+            PointConfigGroupBox.Header = GetPointConfigDisplayName(_pointConfigPath);
+        }
+
+        private void SaveDeviceConfig()
+        {
             Directory.CreateDirectory(Path.GetDirectoryName(_deviceConfigPath));
             File.WriteAllText(_deviceConfigPath, DeviceJsonTextBox.Text);
-            File.WriteAllText(_pointConfigPath, PointJsonTextBox.Text);
         }
 
         private TagTable LoadPointTable()
         {
-            return TagTable.Load(_pointConfigPath);
+            LoadSelectedPointConfig();
+            return TagTable.LoadForDevice(_deviceConfigPath, DeviceNameTextBox.Text);
         }
 
         private async Task RunAsync(string actionName, Func<Task> action)
@@ -158,9 +179,8 @@ namespace IndustrialCommDemo.Views
             try
             {
                 EnsureConfigFileExists(_deviceConfigPath, "devices.json");
-                EnsureConfigFileExists(_pointConfigPath, "points.json");
                 DeviceJsonTextBox.Text = File.ReadAllText(_deviceConfigPath);
-                PointJsonTextBox.Text = File.ReadAllText(_pointConfigPath);
+                LoadSelectedPointConfig(true, false);
                 _rows.Clear();
                 SetStatus("已读取配置：" + _deviceConfigPath, Brushes.ForestGreen);
             }
@@ -174,6 +194,50 @@ namespace IndustrialCommDemo.Views
         private static string ResolveConfigPath(string fileName)
         {
             return Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Config", fileName);
+        }
+
+        private string ResolveSelectedPointConfigPath()
+        {
+            var config = IndustrialSdkConfig.FromJson(DeviceJsonTextBox.Text);
+            var device = config.FindDevice(DeviceNameTextBox.Text);
+            return device.ResolvePointsFile(Path.GetDirectoryName(_deviceConfigPath));
+        }
+
+        private void LoadSelectedPointConfig(bool forceReload = false, bool saveCurrent = true)
+        {
+            var selectedPath = ResolveSelectedPointConfigPath();
+            if (!forceReload && string.Equals(selectedPath, _pointConfigPath, StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
+            if (saveCurrent && !string.IsNullOrWhiteSpace(_pointConfigPath) && File.Exists(_pointConfigPath))
+            {
+                File.WriteAllText(_pointConfigPath, PointJsonTextBox.Text);
+            }
+
+            if (!File.Exists(selectedPath))
+            {
+                throw new FileNotFoundException("设备点位配置文件不存在，请按模板创建。", selectedPath);
+            }
+
+            _pointConfigPath = selectedPath;
+            PointJsonTextBox.Text = File.ReadAllText(_pointConfigPath);
+            PointConfigGroupBox.Header = GetPointConfigDisplayName(_pointConfigPath);
+        }
+
+        private string GetPointConfigDisplayName(string path)
+        {
+            var configDirectory = Path.GetDirectoryName(_deviceConfigPath);
+            var baseUri = new Uri(AppendDirectorySeparator(configDirectory));
+            return Uri.UnescapeDataString(baseUri.MakeRelativeUri(new Uri(path)).ToString()).Replace('/', Path.DirectorySeparatorChar);
+        }
+
+        private static string AppendDirectorySeparator(string path)
+        {
+            return path.EndsWith(Path.DirectorySeparatorChar.ToString(), StringComparison.Ordinal)
+                ? path
+                : path + Path.DirectorySeparatorChar;
         }
 
         private static void EnsureConfigFileExists(string targetPath, string fileName)

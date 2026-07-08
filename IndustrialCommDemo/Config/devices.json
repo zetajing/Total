@@ -6,7 +6,17 @@
       "host": "127.0.0.1",
       "port": 502,
       "slaveId": 1,
-      "deviceProfile": "inovance-easyplc"
+      "deviceProfile": "inovance-easyplc",
+      "pointsFile": "points/plc1.json"
+    },
+    {
+      "name": "s7plc",
+      "protocol": "siemens-s7",
+      "host": "192.168.1.20",
+      "cpuType": "S71200",
+      "rack": 0,
+      "slot": 1,
+      "pointsFile": "points/s7plc.json"
     }
   ]
 }

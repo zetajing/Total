@@ -3,6 +3,7 @@ using IndustrialCommSdk.Protocols.Mc;
 using IndustrialCommSdk.Protocols.Modbus;
 using IndustrialCommSdk.Protocols.S7;
 using NUnit.Framework;
+using System.IO;
 
 namespace IndustrialCommSdk.Tests
 {
@@ -87,6 +88,26 @@ namespace IndustrialCommSdk.Tests
             var config = IndustrialSdkConfig.FromJson(@"{ ""devices"": [] }");
 
             Assert.Throws<System.Collections.Generic.KeyNotFoundException>(() => IndustrialClientFactory.FromConfig(config, "missing"));
+        }
+
+        [Test]
+        public void DeviceConfig_Should_Resolve_Relative_PointsFile()
+        {
+            var config = IndustrialSdkConfig.FromJson(@"
+{
+  ""devices"": [
+    {
+      ""name"": ""s7plc"",
+      ""protocol"": ""siemens-s7"",
+      ""host"": ""192.168.1.20"",
+      ""pointsFile"": ""points/s7plc.json""
+    }
+  ]
+}");
+
+            var path = config.FindDevice("s7plc").ResolvePointsFile(Path.Combine("C:\\", "Config"));
+
+            Assert.That(path, Is.EqualTo(Path.GetFullPath(Path.Combine("C:\\", "Config", "points", "s7plc.json"))));
         }
 
         [Test]

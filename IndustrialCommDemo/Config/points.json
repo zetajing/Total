@@ -1,7 +1,0 @@
-{
-  "tags": [
-    { "name": "Speed", "address": "D100", "type": "Int16" },
-    { "name": "Running", "address": "M10", "type": "Bool" },
-    { "name": "Title", "address": "D200", "type": "String", "length": 12 }
-  ]
-}

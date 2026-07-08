@@ -131,6 +131,9 @@ namespace IndustrialCommSdk
         [DataMember(Name = "deviceProfile")]
         public string DeviceProfile { get; set; }
 
+        [DataMember(Name = "pointsFile")]
+        public string PointsFile { get; set; }
+
         [DataMember(Name = "cpuType")]
         public string CpuType { get; set; }
 
@@ -139,5 +142,25 @@ namespace IndustrialCommSdk
 
         [DataMember(Name = "slot")]
         public short? Slot { get; set; }
+
+        public string ResolvePointsFile(string configDirectory)
+        {
+            if (string.IsNullOrWhiteSpace(PointsFile))
+            {
+                throw new InvalidOperationException(string.Format("Device '{0}' does not define pointsFile.", Name));
+            }
+
+            if (Path.IsPathRooted(PointsFile))
+            {
+                return Path.GetFullPath(PointsFile);
+            }
+
+            if (string.IsNullOrWhiteSpace(configDirectory))
+            {
+                throw new ArgumentException("Config directory cannot be null or empty.", nameof(configDirectory));
+            }
+
+            return Path.GetFullPath(Path.Combine(configDirectory, PointsFile));
+        }
     }
 }

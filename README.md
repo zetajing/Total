@@ -132,7 +132,17 @@ await client.WriteManyAsync(
       "host": "192.168.1.10",
       "port": 502,
       "slaveId": 1,
-      "deviceProfile": "generic"
+      "deviceProfile": "inovance-easyplc",
+      "pointsFile": "points/plc1.json"
+    },
+    {
+      "name": "s7plc",
+      "protocol": "siemens-s7",
+      "host": "192.168.1.20",
+      "cpuType": "S71200",
+      "rack": 0,
+      "slot": 1,
+      "pointsFile": "points/s7plc.json"
     }
   ]
 }
@@ -144,7 +154,7 @@ await client.WriteManyAsync(
 var plc = IndustrialClientFactory.FromConfig("devices.json", "plc1");
 ```
 
-点位表也可以放 JSON，例如 `points.json`：
+每台设备绑定自己的点位表。例如 `points/plc1.json`：
 
 ```json
 {
@@ -168,9 +178,11 @@ Title,D200,String,12
 加载后直接批量读取：
 
 ```csharp
-var tags = TagTable.Load("points.json");
+var tags = TagTable.LoadForDevice("devices.json", "plc1");
 var values = await plc.ReadManyAsync(tags.Tags);
 ```
+
+新增设备时，复制一段设备配置并新建对应的点位 JSON；软件启动后会按 `pointsFile` 自动加载。
 
 上线前可以先做连接诊断：
 

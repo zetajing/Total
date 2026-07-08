@@ -1,0 +1,8 @@
+{
+  "tags": [
+    { "name": "Running", "address": "DB1.DBX0.0", "type": "Bool" },
+    { "name": "Speed", "address": "DB1.DBW2", "type": "Int16" },
+    { "name": "Count", "address": "DB1.DBD4", "type": "Int32" },
+    { "name": "Temperature", "address": "DB1.DBD8", "type": "Float" }
+  ]
+}

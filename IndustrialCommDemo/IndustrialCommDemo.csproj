@@ -11,6 +11,9 @@
   <ItemGroup>
     <Resource Include="Assets\industrial-comm-icon.png" />
     <Content Include="Assets\industrial-comm-icon.ico" />
+    <Content Include="Config\**\*.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
   </ItemGroup>
 
   <ItemGroup>
