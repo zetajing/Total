@@ -10,6 +10,7 @@
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
+        <!-- 左侧编辑部署目录中的设备配置和当前设备点位表。 -->
         <Grid Grid.Column="0">
             <Grid.RowDefinitions>
                 <RowDefinition Height="*" />
@@ -40,6 +41,7 @@
             </GroupBox>
         </Grid>
 
+        <!-- 右侧执行连接诊断、批量读取并展示点位质量。 -->
         <Grid Grid.Column="1" Margin="14,0,0,0">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />

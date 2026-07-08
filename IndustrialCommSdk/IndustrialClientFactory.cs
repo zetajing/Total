@@ -10,10 +10,11 @@ using S7.Net;
 namespace IndustrialCommSdk
 {
     /// <summary>
-    /// Provides small factory helpers for the SDK's built-in protocol clients.
+    /// 提供内置工业协议客户端的快捷创建和 JSON 配置创建入口。
     /// </summary>
     public static class IndustrialClientFactory
     {
+        /// <summary>使用常用参数创建 Modbus TCP 客户端。</summary>
         public static ModbusTcpClient ModbusTcp(
             string host,
             int port = 502,
@@ -38,6 +39,7 @@ namespace IndustrialCommSdk
             }, logger);
         }
 
+        /// <summary>使用常用串口参数创建 Modbus RTU 客户端。</summary>
         public static ModbusRtuClient ModbusRtu(
             string portName,
             int baudRate = 9600,
@@ -78,6 +80,7 @@ namespace IndustrialCommSdk
             }, logger);
         }
 
+        /// <summary>使用常用参数创建 Siemens S7 客户端。</summary>
         public static SiemensS7Client SiemensS7(
             string host,
             CpuType cpuType = CpuType.S71200,
@@ -98,6 +101,7 @@ namespace IndustrialCommSdk
             }, logger);
         }
 
+        /// <summary>使用常用参数创建 Mitsubishi MC 客户端。</summary>
         public static MitsubishiMcClient MitsubishiMc(
             string host,
             int port = 5000,
@@ -121,6 +125,7 @@ namespace IndustrialCommSdk
             }, logger);
         }
 
+        /// <summary>兼容旧调用名称，创建 Modbus TCP 客户端。</summary>
         public static IIndustrialClient CreateModbus(
             string host,
             int port = 502,
@@ -133,6 +138,7 @@ namespace IndustrialCommSdk
             return ModbusTcp(host, port, slaveId, deviceId, logger, deviceProfile, connectTimeoutMilliseconds);
         }
 
+        /// <summary>创建 Modbus TCP 客户端。</summary>
         public static IIndustrialClient CreateModbusTcp(
             string host,
             int port = 502,
@@ -145,6 +151,7 @@ namespace IndustrialCommSdk
             return ModbusTcp(host, port, slaveId, deviceId, logger, deviceProfile, connectTimeoutMilliseconds);
         }
 
+        /// <summary>根据完整选项创建 Modbus TCP 客户端。</summary>
         public static IIndustrialClient CreateModbusTcp(
             ModbusTcpClientOptions options,
             IIndustrialLogger logger = null)
@@ -152,6 +159,7 @@ namespace IndustrialCommSdk
             return CreateModbus(options, logger);
         }
 
+        /// <summary>兼容旧调用名称，根据完整选项创建 Modbus TCP 客户端。</summary>
         public static IIndustrialClient CreateModbus(
             ModbusTcpClientOptions options,
             IIndustrialLogger logger = null)
@@ -159,6 +167,7 @@ namespace IndustrialCommSdk
             return new ModbusTcpClient(options, logger);
         }
 
+        /// <summary>使用常用串口参数创建 Modbus RTU 客户端。</summary>
         public static IIndustrialClient CreateModbusRtu(
             string portName,
             int baudRate = 9600,
@@ -177,6 +186,7 @@ namespace IndustrialCommSdk
             return ModbusRtu(portName, baudRate, slaveId, deviceId, logger, deviceProfile, dataBits, parity, stopBits, readTimeout, writeTimeout, retries, waitToRetryMilliseconds);
         }
 
+        /// <summary>根据完整选项创建 Modbus RTU 客户端。</summary>
         public static IIndustrialClient CreateModbusRtu(
             ModbusRtuClientOptions options,
             IIndustrialLogger logger = null)
@@ -184,6 +194,7 @@ namespace IndustrialCommSdk
             return new ModbusRtuClient(options, logger);
         }
 
+        /// <summary>使用常用参数创建 Siemens S7 客户端。</summary>
         public static SiemensS7Client CreateSiemensS7(
             string host,
             CpuType cpuType = CpuType.S71200,
@@ -195,6 +206,7 @@ namespace IndustrialCommSdk
             return SiemensS7(host, cpuType, rack, slot, deviceId, logger);
         }
 
+        /// <summary>根据完整选项创建 Siemens S7 客户端。</summary>
         public static IIndustrialClient CreateSiemensS7(
             SiemensS7ClientOptions options,
             IIndustrialLogger logger = null)
@@ -202,6 +214,7 @@ namespace IndustrialCommSdk
             return new SiemensS7Client(options, logger);
         }
 
+        /// <summary>使用常用参数创建 Mitsubishi MC 客户端。</summary>
         public static MitsubishiMcClient CreateMitsubishiMc(
             string host,
             int port = 5000,
@@ -213,6 +226,7 @@ namespace IndustrialCommSdk
             return MitsubishiMc(host, port, deviceId, logger, sendTimeoutMilliseconds, receiveTimeoutMilliseconds);
         }
 
+        /// <summary>根据完整选项创建 Mitsubishi MC 客户端。</summary>
         public static IIndustrialClient CreateMitsubishiMc(
             MitsubishiMcClientOptions options,
             IIndustrialLogger logger = null)
@@ -220,6 +234,7 @@ namespace IndustrialCommSdk
             return new MitsubishiMcClient(options, logger);
         }
 
+        /// <summary>从 devices.json 中按设备名创建客户端。</summary>
         public static IIndustrialClient FromConfig(
             string filePath,
             string deviceName,
@@ -228,6 +243,7 @@ namespace IndustrialCommSdk
             return FromConfig(IndustrialSdkConfig.Load(filePath), deviceName, logger);
         }
 
+        /// <summary>从已解析的 SDK 配置中按设备名创建客户端。</summary>
         public static IIndustrialClient FromConfig(
             IndustrialSdkConfig config,
             string deviceName,
@@ -238,6 +254,7 @@ namespace IndustrialCommSdk
             return FromConfig(config.FindDevice(deviceName), logger);
         }
 
+        /// <summary>根据单台设备配置自动选择协议并创建客户端。</summary>
         public static IIndustrialClient FromConfig(
             IndustrialDeviceConfig device,
             IIndustrialLogger logger = null)

@@ -8,6 +8,7 @@ using IndustrialCommDemo.Services;
 
 namespace IndustrialCommDemo.Views
 {
+    /// <summary>显示本机网卡信息，并演示静态 IP 与 DHCP 配置。</summary>
     public partial class NetworkSettingsTab : UserControl
     {
         private DemoAppContext _ctx;
@@ -18,11 +19,13 @@ namespace IndustrialCommDemo.Views
             InitializeComponent();
         }
 
+        /// <summary>绑定 Demo 共享上下文。</summary>
         public void Initialize(DemoAppContext ctx)
         {
             _ctx = ctx ?? throw new ArgumentNullException(nameof(ctx));
         }
 
+        /// <summary>首次进入页面时延迟枚举网卡，避免拖慢主窗口启动。</summary>
         public async Task OnTabLoadedAsync()
         {
             if (_adaptersLoaded) return;
@@ -40,6 +43,7 @@ namespace IndustrialCommDemo.Views
             ShowSelectedNetworkAdapter();
         }
 
+        // 后台枚举网卡，完成后恢复之前选择的适配器。
         private async Task RefreshNetworkAdaptersAsync(string preferredId = null)
         {
             try
@@ -124,6 +128,7 @@ namespace IndustrialCommDemo.Views
             await RunNetworkChangeAsync(adapter, () => NetworkAdapterService.EnableDhcp(adapter.Name));
         }
 
+        // 网络修改需要管理员权限；完成后重新读取系统实际状态。
         private async Task RunNetworkChangeAsync(NetworkAdapterInfo adapter, Action change)
         {
             try

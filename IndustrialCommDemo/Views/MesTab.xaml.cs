@@ -11,6 +11,7 @@ using IndustrialCommSdk.Mes;
 
 namespace IndustrialCommDemo.Views
 {
+    /// <summary>演示 MES 长连接、上线报文、FATRACK 发送和服务端消息接收。</summary>
     public partial class MesTab : UserControl
     {
         private DemoAppContext _ctx;

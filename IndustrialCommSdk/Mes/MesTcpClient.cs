@@ -9,7 +9,7 @@ using IndustrialCommSdk.Exceptions;
 
 namespace IndustrialCommSdk.Mes
 {
-    /// <summary>FA MES TCP 长连接客户端。连接、重连、接收循环均在后台执行。</summary>
+    /// <summary>MES TCP 长连接客户端，负责消息收发、拆包粘包处理和断线重连。</summary>
     public sealed class MesTcpClient : IMesClient
     {
         private readonly MesClientOptions _options;
@@ -23,6 +23,7 @@ namespace IndustrialCommSdk.Mes
         private int _state = (int)MesConnectionState.Disconnected;
         private int _disposed;
 
+        /// <summary>使用指定连接和设备身份选项创建 MES 客户端。</summary>
         public MesTcpClient(MesClientOptions options, IIndustrialLogger logger = null)
         {
             _options = options ?? throw new ArgumentNullException(nameof(options));

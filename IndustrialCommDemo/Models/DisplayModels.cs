@@ -7,6 +7,7 @@ using IndustrialCommDemo.Helpers;
 
 namespace IndustrialCommDemo
 {
+    /// <summary>订阅结果表格的一行，保存已格式化的值、质量和时间。</summary>
     internal sealed class SubscriptionDisplayRow
     {
         public string Address { get; set; }
@@ -17,6 +18,7 @@ namespace IndustrialCommDemo
         public string ErrorMessage { get; set; }
     }
 
+    /// <summary>数据库历史记录表格的一行。</summary>
     internal sealed class DatabaseHistoryDisplayRow
     {
         public long Id { get; set; }
@@ -29,6 +31,7 @@ namespace IndustrialCommDemo
         public string Timestamp { get; set; }
         public string ErrorMessage { get; set; }
 
+        // 集中完成枚举、时间和空值格式化，避免 XAML 中重复转换。
         public static DatabaseHistoryDisplayRow FromRecord(IndustrialDataRecord record)
         {
             return new DatabaseHistoryDisplayRow
@@ -46,6 +49,7 @@ namespace IndustrialCommDemo
         }
     }
 
+    /// <summary>保存 S7 地址规范化结果及由地址推断的数据类型。</summary>
     internal sealed class S7AddressInputInfo
     {
         public S7AddressInputInfo(string normalizedAddress, DataType? inferredDataType, ushort? inferredLength)
@@ -60,6 +64,7 @@ namespace IndustrialCommDemo
         public ushort? InferredLength { get; private set; }
     }
 
+    /// <summary>保存批量 Modbus 地址输入的解析和校验结果。</summary>
     internal sealed class ModbusAddressInputAnalysis
     {
         public List<string> Addresses { get; private set; }

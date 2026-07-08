@@ -10,6 +10,10 @@ using IndustrialCommSdk.Abstractions;
 
 namespace IndustrialCommDemo.Views
 {
+    /// <summary>
+    /// 演示仅通过 devices.json 和设备点位表完成客户端创建、诊断与批量读取。
+    /// 配置文件从程序输出目录的 Config 文件夹读取，便于直接部署和修改。
+    /// </summary>
     public partial class JsonConfigTab : UserControl
     {
         private readonly ObservableCollection<JsonReadResultRow> _rows = new ObservableCollection<JsonReadResultRow>();
@@ -23,6 +27,7 @@ namespace IndustrialCommDemo.Views
             JsonReadResultGrid.ItemsSource = _rows;
         }
 
+        /// <summary>绑定共享上下文并在页面启动时加载 JSON 配置。</summary>
         public void Initialize(DemoAppContext ctx)
         {
             _ctx = ctx ?? throw new ArgumentNullException(nameof(ctx));
@@ -30,11 +35,13 @@ namespace IndustrialCommDemo.Views
             LoadConfigFiles();
         }
 
+        // 丢弃编辑器中的未保存修改，重新读取磁盘文件。
         private void ReloadConfigButton_Click(object sender, RoutedEventArgs e)
         {
             LoadConfigFiles();
         }
 
+        // 同时保存设备列表和当前设备关联的点位表。
         private void SaveConfigButton_Click(object sender, RoutedEventArgs e)
         {
             try
@@ -50,6 +57,7 @@ namespace IndustrialCommDemo.Views
             }
         }
 
+        // 先保存旧点位表，再加载新设备的 pointsFile，避免配置串写。
         private void DeviceNameTextBox_LostKeyboardFocus(object sender, System.Windows.Input.KeyboardFocusChangedEventArgs e)
         {
             try
@@ -63,6 +71,7 @@ namespace IndustrialCommDemo.Views
             }
         }
 
+        // 连接诊断自动创建、连接并释放客户端，不执行点位读写。
         private async void TestConnectionButton_Click(object sender, RoutedEventArgs e)
         {
             await RunAsync("JSON 连接测试", async () =>
@@ -76,6 +85,7 @@ namespace IndustrialCommDemo.Views
             });
         }
 
+        // 返回值与 Tags 使用相同索引，逐项显示值、质量和错误。
         private async void ReadPointsButton_Click(object sender, RoutedEventArgs e)
         {
             await RunAsync("JSON 点位批量读取", async () =>
@@ -114,12 +124,14 @@ namespace IndustrialCommDemo.Views
             });
         }
 
+        // 工厂根据 protocol 字段自动选择 Modbus、S7 或 MC 客户端。
         private IIndustrialClient CreateClientFromJson()
         {
             SaveDeviceConfig();
             return IndustrialClientFactory.FromConfig(_deviceConfigPath, DeviceNameTextBox.Text, _ctx.SdkLogger);
         }
 
+        // 操作前先落盘，保证 Demo 行为与实际部署读取文件时一致。
         private void SaveConfigFiles()
         {
             SaveDeviceConfig();
@@ -135,12 +147,14 @@ namespace IndustrialCommDemo.Views
             File.WriteAllText(_deviceConfigPath, DeviceJsonTextBox.Text);
         }
 
+        // 通过 devices.json 的 pointsFile 一步加载当前设备点位表。
         private TagTable LoadPointTable()
         {
             LoadSelectedPointConfig();
             return TagTable.LoadForDevice(_deviceConfigPath, DeviceNameTextBox.Text);
         }
 
+        // 统一处理按钮状态、执行提示和异常记录。
         private async Task RunAsync(string actionName, Func<Task> action)
         {
             try
@@ -240,6 +254,7 @@ namespace IndustrialCommDemo.Views
                 : path + Path.DirectorySeparatorChar;
         }
 
+        // 配置不存在时从项目模板复制到程序输出目录。
         private static void EnsureConfigFileExists(string targetPath, string fileName)
         {
             if (File.Exists(targetPath))

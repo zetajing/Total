@@ -9,11 +9,15 @@ using IndustrialCommSdk.Abstractions;
 
 namespace IndustrialCommSdk
 {
+    /// <summary>
+    /// 表示可按名称或地址查询的点位表，并提供 JSON、CSV 加载入口。
+    /// </summary>
     public sealed class TagTable
     {
         private readonly Dictionary<string, IndustrialTag> _nameIndexes;
         private readonly Dictionary<string, IndustrialTag> _addressIndexes;
 
+        /// <summary>使用给定点位集合创建点位表。</summary>
         public TagTable(IReadOnlyList<IndustrialTag> tags)
         {
             Tags = tags ?? throw new ArgumentNullException(nameof(tags));
@@ -36,8 +40,10 @@ namespace IndustrialCommSdk
             }
         }
 
+        /// <summary>获取点位表中按原始顺序保存的全部点位。</summary>
         public IReadOnlyList<IndustrialTag> Tags { get; private set; }
 
+        /// <summary>根据文件扩展名自动加载 JSON 或 CSV 点位表。</summary>
         public static TagTable Load(string filePath)
         {
             if (string.IsNullOrWhiteSpace(filePath)) throw new ArgumentException("Tag table file path cannot be null or empty.", nameof(filePath));
@@ -51,6 +57,7 @@ namespace IndustrialCommSdk
             return LoadCsv(filePath);
         }
 
+        /// <summary>从 devices.json 中找到指定设备并加载其 pointsFile。</summary>
         public static TagTable LoadForDevice(string configFilePath, string deviceName)
         {
             if (string.IsNullOrWhiteSpace(configFilePath)) throw new ArgumentException("Config file path cannot be null or empty.", nameof(configFilePath));
@@ -61,6 +68,7 @@ namespace IndustrialCommSdk
             return Load(device.ResolvePointsFile(Path.GetDirectoryName(fullConfigPath)));
         }
 
+        /// <summary>从 JSON 文件加载点位表。</summary>
         public static TagTable LoadJson(string filePath)
         {
             if (string.IsNullOrWhiteSpace(filePath)) throw new ArgumentException("Tag table file path cannot be null or empty.", nameof(filePath));
@@ -79,6 +87,7 @@ namespace IndustrialCommSdk
             }
         }
 
+        /// <summary>从 JSON 文本解析点位表。</summary>
         public static TagTable FromJson(string json)
         {
             if (string.IsNullOrWhiteSpace(json)) throw new ArgumentException("Tag table JSON cannot be null or empty.", nameof(json));
@@ -97,6 +106,7 @@ namespace IndustrialCommSdk
             }
         }
 
+        /// <summary>从 UTF-8 CSV 文件加载点位表。</summary>
         public static TagTable LoadCsv(string filePath)
         {
             if (string.IsNullOrWhiteSpace(filePath)) throw new ArgumentException("Tag table file path cannot be null or empty.", nameof(filePath));
@@ -104,6 +114,7 @@ namespace IndustrialCommSdk
             return ParseCsv(File.ReadAllText(filePath, Encoding.UTF8));
         }
 
+        /// <summary>从 CSV 文本解析点位表，支持带引号和逗号的字段。</summary>
         public static TagTable ParseCsv(string csv)
         {
             if (string.IsNullOrWhiteSpace(csv)) throw new ArgumentException("Tag table CSV cannot be null or empty.", nameof(csv));
@@ -134,6 +145,7 @@ namespace IndustrialCommSdk
             return new TagTable(tags);
         }
 
+        /// <summary>按点位名称查找，名称匹配不区分大小写。</summary>
         public IndustrialTag Get(string name)
         {
             if (string.IsNullOrWhiteSpace(name)) throw new ArgumentException("Tag name cannot be null or empty.", nameof(name));
@@ -147,6 +159,7 @@ namespace IndustrialCommSdk
             throw new KeyNotFoundException(string.Format("Tag '{0}' was not found.", name));
         }
 
+        /// <summary>按设备地址查找，地址匹配不区分大小写。</summary>
         public IndustrialTag GetByAddress(string address)
         {
             if (string.IsNullOrWhiteSpace(address)) throw new ArgumentException("Tag address cannot be null or empty.", nameof(address));
