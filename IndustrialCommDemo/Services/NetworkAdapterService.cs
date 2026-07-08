@@ -10,6 +10,7 @@ using System.Security.Principal;
 
 namespace IndustrialCommDemo.Services
 {
+    /// <summary>供网卡设置页面显示和修改的网络适配器快照。</summary>
     internal sealed class NetworkAdapterInfo
     {
         public string Id { get; set; }
@@ -35,6 +36,7 @@ namespace IndustrialCommDemo.Services
         }
     }
 
+    /// <summary>封装 Windows 网卡枚举、静态地址和 DHCP 配置操作。</summary>
     internal static class NetworkAdapterService
     {
         public static IReadOnlyList<NetworkAdapterInfo> GetAdapters()

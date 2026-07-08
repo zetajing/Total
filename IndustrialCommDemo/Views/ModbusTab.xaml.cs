@@ -17,6 +17,7 @@ using IndustrialCommSdk.Protocols.Modbus;
 
 namespace IndustrialCommDemo.Views
 {
+    /// <summary>演示 Modbus TCP/RTU 连接、单点读写、批量操作和轮询订阅。</summary>
     public partial class ModbusTab : UserControl
     {
         private static readonly DataType[] RegisterDataTypes =

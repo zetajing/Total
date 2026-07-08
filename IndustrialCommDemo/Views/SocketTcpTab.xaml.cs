@@ -10,6 +10,7 @@ using IndustrialCommDemo.SocketDebug;
 
 namespace IndustrialCommDemo.Views
 {
+    /// <summary>演示按行收发文本的 TCP 服务端与客户端调试流程。</summary>
     public partial class SocketTcpTab : UserControl
     {
         private DemoAppContext _ctx;

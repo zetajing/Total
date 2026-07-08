@@ -9,8 +9,8 @@ using IndustrialCommDemo.Services;
 namespace IndustrialCommDemo
 {
     /// <summary>
-    /// Shared application context that provides cross-cutting services to all tabs.
-    /// Created once by MainWindow and passed to each UserControl.
+    /// Demo 的共享运行上下文，由主窗口创建一次并传递给所有页面。
+    /// 集中提供日志、UI 状态、数据库记录器和主窗口状态更新能力。
     /// </summary>
     public sealed class DemoAppContext
     {

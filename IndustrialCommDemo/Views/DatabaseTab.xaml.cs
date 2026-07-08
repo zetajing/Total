@@ -15,6 +15,7 @@ using IndustrialCommSdk.Storage;
 
 namespace IndustrialCommDemo.Views
 {
+    /// <summary>演示采集数据缓冲写库、历史查询和 CSV 导出。</summary>
     public partial class DatabaseTab : UserControl
     {
         private const int MaxHistoryRowCount = 500;

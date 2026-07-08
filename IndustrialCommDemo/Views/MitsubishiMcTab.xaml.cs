@@ -7,6 +7,7 @@ using IndustrialCommDemo.Helpers;
 
 namespace IndustrialCommDemo.Views
 {
+    /// <summary>演示 Mitsubishi MC 3E 帧客户端的连接、读写和订阅。</summary>
     public partial class MitsubishiMcTab : UserControl
     {
         private ViewModels.MitsubishiMcViewModel _vm;

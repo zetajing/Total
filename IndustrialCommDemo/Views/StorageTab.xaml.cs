@@ -6,6 +6,7 @@ using LogHelper;
 
 namespace IndustrialCommDemo.Views
 {
+    /// <summary>配置 Demo 的本地数据目录，并将选择持久化到 UI 状态文件。</summary>
     public partial class StorageTab : UserControl
     {
         private DemoAppContext _ctx;
@@ -15,6 +16,7 @@ namespace IndustrialCommDemo.Views
             InitializeComponent();
         }
 
+        /// <summary>绑定共享上下文并显示当前数据目录。</summary>
         public void Initialize(DemoAppContext ctx)
         {
             _ctx = ctx ?? throw new ArgumentNullException(nameof(ctx));
@@ -22,6 +24,7 @@ namespace IndustrialCommDemo.Views
             DataDirectoryHintTextBlock.Text = "当前目录：" + StoragePathProvider.DataRoot;
         }
 
+        // 校验并创建目录后更新运行时路径，后续日志和缓存会写入新目录。
         private void ApplyDataDirectoryButton_Click(object sender, RoutedEventArgs e)
         {
             try

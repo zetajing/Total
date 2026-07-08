@@ -10,6 +10,7 @@ using IndustrialCommSdk.Abstractions;
 
 namespace IndustrialCommDemo.Views
 {
+    /// <summary>演示 Siemens S7 连接、地址规范化、读写和轮询订阅。</summary>
     public partial class SiemensS7Tab : UserControl
     {
         private ViewModels.SiemensS7ViewModel _vm;
