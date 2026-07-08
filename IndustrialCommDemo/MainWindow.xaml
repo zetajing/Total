@@ -81,6 +81,9 @@
                 <TabItem Header="Mitsubishi MC">
                     <views:MitsubishiMcTab x:Name="McControlTag" />
                 </TabItem>
+                <TabItem Header="JSON 配置">
+                    <views:JsonConfigTab x:Name="JsonConfigControlTag" />
+                </TabItem>
                 <TabItem Header="Socket TCP">
                     <views:SocketTcpTab x:Name="SocketControlTag" />
                 </TabItem>

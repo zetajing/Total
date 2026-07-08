@@ -41,6 +41,7 @@ namespace IndustrialCommDemo
             ModbusControlTag.Initialize(_ctx);
             S7ControlTag.Initialize(_ctx);
             McControlTag.Initialize(_ctx);
+            JsonConfigControlTag.Initialize(_ctx);
             SocketControlTag.Initialize(_ctx);
             MesControlTag.Initialize(_ctx);
             DatabaseControlTag.Initialize(_ctx);
