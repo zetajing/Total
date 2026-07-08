@@ -55,6 +55,16 @@ namespace IndustrialCommSdk.Tests
         }
 
         [Test]
+        public void SubscribeAsync_RejectsNullRequestWithArgumentNullException()
+        {
+            using (var client = new WaitingClient())
+            {
+                Assert.ThrowsAsync<ArgumentNullException>(async () =>
+                    await client.SubscribeAsync(null, null, CancellationToken.None));
+            }
+        }
+
+        [Test]
         public void ReadAsync_PreservesCallerCancellation()
         {
             using (var client = new WaitingClient())

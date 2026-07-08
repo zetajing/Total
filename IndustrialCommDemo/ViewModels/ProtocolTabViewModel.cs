@@ -27,6 +27,7 @@ namespace IndustrialCommDemo.ViewModels
         private string _address;
         private string _length = "1";
         private string _writeValue;
+        private DataType _selectedDataType = DataType.Int16;
         private bool _isBusy;
 
         // ── Bindable properties ──
@@ -38,6 +39,7 @@ namespace IndustrialCommDemo.ViewModels
         public string Address { get => _address; set => SetProperty(ref _address, value); }
         public string Length { get => _length; set => SetProperty(ref _length, value); }
         public string WriteValue { get => _writeValue; set => SetProperty(ref _writeValue, value); }
+        public DataType SelectedDataType { get => _selectedDataType; set => SetProperty(ref _selectedDataType, value); }
 
         public string StatusText
         {

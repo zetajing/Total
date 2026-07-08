@@ -258,6 +258,7 @@ namespace IndustrialCommSdk.Internal
         /// <exception cref="OperationCanceledException">操作已被取消。</exception>
         public Task<string> SubscribeAsync(SubscriptionRequest request, EventHandler<SubscriptionEvent> handler, CancellationToken cancellationToken)
         {
+            if (request == null) throw new ArgumentNullException(nameof(request));
             _logger.Info(string.Format("SUBSCRIBE requested | Device={0} | Key={1} | Items={2} | Interval={3}ms | ChangeOnly={4}", DeviceId, request.SubscriptionKey, request.Items.Count, request.Interval.TotalMilliseconds, request.ReportOnChangeOnly));
             return _pollingScheduler.SubscribeAsync(this, request, handler, cancellationToken);
         }

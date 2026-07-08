@@ -22,6 +22,7 @@ namespace IndustrialCommDemo.Views
             _vm.PropertyChanged += OnVmPropertyChanged;
             _vm.RecentAddressChanged += OnRecentAddressChanged;
             _vm.RestoreState();
+            ComboHelper.SelectDataType(McDataTypeComboBox, _vm.SelectedDataType);
 
             StatusTextBlock.Text = _vm.StatusText;
             StatusTextBlock.Foreground = _vm.StatusBrush;
@@ -92,6 +93,7 @@ namespace IndustrialCommDemo.Views
         private async void ReadButton_Click(object sender, RoutedEventArgs e)
         {
             _vm.Address = McAddressTextBox.Text;
+            _vm.SelectedDataType = ComboHelper.GetSelectedDataType(McDataTypeComboBox);
             _vm.Length = McLengthTextBox.Text;
             await _vm.ReadAsync();
         }
@@ -99,6 +101,7 @@ namespace IndustrialCommDemo.Views
         private async void WriteButton_Click(object sender, RoutedEventArgs e)
         {
             _vm.Address = McAddressTextBox.Text;
+            _vm.SelectedDataType = ComboHelper.GetSelectedDataType(McDataTypeComboBox);
             _vm.Length = McLengthTextBox.Text;
             _vm.WriteValue = McWriteValueTextBox.Text;
             await _vm.WriteAsync();
@@ -107,6 +110,13 @@ namespace IndustrialCommDemo.Views
         private void AddressHistoryComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             ComboHelper.ApplyHistorySelection(McAddressHistoryComboBox, McAddressTextBox);
+        }
+
+        private void DataTypeComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (!IsLoaded || _vm == null) return;
+            _vm.SelectedDataType = ComboHelper.GetSelectedDataType(McDataTypeComboBox);
+            McLengthTextBox.Text = "1";
         }
     }
 }

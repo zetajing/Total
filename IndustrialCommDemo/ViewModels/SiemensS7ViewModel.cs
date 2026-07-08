@@ -80,6 +80,7 @@ namespace IndustrialCommDemo.ViewModels
             Ctx.UiState.S7.PortOrRack = PortOrRack;
             Ctx.UiState.S7.SlotOrLength = SlotOrLength;
             Ctx.UiState.S7.Address = Address;
+            Ctx.UiState.S7.DataType = SelectedDataType.ToString();
             Ctx.UiState.S7.Length = Length;
             Ctx.UiState.S7.WriteValue = WriteValue;
         }
@@ -93,6 +94,7 @@ namespace IndustrialCommDemo.ViewModels
             if (!string.IsNullOrWhiteSpace(s.PortOrRack)) PortOrRack = s.PortOrRack;
             if (!string.IsNullOrWhiteSpace(s.SlotOrLength)) SlotOrLength = s.SlotOrLength;
             if (!string.IsNullOrWhiteSpace(s.Address)) Address = s.Address;
+            if (Enum.TryParse(s.DataType, out DataType selectedDataType)) SelectedDataType = selectedDataType;
             if (!string.IsNullOrWhiteSpace(s.Length)) Length = s.Length;
             if (!string.IsNullOrWhiteSpace(s.WriteValue)) WriteValue = s.WriteValue;
         }
@@ -101,8 +103,7 @@ namespace IndustrialCommDemo.ViewModels
 
         private DataType DataTypeFromCombo()
         {
-            // Default to Int16; view overrides via SelectionChanged
-            return DataType.Int16;
+            return SelectedDataType;
         }
 
         /// <summary>

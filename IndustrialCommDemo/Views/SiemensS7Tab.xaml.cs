@@ -25,6 +25,7 @@ namespace IndustrialCommDemo.Views
             _vm.PropertyChanged += OnVmPropertyChanged;
             _vm.RecentAddressChanged += OnRecentAddressChanged;
             _vm.RestoreState();
+            ComboHelper.SelectDataType(S7DataTypeComboBox, _vm.SelectedDataType);
 
             // Sync initial VM state to UI
             StatusTextBlock.Text = _vm.StatusText;
@@ -104,6 +105,7 @@ namespace IndustrialCommDemo.Views
         private async void ReadButton_Click(object sender, RoutedEventArgs e)
         {
             _vm.Address = S7AddressTextBox.Text;
+            _vm.SelectedDataType = ComboHelper.GetSelectedDataType(S7DataTypeComboBox);
             _vm.Length = S7LengthTextBox.Text;
             await _vm.ReadAsync();
         }
@@ -111,6 +113,7 @@ namespace IndustrialCommDemo.Views
         private async void WriteButton_Click(object sender, RoutedEventArgs e)
         {
             _vm.Address = S7AddressTextBox.Text;
+            _vm.SelectedDataType = ComboHelper.GetSelectedDataType(S7DataTypeComboBox);
             _vm.Length = S7LengthTextBox.Text;
             _vm.WriteValue = S7WriteValueTextBox.Text;
             await _vm.WriteAsync();
@@ -137,7 +140,8 @@ namespace IndustrialCommDemo.Views
 
         private void DataTypeComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
-            if (!IsLoaded) return;
+            if (!IsLoaded || _vm == null) return;
+            _vm.SelectedDataType = ComboHelper.GetSelectedDataType(S7DataTypeComboBox);
             S7LengthTextBox.Text = "1";
         }
 

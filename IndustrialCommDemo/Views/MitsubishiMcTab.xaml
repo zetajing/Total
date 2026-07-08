@@ -51,7 +51,7 @@
                         <ComboBox x:Name="McAddressHistoryComboBox" Margin="0,0,0,6" SelectionChanged="AddressHistoryComboBox_SelectionChanged" />
                     </StackPanel>
                     <TextBlock Grid.Row="1" Grid.Column="0" Margin="0,8" VerticalAlignment="Center" Text="数据类型" />
-                    <ComboBox x:Name="McDataTypeComboBox" Grid.Row="1" Grid.Column="1" Margin="0,6,0,6" SelectedIndex="1">
+                    <ComboBox x:Name="McDataTypeComboBox" Grid.Row="1" Grid.Column="1" Margin="0,6,0,6" SelectedIndex="1" SelectionChanged="DataTypeComboBox_SelectionChanged">
                         <ComboBoxItem Content="Bool" /><ComboBoxItem Content="Int16" /><ComboBoxItem Content="UInt16" />
                         <ComboBoxItem Content="Int32" /><ComboBoxItem Content="UInt32" />
                         <ComboBoxItem Content="Float" /><ComboBoxItem Content="Double" /><ComboBoxItem Content="String" />

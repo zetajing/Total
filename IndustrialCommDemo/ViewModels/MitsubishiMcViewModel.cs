@@ -71,6 +71,7 @@ namespace IndustrialCommDemo.ViewModels
             Ctx.UiState.Mc.Host = Host;
             Ctx.UiState.Mc.PortOrRack = PortOrRack;
             Ctx.UiState.Mc.Address = Address;
+            Ctx.UiState.Mc.DataType = SelectedDataType.ToString();
             Ctx.UiState.Mc.Length = Length;
             Ctx.UiState.Mc.WriteValue = WriteValue;
         }
@@ -83,13 +84,14 @@ namespace IndustrialCommDemo.ViewModels
             if (!string.IsNullOrWhiteSpace(s.Host)) Host = s.Host;
             if (!string.IsNullOrWhiteSpace(s.PortOrRack)) PortOrRack = s.PortOrRack;
             if (!string.IsNullOrWhiteSpace(s.Address)) Address = s.Address;
+            if (Enum.TryParse(s.DataType, out DataType selectedDataType)) SelectedDataType = selectedDataType;
             if (!string.IsNullOrWhiteSpace(s.Length)) Length = s.Length;
             if (!string.IsNullOrWhiteSpace(s.WriteValue)) WriteValue = s.WriteValue;
         }
 
         private DataType DataTypeFromCombo()
         {
-            return DataType.Int16;
+            return SelectedDataType;
         }
     }
 }

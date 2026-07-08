@@ -392,15 +392,21 @@ namespace IndustrialCommDemo.Services
         public string Length { get; set; }
 
         /// <summary>
-        /// 获取或设置要写入的数据值。
+        /// 获取或设置协议页签中选择的数据类型。
         /// </summary>
         [DataMember(Order = 7)]
+        public string DataType { get; set; }
+
+        /// <summary>
+        /// 获取或设置要写入的数据值。
+        /// </summary>
+        [DataMember(Order = 8)]
         public string WriteValue { get; set; }
 
         /// <summary>
         /// 获取或设置最近使用的地址列表。
         /// </summary>
-        [DataMember(Order = 8)]
+        [DataMember(Order = 9)]
         public List<string> RecentAddresses { get; set; } = new List<string>();
     }
 }
