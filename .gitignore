@@ -5,4 +5,4 @@ TestResults/
 *.user
 *.suo
 artifacts/
-.reasonix
+.reasonix/
