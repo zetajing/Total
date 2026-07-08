@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using IndustrialCommSdk.Abstractions;
@@ -36,6 +37,66 @@ namespace IndustrialCommSdk
         public static Task DisconnectAsync(this IIndustrialClient client)
         {
             return client.DisconnectAsync(CancellationToken.None);
+        }
+
+        public static async Task UseAsync<TClient>(
+            this TClient client,
+            Func<TClient, Task> operation,
+            CancellationToken cancellationToken = default)
+            where TClient : IIndustrialClient
+        {
+            if (client == null) throw new ArgumentNullException(nameof(client));
+            if (operation == null) throw new ArgumentNullException(nameof(operation));
+
+            try
+            {
+                await client.ConnectAsync(cancellationToken).ConfigureAwait(false);
+                await operation(client).ConfigureAwait(false);
+            }
+            finally
+            {
+                try
+                {
+                    if (client.IsConnected)
+                    {
+                        await client.DisconnectAsync(CancellationToken.None).ConfigureAwait(false);
+                    }
+                }
+                finally
+                {
+                    client.Dispose();
+                }
+            }
+        }
+
+        public static async Task<TResult> UseAsync<TClient, TResult>(
+            this TClient client,
+            Func<TClient, Task<TResult>> operation,
+            CancellationToken cancellationToken = default)
+            where TClient : IIndustrialClient
+        {
+            if (client == null) throw new ArgumentNullException(nameof(client));
+            if (operation == null) throw new ArgumentNullException(nameof(operation));
+
+            try
+            {
+                await client.ConnectAsync(cancellationToken).ConfigureAwait(false);
+                return await operation(client).ConfigureAwait(false);
+            }
+            finally
+            {
+                try
+                {
+                    if (client.IsConnected)
+                    {
+                        await client.DisconnectAsync(CancellationToken.None).ConfigureAwait(false);
+                    }
+                }
+                finally
+                {
+                    client.Dispose();
+                }
+            }
         }
 
         /// <summary>
@@ -176,6 +237,160 @@ namespace IndustrialCommSdk
         }
 
         /// <summary>
+        /// 从指定地址异步读取一个值，数据类型由泛型参数自动推断。
+        /// </summary>
+        /// <typeparam name="T">要读取的 CLR 类型。</typeparam>
+        /// <param name="client">工业客户端实例。</param>
+        /// <param name="address">要读取的地址字符串。</param>
+        /// <param name="cancellationToken">用于取消异步操作的取消令牌。</param>
+        /// <returns>返回表示读取结果的任务，包含类型 <typeparamref name="T"/> 的值。</returns>
+        public static Task<T> ReadAsync<T>(this IIndustrialClient client, string address, CancellationToken cancellationToken = default)
+        {
+            return ReadValueAsync<T>(client, address, InferDataType(typeof(T)), 1, cancellationToken);
+        }
+
+        /// <summary>
+        /// 从指定地址异步读取一个指定长度的值，适用于字符串和字节数组等变长类型。
+        /// </summary>
+        /// <typeparam name="T">要读取的 CLR 类型。</typeparam>
+        /// <param name="client">工业客户端实例。</param>
+        /// <param name="address">要读取的地址字符串。</param>
+        /// <param name="length">读取长度。</param>
+        /// <param name="cancellationToken">用于取消异步操作的取消令牌。</param>
+        /// <returns>返回表示读取结果的任务，包含类型 <typeparamref name="T"/> 的值。</returns>
+        public static Task<T> ReadAsync<T>(this IIndustrialClient client, string address, ushort length, CancellationToken cancellationToken = default)
+        {
+            return ReadValueAsync<T>(client, address, InferDataType(typeof(T)), length, cancellationToken);
+        }
+
+        public static Task<T> ReadAsync<T>(this IIndustrialClient client, IndustrialTag<T> tag, CancellationToken cancellationToken = default)
+        {
+            if (tag == null) throw new ArgumentNullException(nameof(tag));
+
+            return ReadValueAsync<T>(client, tag.Address, tag.DataType, tag.Length, cancellationToken);
+        }
+
+        public static async Task<IndustrialResult<T>> TryReadAsync<T>(this IIndustrialClient client, string address, CancellationToken cancellationToken = default)
+        {
+            return await TryReadValueAsync<T>(client, address, InferDataType(typeof(T)), 1, cancellationToken).ConfigureAwait(false);
+        }
+
+        public static async Task<IndustrialResult<T>> TryReadAsync<T>(this IIndustrialClient client, string address, ushort length, CancellationToken cancellationToken = default)
+        {
+            return await TryReadValueAsync<T>(client, address, InferDataType(typeof(T)), length, cancellationToken).ConfigureAwait(false);
+        }
+
+        public static async Task<IndustrialResult<T>> TryReadAsync<T>(this IIndustrialClient client, IndustrialTag<T> tag, CancellationToken cancellationToken = default)
+        {
+            if (tag == null) throw new ArgumentNullException(nameof(tag));
+
+            return await TryReadValueAsync<T>(client, tag.Address, tag.DataType, tag.Length, cancellationToken).ConfigureAwait(false);
+        }
+
+        public static async Task<IndustrialResult<T>> TryReadValueAsync<T>(
+            this IIndustrialClient client,
+            string address,
+            DataType dataType,
+            ushort length = 1,
+            CancellationToken cancellationToken = default)
+        {
+            if (client == null) throw new ArgumentNullException(nameof(client));
+
+            DataValue result = null;
+            try
+            {
+                result = await client.ReadAsync(
+                    new ReadRequest(client.DeviceId, address, dataType, length),
+                    cancellationToken).ConfigureAwait(false);
+
+                EnsureReadable(result);
+                return IndustrialResult<T>.Success(ConvertValue<T>(result.Value, address, dataType), result);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                return IndustrialResult<T>.Failure(ex.Message, result, ex);
+            }
+        }
+
+        public static Task<IndustrialTagReadResult> ReadManyAsync(this IIndustrialClient client, params IndustrialTag[] tags)
+        {
+            return ReadManyAsync(client, (IReadOnlyCollection<IndustrialTag>)tags, CancellationToken.None);
+        }
+
+        public static Task<IReadOnlyDictionary<string, T>> ReadManyAsync<T>(this IIndustrialClient client, params string[] addresses)
+        {
+            return ReadManyAsync<T>(client, (IReadOnlyCollection<string>)addresses, CancellationToken.None);
+        }
+
+        public static Task<IReadOnlyDictionary<string, T>> ReadManyAsync<T>(
+            this IIndustrialClient client,
+            IReadOnlyCollection<string> addresses,
+            CancellationToken cancellationToken = default)
+        {
+            return ReadManyAsync<T>(client, addresses, 1, cancellationToken);
+        }
+
+        public static async Task<IReadOnlyDictionary<string, T>> ReadManyAsync<T>(
+            this IIndustrialClient client,
+            IReadOnlyCollection<string> addresses,
+            ushort length,
+            CancellationToken cancellationToken = default)
+        {
+            if (client == null) throw new ArgumentNullException(nameof(client));
+            if (addresses == null) throw new ArgumentNullException(nameof(addresses));
+
+            var dataType = InferDataType(typeof(T));
+            var requestAddresses = new List<string>(addresses.Count);
+            var requests = new List<ReadRequest>(addresses.Count);
+            foreach (var address in addresses)
+            {
+                if (string.IsNullOrWhiteSpace(address))
+                {
+                    throw new ArgumentException("Addresses cannot contain null or empty values.", nameof(addresses));
+                }
+
+                requestAddresses.Add(address);
+                requests.Add(new ReadRequest(client.DeviceId, address, dataType, length));
+            }
+
+            var result = await client.ReadManyAsync(requests, cancellationToken).ConfigureAwait(false);
+            var values = new Dictionary<string, T>(StringComparer.OrdinalIgnoreCase);
+            for (var i = 0; i < result.Values.Count; i++)
+            {
+                var value = result.Values[i];
+                EnsureReadable(value);
+                values[requestAddresses[i]] = ConvertValue<T>(value.Value, requestAddresses[i], dataType);
+            }
+
+            return values;
+        }
+
+        public static async Task<IndustrialTagReadResult> ReadManyAsync(
+            this IIndustrialClient client,
+            IReadOnlyCollection<IndustrialTag> tags,
+            CancellationToken cancellationToken = default)
+        {
+            if (client == null) throw new ArgumentNullException(nameof(client));
+            if (tags == null) throw new ArgumentNullException(nameof(tags));
+
+            var tagList = new List<IndustrialTag>(tags.Count);
+            var requests = new List<ReadRequest>(tags.Count);
+            foreach (var tag in tags)
+            {
+                if (tag == null) throw new ArgumentException("Tags cannot contain null.", nameof(tags));
+                tagList.Add(tag);
+                requests.Add(tag.ToReadRequest(client.DeviceId));
+            }
+
+            var result = await client.ReadManyAsync(requests, cancellationToken).ConfigureAwait(false);
+            return new IndustrialTagReadResult(tagList, result.Values);
+        }
+
+        /// <summary>
         /// 从指定地址异步读取指定数据类型和长度的值，并自动转换为泛型类型 <typeparamref name="T"/>。
         /// </summary>
         /// <typeparam name="T">返回值的类型，支持 bool、short、ushort、int、uint、float、double、string、byte[] 等。</typeparam>
@@ -311,6 +526,87 @@ namespace IndustrialCommSdk
         }
 
         /// <summary>
+        /// 向指定地址异步写入一个字符串，写入长度由字符串长度自动推断。
+        /// </summary>
+        /// <param name="client">工业客户端实例。</param>
+        /// <param name="address">要写入的地址字符串。</param>
+        /// <param name="value">要写入的字符串值。如果为 null，则写入空字符串。</param>
+        /// <param name="cancellationToken">用于取消异步操作的取消令牌。</param>
+        /// <returns>表示异步写入操作的任务。</returns>
+        public static Task WriteAsync(this IIndustrialClient client, string address, string value, CancellationToken cancellationToken = default)
+        {
+            var text = value ?? string.Empty;
+            return WriteValueAsync(client, address, DataType.String, text, ToUShortLength(text.Length), cancellationToken);
+        }
+
+        /// <summary>
+        /// 向指定地址异步写入一个字节数组，写入长度由数组长度自动推断。
+        /// </summary>
+        /// <param name="client">工业客户端实例。</param>
+        /// <param name="address">要写入的地址字符串。</param>
+        /// <param name="value">要写入的字节数组。如果为 null，则写入空数组。</param>
+        /// <param name="cancellationToken">用于取消异步操作的取消令牌。</param>
+        /// <returns>表示异步写入操作的任务。</returns>
+        public static Task WriteAsync(this IIndustrialClient client, string address, byte[] value, CancellationToken cancellationToken = default)
+        {
+            var bytes = value ?? Array.Empty<byte>();
+            return WriteValueAsync(client, address, DataType.ByteArray, bytes, ToUShortLength(bytes.Length), cancellationToken);
+        }
+
+        public static Task WriteAsync<T>(this IIndustrialClient client, IndustrialTag<T> tag, T value, CancellationToken cancellationToken = default)
+        {
+            if (tag == null) throw new ArgumentNullException(nameof(tag));
+
+            return WriteValueAsync(client, tag.Address, tag.DataType, value, tag.Length, cancellationToken);
+        }
+
+        public static Task WriteManyAsync(this IIndustrialClient client, params IndustrialWrite[] writes)
+        {
+            return WriteManyAsync(client, (IReadOnlyCollection<IndustrialWrite>)writes, CancellationToken.None);
+        }
+
+        public static Task WriteManyAsync<T>(
+            this IIndustrialClient client,
+            IReadOnlyDictionary<string, T> values,
+            CancellationToken cancellationToken = default)
+        {
+            if (client == null) throw new ArgumentNullException(nameof(client));
+            if (values == null) throw new ArgumentNullException(nameof(values));
+
+            var dataType = InferDataType(typeof(T));
+            var requests = new List<WriteRequest>(values.Count);
+            foreach (var item in values)
+            {
+                if (string.IsNullOrWhiteSpace(item.Key))
+                {
+                    throw new ArgumentException("Write addresses cannot contain null or empty values.", nameof(values));
+                }
+
+                requests.Add(new WriteRequest(client.DeviceId, item.Key, dataType, item.Value, GetWriteLength(item.Value)));
+            }
+
+            return client.WriteManyAsync(requests, cancellationToken);
+        }
+
+        public static Task WriteManyAsync(
+            this IIndustrialClient client,
+            IReadOnlyCollection<IndustrialWrite> writes,
+            CancellationToken cancellationToken = default)
+        {
+            if (client == null) throw new ArgumentNullException(nameof(client));
+            if (writes == null) throw new ArgumentNullException(nameof(writes));
+
+            var requests = new List<WriteRequest>(writes.Count);
+            foreach (var write in writes)
+            {
+                if (write == null) throw new ArgumentException("Writes cannot contain null.", nameof(writes));
+                requests.Add(write.ToWriteRequest(client.DeviceId));
+            }
+
+            return client.WriteManyAsync(requests, cancellationToken);
+        }
+
+        /// <summary>
         /// 向指定地址异步写入一个字符串。
         /// </summary>
         /// <param name="client">工业客户端实例。</param>
@@ -435,6 +731,51 @@ namespace IndustrialCommSdk
                         dataType),
                     ex);
             }
+        }
+
+        private static DataType InferDataType(Type type)
+        {
+            var targetType = Nullable.GetUnderlyingType(type) ?? type;
+
+            if (targetType == typeof(bool)) return DataType.Bool;
+            if (targetType == typeof(short)) return DataType.Int16;
+            if (targetType == typeof(ushort)) return DataType.UInt16;
+            if (targetType == typeof(int)) return DataType.Int32;
+            if (targetType == typeof(uint)) return DataType.UInt32;
+            if (targetType == typeof(float)) return DataType.Float;
+            if (targetType == typeof(double)) return DataType.Double;
+            if (targetType == typeof(byte)) return DataType.Byte;
+            if (targetType == typeof(char)) return DataType.Char;
+            if (targetType == typeof(string)) return DataType.String;
+            if (targetType == typeof(byte[])) return DataType.ByteArray;
+
+            throw new IndustrialDataConversionException(
+                string.Format("Cannot infer industrial data type from CLR type {0}. Use ReadValueAsync<T> with an explicit DataType.", type.Name));
+        }
+
+        private static ushort ToUShortLength(int length)
+        {
+            if (length > ushort.MaxValue)
+            {
+                throw new ArgumentOutOfRangeException(nameof(length), "Length cannot exceed UInt16.MaxValue.");
+            }
+
+            return (ushort)length;
+        }
+
+        private static ushort GetWriteLength(object value)
+        {
+            if (value is string text)
+            {
+                return ToUShortLength(text.Length);
+            }
+
+            if (value is byte[] bytes)
+            {
+                return ToUShortLength(bytes.Length);
+            }
+
+            return 1;
         }
     }
 }

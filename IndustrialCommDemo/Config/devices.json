@@ -1,0 +1,12 @@
+{
+  "devices": [
+    {
+      "name": "plc1",
+      "protocol": "modbus-tcp",
+      "host": "127.0.0.1",
+      "port": 502,
+      "slaveId": 1,
+      "deviceProfile": "inovance-easyplc"
+    }
+  ]
+}
