@@ -118,9 +118,9 @@ namespace IndustrialCommDemo.Views
         {
             await RunAsync("JSON 连接测试", async () =>
             {
-                using (var client = CreateClientFromJson())
+                using (var device = OpenConfiguredDevice())
                 {
-                    var report = await client.TestAsync();
+                    var report = await device.Client.TestAsync();
                     SetStatus(report.ToString(), report.IsSuccess ? Brushes.ForestGreen : Brushes.IndianRed);
                     _ctx.DemoLogger.Info(report.ToString());
                 }
@@ -133,14 +133,14 @@ namespace IndustrialCommDemo.Views
             await RunAsync("JSON 点位批量读取", async () =>
             {
                 SaveConfigFiles();
-                var table = LoadPointTable();
                 _rows.Clear();
-                using (var client = CreateClientFromJson())
+                using (var device = OpenConfiguredDevice())
                 {
-                    await client.ConnectAsync();
+                    var table = device.Tags;
+                    await device.ConnectAsync();
                     try
                     {
-                        var values = await client.ReadManyAsync(table.Tags);
+                        var values = await device.ReadManyAsync();
                         for (var i = 0; i < table.Tags.Count; i++)
                         {
                             var tag = table.Tags[i];
@@ -158,7 +158,7 @@ namespace IndustrialCommDemo.Views
                     }
                     finally
                     {
-                        await client.DisconnectAsync();
+                        await device.DisconnectAsync();
                     }
                 }
 
@@ -166,12 +166,12 @@ namespace IndustrialCommDemo.Views
             });
         }
 
-        // 工厂根据 protocol 字段自动选择 Modbus、S7 或 MC 客户端。
-        private IIndustrialClient CreateClientFromJson()
+        // 从 JSON 同时装配协议客户端和点位表，Demo 与 SDK 用户走同一条部署路径。
+        private IndustrialConfiguredClient OpenConfiguredDevice()
         {
             var config = SaveDeviceConfig();
             RefreshDeviceList(config);
-            return IndustrialClientFactory.FromConfig(_deviceConfigPath, GetSelectedDeviceName(), _ctx.SdkLogger);
+            return IndustrialDeployment.Open(_deviceConfigPath, GetSelectedDeviceName(), _ctx.SdkLogger);
         }
 
         // 操作前先落盘，保证 Demo 行为与实际部署读取文件时一致。
@@ -192,13 +192,6 @@ namespace IndustrialCommDemo.Views
             Directory.CreateDirectory(Path.GetDirectoryName(_deviceConfigPath));
             File.WriteAllText(_deviceConfigPath, DeviceJsonTextBox.Text);
             return config;
-        }
-
-        // 通过 devices.json 的 pointsFile 一步加载当前设备点位表。
-        private TagTable LoadPointTable()
-        {
-            LoadSelectedPointConfig();
-            return TagTable.LoadForDevice(_deviceConfigPath, GetSelectedDeviceName());
         }
 
         // 统一处理按钮状态、执行提示和异常记录。
