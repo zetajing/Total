@@ -7,6 +7,21 @@ using System.Text;
 
 namespace IndustrialCommSdk
 {
+    /// <summary>表示部署配置的离线校验结果。</summary>
+    public sealed class IndustrialConfigValidationResult
+    {
+        internal IndustrialConfigValidationResult(IReadOnlyList<string> errors)
+        {
+            Errors = errors ?? throw new ArgumentNullException(nameof(errors));
+        }
+
+        /// <summary>获取配置是否通过全部校验。</summary>
+        public bool IsValid { get { return Errors.Count == 0; } }
+
+        /// <summary>获取所有校验错误；为空表示配置可以用于部署。</summary>
+        public IReadOnlyList<string> Errors { get; private set; }
+    }
+
     /// <summary>
     /// 表示从 devices.json 读取的 SDK 部署配置。
     /// </summary>
@@ -75,6 +90,79 @@ namespace IndustrialCommSdk
             }
 
             throw new KeyNotFoundException(string.Format("Device '{0}' was not found in SDK config.", name));
+        }
+
+        /// <summary>
+        /// 在不连接设备的情况下校验部署配置、协议参数和全部关联点位表。
+        /// configDirectory 应为 devices.json 所在目录，用于解析相对 pointsFile 路径。
+        /// </summary>
+        public IndustrialConfigValidationResult Validate(string configDirectory)
+        {
+            var errors = new List<string>();
+            var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            if (string.IsNullOrWhiteSpace(configDirectory))
+            {
+                errors.Add("配置目录不能为空。");
+                return new IndustrialConfigValidationResult(errors.AsReadOnly());
+            }
+
+            if (Devices == null || Devices.Count == 0)
+            {
+                errors.Add("devices 至少需要配置一台设备。");
+                return new IndustrialConfigValidationResult(errors.AsReadOnly());
+            }
+
+            for (var i = 0; i < Devices.Count; i++)
+            {
+                var device = Devices[i];
+                var label = string.Format("devices[{0}]", i);
+                if (device == null)
+                {
+                    errors.Add(label + " 不能为空。");
+                    continue;
+                }
+
+                if (string.IsNullOrWhiteSpace(device.Name))
+                {
+                    errors.Add(label + ".name 不能为空。");
+                }
+                else if (!names.Add(device.Name))
+                {
+                    errors.Add(string.Format("设备名 '{0}' 重复。", device.Name));
+                }
+
+                try
+                {
+                    using (IndustrialClientFactory.FromConfig(device))
+                    {
+                        // 仅创建客户端以复用协议参数校验，不建立网络连接。
+                    }
+                }
+                catch (Exception ex)
+                {
+                    errors.Add(string.Format("设备 '{0}' 协议配置错误：{1}", device.Name ?? label, ex.Message));
+                }
+
+                try
+                {
+                    var pointFile = device.ResolvePointsFile(configDirectory);
+                    if (!File.Exists(pointFile))
+                    {
+                        errors.Add(string.Format("设备 '{0}' 的点位文件不存在：{1}", device.Name ?? label, pointFile));
+                    }
+                    else
+                    {
+                        TagTable.Load(pointFile);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    errors.Add(string.Format("设备 '{0}' 点位表错误：{1}", device.Name ?? label, ex.Message));
+                }
+            }
+
+            return new IndustrialConfigValidationResult(errors.AsReadOnly());
         }
     }
 

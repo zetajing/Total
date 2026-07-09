@@ -1,6 +1,8 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.IO;
+using System.Linq;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
@@ -20,6 +22,7 @@ namespace IndustrialCommDemo.Views
         private DemoAppContext _ctx;
         private string _deviceConfigPath;
         private string _pointConfigPath;
+        private bool _isRefreshingDeviceList;
 
         public JsonConfigTab()
         {
@@ -57,9 +60,14 @@ namespace IndustrialCommDemo.Views
             }
         }
 
-        // 先保存旧点位表，再加载新设备的 pointsFile，避免配置串写。
-        private void DeviceNameTextBox_LostKeyboardFocus(object sender, System.Windows.Input.KeyboardFocusChangedEventArgs e)
+        // 从 JSON 设备列表选择设备，避免手工输入名称造成找不到配置的错误。
+        private void DeviceNameComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
+            if (_isRefreshingDeviceList)
+            {
+                return;
+            }
+
             try
             {
                 LoadSelectedPointConfig();
@@ -68,6 +76,40 @@ namespace IndustrialCommDemo.Views
             catch (Exception ex)
             {
                 SetStatus("切换设备失败：" + ex.Message, Brushes.IndianRed);
+            }
+        }
+
+        // 保存前执行离线校验，检查协议参数、点位文件和点位 JSON，不连接 PLC。
+        private void ValidateConfigButton_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                SaveConfigFiles();
+                var config = IndustrialSdkConfig.Load(_deviceConfigPath);
+                var result = config.Validate(Path.GetDirectoryName(_deviceConfigPath));
+                if (result.IsValid)
+                {
+                    SetStatus("配置校验通过，共 " + config.Devices.Count + " 台设备。", Brushes.ForestGreen);
+                    _ctx.DemoLogger.Info("JSON 配置校验通过。devices=" + config.Devices.Count);
+                    return;
+                }
+
+                var message = string.Join(Environment.NewLine, result.Errors.Take(5));
+                if (result.Errors.Count > 5)
+                {
+                    message += Environment.NewLine + "其余 " + (result.Errors.Count - 5) + " 项错误请查看日志。";
+                }
+
+                SetStatus("配置校验失败：" + Environment.NewLine + message, Brushes.IndianRed);
+                foreach (var error in result.Errors)
+                {
+                    _ctx.DemoLogger.Warn("JSON 配置校验：" + error);
+                }
+            }
+            catch (Exception ex)
+            {
+                SetStatus("配置校验失败：" + ex.Message, Brushes.IndianRed);
+                _ctx.HandleError("JSON 配置校验失败。", ex, true);
             }
         }
 
@@ -127,31 +169,36 @@ namespace IndustrialCommDemo.Views
         // 工厂根据 protocol 字段自动选择 Modbus、S7 或 MC 客户端。
         private IIndustrialClient CreateClientFromJson()
         {
-            SaveDeviceConfig();
-            return IndustrialClientFactory.FromConfig(_deviceConfigPath, DeviceNameTextBox.Text, _ctx.SdkLogger);
+            var config = SaveDeviceConfig();
+            RefreshDeviceList(config);
+            return IndustrialClientFactory.FromConfig(_deviceConfigPath, GetSelectedDeviceName(), _ctx.SdkLogger);
         }
 
         // 操作前先落盘，保证 Demo 行为与实际部署读取文件时一致。
         private void SaveConfigFiles()
         {
-            SaveDeviceConfig();
+            var config = SaveDeviceConfig();
+            RefreshDeviceList(config);
             _pointConfigPath = ResolveSelectedPointConfigPath();
+            TagTable.FromJson(PointJsonTextBox.Text);
             Directory.CreateDirectory(Path.GetDirectoryName(_pointConfigPath));
             File.WriteAllText(_pointConfigPath, PointJsonTextBox.Text);
             PointConfigGroupBox.Header = GetPointConfigDisplayName(_pointConfigPath);
         }
 
-        private void SaveDeviceConfig()
+        private IndustrialSdkConfig SaveDeviceConfig()
         {
+            var config = IndustrialSdkConfig.FromJson(DeviceJsonTextBox.Text);
             Directory.CreateDirectory(Path.GetDirectoryName(_deviceConfigPath));
             File.WriteAllText(_deviceConfigPath, DeviceJsonTextBox.Text);
+            return config;
         }
 
         // 通过 devices.json 的 pointsFile 一步加载当前设备点位表。
         private TagTable LoadPointTable()
         {
             LoadSelectedPointConfig();
-            return TagTable.LoadForDevice(_deviceConfigPath, DeviceNameTextBox.Text);
+            return TagTable.LoadForDevice(_deviceConfigPath, GetSelectedDeviceName());
         }
 
         // 统一处理按钮状态、执行提示和异常记录。
@@ -178,7 +225,7 @@ namespace IndustrialCommDemo.Views
         {
             DeviceJsonTextBox.IsEnabled = enabled;
             PointJsonTextBox.IsEnabled = enabled;
-            DeviceNameTextBox.IsEnabled = enabled;
+            DeviceNameComboBox.IsEnabled = enabled;
         }
 
         private void SetStatus(string text, Brush foreground)
@@ -194,6 +241,7 @@ namespace IndustrialCommDemo.Views
             {
                 EnsureConfigFileExists(_deviceConfigPath, "devices.json");
                 DeviceJsonTextBox.Text = File.ReadAllText(_deviceConfigPath);
+                RefreshDeviceList(IndustrialSdkConfig.FromJson(DeviceJsonTextBox.Text));
                 LoadSelectedPointConfig(true, false);
                 _rows.Clear();
                 SetStatus("已读取配置：" + _deviceConfigPath, Brushes.ForestGreen);
@@ -213,8 +261,47 @@ namespace IndustrialCommDemo.Views
         private string ResolveSelectedPointConfigPath()
         {
             var config = IndustrialSdkConfig.FromJson(DeviceJsonTextBox.Text);
-            var device = config.FindDevice(DeviceNameTextBox.Text);
+            var device = config.FindDevice(GetSelectedDeviceName());
             return device.ResolvePointsFile(Path.GetDirectoryName(_deviceConfigPath));
+        }
+
+        private void RefreshDeviceList(IndustrialSdkConfig config)
+        {
+            if (config == null) throw new ArgumentNullException(nameof(config));
+
+            var currentName = DeviceNameComboBox.SelectedItem as string;
+            var names = config.Devices
+                .Where(device => device != null && !string.IsNullOrWhiteSpace(device.Name))
+                .Select(device => device.Name)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            if (names.Count == 0)
+            {
+                throw new InvalidOperationException("devices 至少需要配置一台带 name 的设备。");
+            }
+
+            _isRefreshingDeviceList = true;
+            try
+            {
+                DeviceNameComboBox.ItemsSource = names;
+                DeviceNameComboBox.SelectedItem = names.FirstOrDefault(name => string.Equals(name, currentName, StringComparison.OrdinalIgnoreCase)) ?? names[0];
+            }
+            finally
+            {
+                _isRefreshingDeviceList = false;
+            }
+        }
+
+        private string GetSelectedDeviceName()
+        {
+            var name = DeviceNameComboBox.SelectedItem as string;
+            if (string.IsNullOrWhiteSpace(name))
+            {
+                throw new InvalidOperationException("请先从设备列表选择一台设备。");
+            }
+
+            return name;
         }
 
         private void LoadSelectedPointConfig(bool forceReload = false, bool saveCurrent = true)
