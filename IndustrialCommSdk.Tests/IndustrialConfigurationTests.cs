@@ -50,7 +50,7 @@ namespace IndustrialCommSdk.Tests
                 var config = IndustrialSdkConfig.FromJson(@"
 {
   ""devices"": [
-    { ""name"": ""plc1"", ""protocol"": ""modbus-tcp"", ""host"": ""127.0.0.1"", ""pointsFile"": ""points/missing.json"" },
+    { ""name"": ""plc1"", ""protocol"": ""modbus-tcp"", ""host"": ""127.0.0.1"", ""pointsFile"": ""points/missing.json"", ""pollingIntervalMilliseconds"": 0 },
     { ""name"": ""plc1"", ""protocol"": ""modbus-tcp"", ""host"": ""127.0.0.1"", ""pointsFile"": ""points/missing2.json"" }
   ]
 }");
@@ -60,6 +60,7 @@ namespace IndustrialCommSdk.Tests
                 Assert.That(result.IsValid, Is.False);
                 Assert.That(result.Errors, Has.Some.Contains("重复"));
                 Assert.That(result.Errors, Has.Some.Contains("点位文件不存在"));
+                Assert.That(result.Errors, Has.Some.Contains("pollingIntervalMilliseconds"));
             }
             finally
             {

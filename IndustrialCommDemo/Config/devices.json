@@ -7,7 +7,10 @@
       "port": 502,
       "slaveId": 1,
       "deviceProfile": "inovance-easyplc",
-      "pointsFile": "points/plc1.json"
+      "pointsFile": "points/plc1.json",
+      "enabled": true,
+      "pollingIntervalMilliseconds": 1000,
+      "reconnectDelayMilliseconds": 3000
     },
     {
       "name": "s7plc",
@@ -16,7 +19,10 @@
       "cpuType": "S71200",
       "rack": 0,
       "slot": 1,
-      "pointsFile": "points/s7plc.json"
+      "pointsFile": "points/s7plc.json",
+      "enabled": false,
+      "pollingIntervalMilliseconds": 1000,
+      "reconnectDelayMilliseconds": 3000
     }
   ]
 }

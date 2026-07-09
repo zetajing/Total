@@ -7,7 +7,7 @@
 ## 当前分支与提交
 
 - 默认分支：`master`
-- 当前 JSON 配置运行时提交：`f98f36d`
+- 当前代码状态：以 `master` 最新提交为准，使用 `git log --oneline -1` 查看。
 - 每次修改代码或文档后都需要提交并推送到 Git。
 
 ## 解决方案结构
@@ -50,7 +50,10 @@ Demo 配置模板位于：
   "port": 502,
   "slaveId": 1,
   "deviceProfile": "inovance-easyplc",
-  "pointsFile": "points/plc1.json"
+  "pointsFile": "points/plc1.json",
+  "enabled": true,
+  "pollingIntervalMilliseconds": 1000,
+  "reconnectDelayMilliseconds": 3000
 }
 ```
 
@@ -81,6 +84,8 @@ using (var device = IndustrialDeployment.Open("Config/devices.json", "plc1"))
 
 `IndustrialDeployment.Open` 一次性加载设备配置、点位表并创建协议客户端。`IndustrialConfiguredClient` 按 JSON 点位名提供单读、单写、批量读和批量写入口。
 
+多设备后台运行使用 `IndustrialDeviceHost.Load("Config/devices.json")`：仅加载 `enabled` 不为 false 的设备，管理连接、按 `pollingIntervalMilliseconds` 批量轮询、断线重连、状态事件和数据事件。
+
 ## 验证命令
 
 SDK 测试：
@@ -95,7 +100,7 @@ Demo 构建：
 dotnet build IndustrialCommDemo\IndustrialCommDemo.csproj --no-restore
 ```
 
-预期结果：SDK 138 项测试通过，Demo 构建 0 警告、0 错误。
+预期结果：SDK 140 项测试通过，Demo 构建 0 警告、0 错误。
 
 ## 已知限制
 
@@ -103,14 +108,15 @@ dotnet build IndustrialCommDemo\IndustrialCommDemo.csproj --no-restore
 
 SDK 与 `IndustrialCommDemo` 单独构建正常。解决整个解决方案构建问题时，优先考虑迁移 `Refresh Logs` 为 SDK 风格项目，或使用完整 Visual Studio MSBuild 构建该旧项目。
 
-## 下一阶段：DeviceHost
+## 已完成：DeviceHost 基础运行时
 
-下一步不优先继续堆协议，而是实现配置驱动的多设备运行时：
+已完成的能力：
 
 1. 从 `devices.json` 自动加载所有启用设备。
-2. 管理连接、退避重连、健康状态和运行日志。
-3. 按设备的点位表执行周期批量读取。
+2. 管理连接、固定周期重连、健康状态和运行日志。
+3. 按设备的点位表执行周期批量读取并上报事件。
 4. 提供按“设备名 + 点位名”的读写入口和状态事件。
-5. 后续再增加 `readGroup`、轮询周期、`writable`、单位等少量点位运行元数据。
+
+下一优先级：增加 `readGroup`、`writable`、单位等少量点位运行元数据；再根据真实现场需求扩展协议模块。
 
 协议扩展采用插件式：只有真实现场需要时才增加 Omron、Allen-Bradley、OPC UA 等模块，并保持 `IIndustrialClient` 抽象不变。

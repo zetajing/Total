@@ -132,6 +132,21 @@ namespace IndustrialCommSdk
                     errors.Add(string.Format("设备名 '{0}' 重复。", device.Name));
                 }
 
+                if (!device.Enabled.GetValueOrDefault(true))
+                {
+                    continue;
+                }
+
+                if (device.PollingIntervalMilliseconds.HasValue && device.PollingIntervalMilliseconds.Value <= 0)
+                {
+                    errors.Add(string.Format("设备 '{0}' 的 pollingIntervalMilliseconds 必须大于 0。", device.Name ?? label));
+                }
+
+                if (device.ReconnectDelayMilliseconds.HasValue && device.ReconnectDelayMilliseconds.Value <= 0)
+                {
+                    errors.Add(string.Format("设备 '{0}' 的 reconnectDelayMilliseconds 必须大于 0。", device.Name ?? label));
+                }
+
                 try
                 {
                     using (IndustrialClientFactory.FromConfig(device))
@@ -252,6 +267,22 @@ namespace IndustrialCommSdk
         /// <summary>获取或设置该设备的点位表路径；相对路径以 devices.json 所在目录为基准。</summary>
         [DataMember(Name = "pointsFile")]
         public string PointsFile { get; set; }
+
+        /// <summary>获取或设置设备是否由 DeviceHost 自动启动；省略时默认为 true。</summary>
+        [DataMember(Name = "enabled")]
+        public bool? Enabled { get; set; }
+
+        /// <summary>获取或设置自动批量读取周期，单位为毫秒；省略时 DeviceHost 不创建轮询订阅。</summary>
+        [DataMember(Name = "pollingIntervalMilliseconds")]
+        public int? PollingIntervalMilliseconds { get; set; }
+
+        /// <summary>获取或设置轮询是否只在值或质量变化时上报；省略时默认为 false。</summary>
+        [DataMember(Name = "reportOnChangeOnly")]
+        public bool? ReportOnChangeOnly { get; set; }
+
+        /// <summary>获取或设置断线后重连检查周期，单位为毫秒；省略时使用 3000。</summary>
+        [DataMember(Name = "reconnectDelayMilliseconds")]
+        public int? ReconnectDelayMilliseconds { get; set; }
 
         /// <summary>获取或设置 Siemens S7 CPU 型号，例如 S71200 或 S71500。</summary>
         [DataMember(Name = "cpuType")]
