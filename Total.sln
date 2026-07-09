@@ -13,6 +13,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LogHelper", "LogHelper\LogH
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{6FCFA53C-7A3B-4D35-80B7-FF8A19423179}"
 	ProjectSection(SolutionItems) = preProject
+		PROJECT_CONTEXT.md = PROJECT_CONTEXT.md
 		README.md = README.md
 	EndProjectSection
 EndProject
