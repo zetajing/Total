@@ -171,23 +171,85 @@ namespace IndustrialCommSdk.Tests
             }
         }
 
-        private sealed class FakeIndustrialClient : IIndustrialClient, IProtocolCapabilityProvider
+        [Test]
+        public async Task PollingScheduler_Should_Split_Reads_By_MaxReadItems_When_No_Planner()
+        {
+            using (var scheduler = new PollingScheduler())
+            {
+                var client = new FakeIndustrialClient("dev-1", maxReadItems: 1);
+                var request = new SubscriptionRequest("split", "dev-1", new[]
+                {
+                    new ReadRequest("dev-1", "D100", DataType.Int16),
+                    new ReadRequest("dev-1", "D101", DataType.Int16),
+                    new ReadRequest("dev-1", "D102", DataType.Int16),
+                }, TimeSpan.FromMilliseconds(100), false);
+
+                var tcs = new TaskCompletionSource<SubscriptionEvent>();
+                await scheduler.SubscribeAsync(client, request, (sender, args) => tcs.TrySetResult(args), CancellationToken.None);
+
+                var completed = await Task.WhenAny(tcs.Task, Task.Delay(1000));
+                await scheduler.UnsubscribeAsync("split", CancellationToken.None);
+
+                Assert.That(completed, Is.EqualTo(tcs.Task));
+                Assert.That(tcs.Task.Result.Values.Count, Is.EqualTo(3));
+                Assert.That(client.ReadManyCallCount, Is.GreaterThanOrEqualTo(3));
+                Assert.That(client.LargestBatchSizeSeen, Is.EqualTo(1));
+            }
+        }
+
+        [Test]
+        public async Task PollingScheduler_Should_Use_Batch_Planner_When_Available()
+        {
+            using (var scheduler = new PollingScheduler())
+            {
+                var client = new PlanningIndustrialClient("dev-1");
+                var request = new SubscriptionRequest("planned", "dev-1", new[]
+                {
+                    new ReadRequest("dev-1", "D100", DataType.Int16),
+                    new ReadRequest("dev-1", "D101", DataType.Int16),
+                    new ReadRequest("dev-1", "D102", DataType.Int16),
+                }, TimeSpan.FromMilliseconds(100), false);
+
+                var tcs = new TaskCompletionSource<SubscriptionEvent>();
+                await scheduler.SubscribeAsync(client, request, (sender, args) => tcs.TrySetResult(args), CancellationToken.None);
+
+                var completed = await Task.WhenAny(tcs.Task, Task.Delay(1000));
+                await scheduler.UnsubscribeAsync("planned", CancellationToken.None);
+
+                Assert.That(completed, Is.EqualTo(tcs.Task));
+                Assert.That(tcs.Task.Result.Values.Count, Is.EqualTo(3));
+                Assert.That(client.PlanReadCount, Is.GreaterThanOrEqualTo(1));
+                Assert.That(client.LargestBatchSizeSeen, Is.EqualTo(1));
+            }
+        }
+
+        private class FakeIndustrialClient : IIndustrialClient, IProtocolCapabilityProvider
         {
             private readonly Func<object> _valueFactory;
             private readonly TimeSpan _recommendedMinPollingInterval;
+            private readonly int _maxReadItems;
             private int _smallestBatchSizeSeen = int.MaxValue;
+            private int _largestBatchSizeSeen;
+            private int _readManyCallCount;
 
-            public FakeIndustrialClient(string deviceId, Func<object> valueFactory = null, TimeSpan? recommendedMinPollingInterval = null)
+            public FakeIndustrialClient(
+                string deviceId,
+                Func<object> valueFactory = null,
+                TimeSpan? recommendedMinPollingInterval = null,
+                int maxReadItems = 256)
             {
                 DeviceId = deviceId;
                 _valueFactory = valueFactory ?? (() => 42);
                 _recommendedMinPollingInterval = recommendedMinPollingInterval ?? TimeSpan.FromMilliseconds(1);
+                _maxReadItems = maxReadItems;
             }
 
             public string DeviceId { get; private set; }
             public ProtocolKind Kind { get { return ProtocolKind.ModbusTcp; } }
             public bool IsConnected { get { return true; } }
             public int SmallestBatchSizeSeen { get { return _smallestBatchSizeSeen == int.MaxValue ? 0 : _smallestBatchSizeSeen; } }
+            public int LargestBatchSizeSeen { get { return _largestBatchSizeSeen; } }
+            public int ReadManyCallCount { get { return _readManyCallCount; } }
             public ProtocolCapabilities Capabilities
             {
                 get
@@ -198,7 +260,7 @@ namespace IndustrialCommSdk.Tests
                         supportsSubscriptions: true,
                         supportsBitAddress: true,
                         supportsByteArray: true,
-                        maxReadItems: 256,
+                        maxReadItems: _maxReadItems,
                         maxWriteItems: 256,
                         recommendedMinPollingInterval: _recommendedMinPollingInterval);
                 }
@@ -216,8 +278,11 @@ namespace IndustrialCommSdk.Tests
 
             public async Task<BatchReadResult> ReadManyAsync(IReadOnlyCollection<ReadRequest> requests, CancellationToken cancellationToken)
             {
+                _readManyCallCount++;
                 if (requests.Count < _smallestBatchSizeSeen)
                     _smallestBatchSizeSeen = requests.Count;
+                if (requests.Count > _largestBatchSizeSeen)
+                    _largestBatchSizeSeen = requests.Count;
 
                 var values = new List<DataValue>();
                 foreach (var request in requests)
@@ -237,6 +302,32 @@ namespace IndustrialCommSdk.Tests
 
             public Task WriteAsync(WriteRequest request, CancellationToken cancellationToken) { return Task.CompletedTask; }
             public Task WriteManyAsync(IReadOnlyCollection<WriteRequest> requests, CancellationToken cancellationToken) { return Task.CompletedTask; }
+        }
+
+        private sealed class PlanningIndustrialClient : FakeIndustrialClient, IBatchOperationPlanner
+        {
+            public PlanningIndustrialClient(string deviceId) : base(deviceId, maxReadItems: 256)
+            {
+            }
+
+            public int PlanReadCount { get; private set; }
+
+            public BatchSplitPlan PlanRead(IReadOnlyCollection<ReadRequest> requests, BatchReadOptions options, ProtocolCapabilities capabilities)
+            {
+                PlanReadCount++;
+                var list = new List<ReadRequest>(requests);
+                var groups = new List<BatchRequestGroup>();
+                for (var i = 0; i < list.Count; i++)
+                {
+                    groups.Add(BatchRequestGroup.ForRead(i, "planned", i, i, list[i].DataType, new[] { list[i] }));
+                }
+                return new BatchSplitPlan(ProtocolKind.ModbusTcp, BatchOperationKind.Read, groups, list.Count);
+            }
+
+            public BatchSplitPlan PlanWrite(IReadOnlyCollection<WriteRequest> requests, BatchWriteOptions options, ProtocolCapabilities capabilities)
+            {
+                return BatchSplitPlan.SingleWriteGroup(ProtocolKind.ModbusTcp, requests);
+            }
         }
 
         private sealed class RawSocketClient : IIndustrialClient
