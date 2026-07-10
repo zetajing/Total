@@ -1,6 +1,6 @@
 # SDK 核心可扩展平台设计
 
-本文档记录 `IndustrialCommSdk` 从“多个协议客户端集合”演进为“可扩展工业通讯平台”的第一步。当前改造仍保持非破坏式：不修改现有 `IIndustrialClient` 方法签名，不影响现有 Demo 和业务调用；但已经不只是新增模型，而是开始把模型接入现有核心实现。
+本文档记录 `IndustrialCommSdk` 从“多个协议客户端集合”演进为“可扩展工业通讯平台”的第一步。当前改造仍保持非破坏式：不修改现有 `IIndustrialClient` 方法签名，不影响现有 Demo 和业务调用；但已经不只是新增模型，而是开始把模型接入现有核心实现和 Demo 界面。
 
 ## 本轮新增能力
 
@@ -11,6 +11,7 @@
 ```text
 IndustrialCommSdk/Abstractions/ProtocolCapabilities.cs
 IndustrialCommSdk/IndustrialClientPlatformExtensions.cs
+IndustrialCommDemo/Helpers/CapabilityDisplayHelper.cs
 ```
 
 核心入口：
@@ -21,7 +22,7 @@ var capabilities = client.GetCapabilities();
 
 用途：
 
-- Demo 可以根据能力决定是否显示批量、位地址、字符串、ByteArray、原始 Socket 等功能。
+- Demo 可以显示协议能力、批量限制、PDU 限制、推荐轮询周期和默认超时。
 - DeviceHost / PollingScheduler 可以根据 `RecommendedMinPollingInterval` 给出轮询周期建议。
 - 后续文档可以自动生成协议能力矩阵。
 - 第三方协议客户端可实现 `IProtocolCapabilityProvider` 覆盖默认能力。
@@ -197,7 +198,18 @@ var plan = planner.PlanRead(requests, BatchReadOptions.Default, client.GetCapabi
 5. 每个批次独立容错；某个批次失败时，该批次的点位返回 `QualityStatus.Bad`，不会阻断其他批次。
 6. 批次结果按请求 key 合并，再按每个订阅的原始点位顺序上报。
 
-### 6. 测试覆盖
+### 6. Demo 接入协议能力展示
+
+Demo 现在已经在协议页面展示能力信息：
+
+- `ModbusTab` 根据 TCP / RTU 连接方式显示默认能力，连接后显示实际 client 能力。
+- `SiemensS7Tab` 通过共享 `ProtocolTabViewModel.CapabilityText` 展示 S7 能力。
+- `MitsubishiMcTab` 通过共享 `ProtocolTabViewModel.CapabilityText` 展示 MC 能力。
+- `CapabilityDisplayHelper` 统一格式化 DisplayName、能力标签、最大读写数量、最大地址跨度、PDU 限制、推荐轮询周期和默认超时。
+
+当前 Demo 仍只做“展示能力”，还没有根据能力自动隐藏或禁用输入控件。
+
+### 7. 测试覆盖
 
 `PlatformModelTests` 已覆盖：
 
@@ -227,27 +239,26 @@ var plan = planner.PlanRead(requests, BatchReadOptions.Default, client.GetCapabi
 - 现有 `ReadManyAsync / WriteManyAsync` 仍可继续使用。
 - Modbus `BatchSplitPlan` 已建立，轮询调度器已可使用 planner 拆分读取批次。
 - S7 / MC 已接入统一地址接口，但还未接入通用 `BatchSplitPlan`。
-- Demo 暂时还未根据 `ProtocolCapabilities` 动态调整 UI。
+- Demo 已展示 `ProtocolCapabilities`，但还未按能力自动禁用控件或调整输入项。
 - NuGet 拆包暂缓，先稳定 Abstractions/Core 边界。
 
 ## 建议下一步 PR
 
-### PR 1：Demo 接入协议能力
-
-目标：
-
-- 在 Modbus / S7 / MC 页面显示当前协议能力。
-- 根据 `SupportsBitAddress / SupportsString / SupportsByteArray` 调整输入提示。
-- 对过高频轮询显示警告。
-- 显示批量能力：`MaxReadItems / MaxAddressSpan / MaxPduBytes`。
-
-### PR 2：S7 / MC 批量计划化
+### PR 1：S7 / MC 批量计划化
 
 目标：
 
 - 基于统一地址模型实现 S7 / MC 的批量规划。
 - 明确位地址、字地址、DB 区、设备区的合并边界。
 - 保留顺序映射，避免批量优化影响调用方结果顺序。
+
+### PR 2：Demo 根据协议能力动态调整 UI
+
+目标：
+
+- 根据 `SupportsBitAddress / SupportsString / SupportsByteArray` 动态启用或禁用数据类型。
+- 对低于推荐轮询周期的输入即时显示警告。
+- 在批量读取前预览 `MaxReadItems / MaxAddressSpan / MaxPduBytes` 风险。
 
 ### PR 3：统一日志和诊断输出
 
