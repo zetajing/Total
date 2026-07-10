@@ -161,6 +161,73 @@ namespace IndustrialCommSdk.Tests
         }
 
         [Test]
+        public void S7Planner_ShouldGroupSameDbRange()
+        {
+            var client = new SiemensS7Client(new SiemensS7ClientOptions
+            {
+                DeviceId = "s7",
+                Host = "127.0.0.1",
+                Rack = 0,
+                Slot = 1,
+            });
+            try
+            {
+                var planner = (IBatchOperationPlanner)client;
+                var requests = new[]
+                {
+                    new ReadRequest("s7", "DB1.DBW0", DataType.Int16),
+                    new ReadRequest("s7", "DB1.DBW2", DataType.Int16),
+                    new ReadRequest("s7", "DB1.DBW4", DataType.Int16),
+                };
+
+                var plan = planner.PlanRead(requests, new BatchReadOptions(maxItemsPerBatch: 10, maxAddressSpan: 16), client.Capabilities);
+
+                Assert.That(plan.ProtocolKind, Is.EqualTo(ProtocolKind.SiemensS7));
+                Assert.That(plan.PlannedRequestCount, Is.EqualTo(1));
+                Assert.That(plan.Groups[0].Area, Is.EqualTo("DB1"));
+                Assert.That(plan.Groups[0].StartOffset, Is.EqualTo(0));
+                Assert.That(plan.Groups[0].EndOffset, Is.EqualTo(5));
+            }
+            finally
+            {
+                client.Dispose();
+            }
+        }
+
+        [Test]
+        public void McPlanner_ShouldGroupSameDeviceRange()
+        {
+            var client = new MitsubishiMcClient(new MitsubishiMcClientOptions
+            {
+                DeviceId = "mc",
+                Host = "127.0.0.1",
+                Port = 5000,
+            });
+            try
+            {
+                var planner = (IBatchOperationPlanner)client;
+                var requests = new[]
+                {
+                    new ReadRequest("mc", "D100", DataType.UInt16),
+                    new ReadRequest("mc", "D101", DataType.UInt16),
+                    new ReadRequest("mc", "D102", DataType.UInt16),
+                };
+
+                var plan = planner.PlanRead(requests, new BatchReadOptions(maxItemsPerBatch: 10, maxAddressSpan: 16), client.Capabilities);
+
+                Assert.That(plan.ProtocolKind, Is.EqualTo(ProtocolKind.MitsubishiMc));
+                Assert.That(plan.PlannedRequestCount, Is.EqualTo(1));
+                Assert.That(plan.Groups[0].Area, Is.EqualTo("D"));
+                Assert.That(plan.Groups[0].StartOffset, Is.EqualTo(100));
+                Assert.That(plan.Groups[0].EndOffset, Is.EqualTo(102));
+            }
+            finally
+            {
+                client.Dispose();
+            }
+        }
+
+        [Test]
         public void GetCapabilities_ShouldUseProviderOverride()
         {
             var client = new CapabilityClient();
