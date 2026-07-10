@@ -331,15 +331,14 @@ namespace IndustrialCommSdk.Polling
 
                 if (mergedRequests.Count > _capabilities.MaxReadItems)
                 {
-                    _logger.Error(
+                    _logger.Warn(
                         string.Format(
                             CultureInfo.InvariantCulture,
                             "Merged polling read exceeds protocol capability | Device={0} | Protocol={1} | Requests={2} | MaxReadItems={3}",
                             _client.DeviceId,
                             _capabilities.DisplayName,
                             mergedRequests.Count,
-                            _capabilities.MaxReadItems),
-                        null);
+                            _capabilities.MaxReadItems));
                 }
 
                 BatchReadResult mergedResult;
