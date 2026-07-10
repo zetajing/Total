@@ -1,6 +1,6 @@
 # SDK 核心可扩展平台设计
 
-本文档记录 `IndustrialCommSdk` 从“多个协议客户端集合”演进为“可扩展工业通讯平台”的第一步。当前变更尽量保持非破坏式：不修改现有 `IIndustrialClient` 方法签名，不影响现有 Demo 和业务调用。
+本文档记录 `IndustrialCommSdk` 从“多个协议客户端集合”演进为“可扩展工业通讯平台”的第一步。当前改造仍保持非破坏式：不修改现有 `IIndustrialClient` 方法签名，不影响现有 Demo 和业务调用；但已经不只是新增模型，而是开始把模型接入现有核心实现。
 
 ## 本轮新增能力
 
@@ -63,11 +63,16 @@ public interface IIndustrialAddress
 - 协议内部逐步迁移到强类型地址，减少反复 parse 和 object cast。
 - 点位表校验、批量合并、文档生成、错误提示可以共享统一地址形状。
 
-建议后续每个协议内部逐步对齐：
+当前已接入：
 
-- `ModbusAddress : IIndustrialAddress`
 - `S7Address : IIndustrialAddress`
 - `McAddress : IIndustrialAddress`
+- `S7AddressParser : IAddressParser<S7Address>`
+- `McAddressParser : IAddressParser<McAddress>`
+
+仍待接入：
+
+- `ModbusAddress : IIndustrialAddress`
 
 ### 3. 批量选项和拆分计划
 
@@ -95,19 +100,90 @@ IBatchOperationPlanner
 - PollingScheduler 可以根据 capabilities / options 自动拆分大批量点位。
 - 日志可以统一输出 `OriginalRequestCount / PlannedRequestCount / SavedRequestCount`。
 
+## 已经直接重构接入的部分
+
+### 1. `IndustrialClientBase` 接入能力模型
+
+`IndustrialClientBase` 已实现 `IProtocolCapabilityProvider`，所有继承基类的协议客户端天然具备：
+
+```csharp
+client.GetCapabilities();
+```
+
+默认能力来自：
+
+```csharp
+ProtocolCapabilities.ForProtocol(client.Kind)
+```
+
+协议客户端后续如果因为配置不同导致能力不同，可以 override：
+
+```csharp
+public override ProtocolCapabilities Capabilities { get { ... } }
+```
+
+### 2. S7 / MC 地址接入统一地址模型
+
+`S7Address` 和 `McAddress` 已开始提供统一的：
+
+- `Original`
+- `Normalized`
+- `Area`
+- `Offset`
+- `Bit`
+- `IsBitAddress`
+
+这样后续批量规划、点位表校验、诊断日志、文档生成可以不再依赖协议私有字段。
+
+### 3. Parser 接入强类型接口
+
+保留旧接口：
+
+```csharp
+IAddressParser.Parse(string) -> object
+```
+
+新增强类型接口：
+
+```csharp
+IAddressParser<S7Address>.Parse(string)
+IAddressParser<McAddress>.Parse(string)
+```
+
+协议内部已开始使用 `ParseTyped`，减少强制转换和 object 返回值扩散。
+
+### 4. PollingScheduler 接入协议能力
+
+`PollingScheduler.SubscribeAsync` 现在会：
+
+1. 读取 `client.GetCapabilities()`。
+2. 拒绝 `SupportsSubscriptions == false` 的协议，例如原始 TCP Socket。
+3. 拒绝低于 `RecommendedMinPollingInterval` 的订阅周期。
+4. Worker 内保存协议能力，用于后续批量拆分和日志增强。
+5. 当合并后的轮询请求数量超过 `MaxReadItems` 时记录能力越界日志。
+
 ## 当前边界
 
-本轮只建立平台模型，不强行重写已有协议实现：
+本轮已经开始直接接入平台模型，但仍然避免一次性大改：
 
 - `IIndustrialClient` 签名保持不变。
 - 现有 `ReadManyAsync / WriteManyAsync` 仍可继续使用。
-- Modbus 现有连续地址合并暂时保留在协议实现内部。
-- S7 / MC 之后再逐步接入 `BatchSplitPlan`。
+- Modbus 现有连续地址合并暂时保留在协议实现内部，下一步再映射到 `BatchSplitPlan`。
+- S7 / MC 已接入统一地址接口，但还未接入通用 `BatchSplitPlan`。
 - Demo 暂时还未根据 `ProtocolCapabilities` 动态调整 UI。
+- NuGet 拆包暂缓，先稳定 Abstractions/Core 边界。
 
 ## 建议下一步 PR
 
-### PR 1：Demo 接入协议能力
+### PR 1：Modbus 地址和批量计划接入
+
+目标：
+
+- 让 `ModbusAddress` 实现 `IIndustrialAddress`。
+- 把现有 Modbus 连续地址合并结果映射到 `BatchSplitPlan`。
+- 日志统一输出 `OriginalRequests / PlannedRequests / SavedRequests`。
+
+### PR 2：Demo 接入协议能力
 
 目标：
 
@@ -115,29 +191,21 @@ IBatchOperationPlanner
 - 根据 `SupportsBitAddress / SupportsString / SupportsByteArray` 调整输入提示。
 - 对过高频轮询显示警告。
 
-### PR 2：PollingScheduler 接入能力限制
+### PR 3：PollingScheduler 接入批量拆分计划
 
 目标：
 
-- 根据 `RecommendedMinPollingInterval` 校验订阅周期。
-- 根据 `MaxReadItems / MaxAddressSpan / MaxPduBytes` 为未来拆分批量做准备。
-- 轮询日志输出计划摘要。
+- 根据 `MaxReadItems / MaxAddressSpan / MaxPduBytes` 拆分轮询批次。
+- 为每轮轮询输出计划摘要。
+- 对大点表场景避免一次性合并过多请求。
 
-### PR 3：Modbus 批量计划化
-
-目标：
-
-- 把现有 Modbus 连续地址合并结果映射到 `BatchSplitPlan`。
-- 日志统一输出 `OriginalRequests / PlannedRequests / SavedRequests`。
-- 为 S7 / MC 复用批量规划打基础。
-
-### PR 4：S7 / MC 地址对象实现统一接口
+### PR 4：S7 / MC 批量计划化
 
 目标：
 
-- 让 `S7Address` 和 `McAddress` 实现 `IIndustrialAddress`。
-- 新增 `IAddressParser<TAddress>` 适配。
-- 保留旧 `IAddressParser`，避免破坏已有代码。
+- 基于统一地址模型实现 S7 / MC 的批量规划。
+- 明确位地址、字地址、DB 区、设备区的合并边界。
+- 保留顺序映射，避免批量优化影响调用方结果顺序。
 
 ## 不建议现在做的事
 
