@@ -34,7 +34,7 @@
 
 ## 核心可扩展平台现状
 
-`core-extensible-platform` 最初采用非破坏式建模，现在已经推进到“直接接入现有核心实现”：不修改 `IIndustrialClient` 现有方法签名，但核心基类、S7/MC 地址模型和轮询调度已经开始使用平台模型。
+`core-extensible-platform` 最初采用非破坏式建模，现在已经推进到“直接接入现有核心实现”：不修改 `IIndustrialClient` 现有方法签名，但核心基类、Modbus/S7/MC 地址模型、Modbus 批量规划和轮询调度已经开始使用平台模型。
 
 新增文件：
 
@@ -61,17 +61,20 @@
 
 3. `IIndustrialAddress` / `IndustrialAddress`
    - 提供统一地址形状：Original、Normalized、Area、Offset、Bit、IsBitAddress。
-   - `S7Address` 和 `McAddress` 已实现该接口。
-   - `ModbusAddress` 后续仍需接入。
+   - `ModbusAddress`、`S7Address` 和 `McAddress` 已实现该接口。
 
 4. 强类型地址 Parser
+   - `ModbusAddressParser` 已实现 `IAddressParser<ModbusAddress>`，并保留旧 `IAddressParser`。
    - `S7AddressParser` 已实现 `IAddressParser<S7Address>`，并保留旧 `IAddressParser`。
    - `McAddressParser` 已实现 `IAddressParser<McAddress>`，并保留旧 `IAddressParser`。
    - 协议内部已开始使用 `ParseTyped`，减少 object cast。
 
 5. `BatchReadOptions` / `BatchWriteOptions` / `BatchSplitPlan`
    - 为批量读写的超时、拆分、合并、顺序保持、错误继续策略提供协议无关模型。
-   - 后续可把 Modbus 现有连续地址合并映射为 `BatchSplitPlan`，再推广到 S7 / MC。
+   - `ModbusClientBase` 已实现 `IBatchOperationPlanner`。
+   - Modbus 现有连续地址合并已映射为 `BatchSplitPlan`。
+   - `PlanRead` 使用现有按 Area 分组、地址排序、小间隔合并的规则生成计划。
+   - `PlanWrite` 当前保守地按单个写入生成物理写入组，暂不自动合并写操作。
 
 6. `PollingScheduler` 接入能力模型
    - `SubscribeAsync` 会读取 `client.GetCapabilities()`。
@@ -80,7 +83,7 @@
    - Worker 内保存协议能力，为后续按 `MaxReadItems / MaxAddressSpan / MaxPduBytes` 拆批做准备。
 
 7. 测试更新
-   - `PlatformModelTests` 覆盖能力模型、统一地址、S7/MC parser 的平台地址形状、批量计划和能力 provider fallback。
+   - `PlatformModelTests` 覆盖能力模型、统一地址、Modbus/S7/MC parser 的平台地址形状、Modbus 读计划、批量计划和能力 provider fallback。
    - `PollingSchedulerTests` 已覆盖协议不支持订阅、低于推荐轮询周期、DeviceId 不匹配、同设备不同客户端拒绝、重复点位合并读取。
 
 ## P0/P1 可靠性优化现状
@@ -127,7 +130,7 @@
 - 轮询订阅仍是“SDK 主动周期读取”，不是 PLC 主动推送。
 - `IIndustrialClient` 的操作仍按客户端串行化执行，避免同一 TCP/串口连接上的请求响应错位。
 - 轮询调度已按设备合并，并已接入协议能力校验；但真正按 `BatchSplitPlan` 拆分轮询批次还未实现。
-- 协议级连续地址合并仍由具体协议实现负责；当前 Modbus TCP 已有连续地址合并能力，但尚未映射到 `BatchSplitPlan`。
+- Modbus 连续地址合并已映射到 `BatchSplitPlan`，但 S7 / MC 还未实现批量计划器。
 - `ReadAsync` 通信失败默认返回 `DataValue.Bad`；写入失败仍抛异常。调用方需要按 `Quality` 判断读取结果。
 - Demo 还未根据 `ProtocolCapabilities` 动态调整 UI。
 - 环境里无法保证所有变更都经过本地 `dotnet test`，后续每次功能修改必须优先补齐本地或 CI 验证。
@@ -238,6 +241,6 @@ SDK 与 `IndustrialCommDemo` 单独构建正常。解决整个解决方案构建
 3. 按设备的点位表执行周期批量读取并上报事件。
 4. 提供按“设备名 + 点位名”的读写入口和状态事件。
 
-下一优先级：增加 `readGroup`、`writable`、单位等少量点位运行元数据；再根据真实现场需求扩展协议模块。
+下一优先级：让 `PollingScheduler` 使用 `IBatchOperationPlanner` 生成轮询拆分计划，再接入 Demo 的协议能力显示。
 
 Modbus 品牌差异通过 `IModbusDeviceProfile` 隔离，JSON 数据驱动，新增品牌不改 C# 代码、不重新编译。非 Modbus 协议扩展采用插件式：只有真实现场需要时才增加 Omron、Allen-Bradley、OPC UA 等模块，并保持 `IIndustrialClient` 抽象不变。
