@@ -85,10 +85,11 @@ BatchPlanDiagnostics
 
 `BatchPlanDiagnostics` 统一格式化：
 
-- `BATCH_PLAN summary`
-- `BATCH_PLAN group`
+- `BATCH_PLAN summary`：逻辑批次的总览。
+- `BATCH_PLAN group`：计划中的每个物理请求组。
+- `BATCH_PLAN executed_group`：协议执行阶段真正发出的物理批次。
 
-字段包括 Source、Device、Protocol、Operation、OriginalRequests、PlannedRequests、SavedRequests、Sequence、Area、Start、End、DataType、Requests 和 Addresses。
+字段包括 Source、Device、Protocol、Operation、OriginalRequests、PlannedRequests、SavedRequests、Sequence、Area、Start、End、Length、DataType、Requests、Elapsed 和 Addresses。
 
 ## 4. 三大 PLC 协议接入 batch planner
 
@@ -190,7 +191,7 @@ Demo 已经在协议页面展示能力信息：
 - Modbus / S7 / MC 都已建立 `BatchSplitPlan`，轮询调度器已可使用 planner 拆分读取批次。
 - S7 / MC 的 planner 当前只负责拆批计划，底层读取执行仍复用现有逐项 `ReadManyAsync` 路径；真正的协议级多点合并读取可以后续单独做。
 - Demo 已展示 `ProtocolCapabilities`，但还未按能力自动禁用控件或调整输入项。
-- `BatchPlanDiagnostics` 已新增，后续还需要逐步替换各处手写日志为统一 formatter。
+- `BatchPlanDiagnostics` 已覆盖计划组和执行组日志格式；后续还需要逐步替换各处手写日志为统一 formatter。
 - NuGet 拆包暂缓，先稳定 Abstractions/Core 边界。
 
 ## 建议下一步
