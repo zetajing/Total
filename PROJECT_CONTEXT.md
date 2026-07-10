@@ -9,6 +9,7 @@
 - 默认分支：`master`
 - 当前代码状态：已合并 `PR #1 Optimize industrial SDK reliability for P0/P1`。
 - P0/P1 合并提交：`1afa2eb44394361548f8fd3d313b7c939bed89ca`
+- 当前正在推进：`core-extensible-platform`，目标是把 SDK 核心做成可扩展平台。
 - 每次修改代码或文档后都需要提交并推送到 Git。
 
 ## 解决方案结构
@@ -30,6 +31,40 @@
 - FA MES TCP
 
 统一抽象位于 `IndustrialCommSdk/Abstractions/IIndustrialClient`。协议客户端应继续遵循该接口，不在业务层直接依赖某个 PLC 驱动库。
+
+## 核心可扩展平台现状
+
+本轮 `core-extensible-platform` 采用非破坏式改造：不修改 `IIndustrialClient` 现有方法签名，先增加协议无关的平台模型，供 Demo、DeviceHost、PollingScheduler 和后续协议实现逐步接入。
+
+新增文件：
+
+- `IndustrialCommSdk/Abstractions/ProtocolCapabilities.cs`
+- `IndustrialCommSdk/Abstractions/IndustrialAddress.cs`
+- `IndustrialCommSdk/Abstractions/BatchOptions.cs`
+- `IndustrialCommSdk/Abstractions/BatchSplitPlan.cs`
+- `IndustrialCommSdk/Abstractions/PlatformInterfaces.cs`
+- `IndustrialCommSdk/IndustrialClientPlatformExtensions.cs`
+- `IndustrialCommSdk.Tests/PlatformModelTests.cs`
+- `CORE_EXTENSIBILITY.md`
+
+新增能力：
+
+1. `ProtocolCapabilities`
+   - 描述协议是否支持批量、位地址、字符串、ByteArray、原始传输、原生异步、推荐轮询周期、最大批量数量、最大地址跨度和 PDU 限制。
+   - 通过 `client.GetCapabilities()` 读取。
+   - 第三方协议客户端可实现 `IProtocolCapabilityProvider` 覆盖默认能力。
+
+2. `IIndustrialAddress` / `IndustrialAddress`
+   - 提供统一地址形状：Original、Normalized、Area、Offset、Bit、IsBitAddress。
+   - 后续 `ModbusAddress`、`S7Address`、`McAddress` 应逐步实现该接口。
+
+3. `BatchReadOptions` / `BatchWriteOptions` / `BatchSplitPlan`
+   - 为批量读写的超时、拆分、合并、顺序保持、错误继续策略提供协议无关模型。
+   - 后续可把 Modbus 现有连续地址合并映射为 `BatchSplitPlan`，再推广到 S7 / MC。
+
+4. `IBatchOperationPlanner`
+   - 为协议实现提供批量规划扩展点。
+   - 当前只建立接口和模型，不强制现有协议立即接入。
 
 ## P0/P1 可靠性优化现状
 
@@ -76,6 +111,7 @@
 - `IIndustrialClient` 的操作仍按客户端串行化执行，避免同一 TCP/串口连接上的请求响应错位。
 - 轮询调度已按设备合并，但协议级连续地址合并仍由具体协议实现负责；当前 Modbus TCP 已有连续地址合并能力。
 - `ReadAsync` 通信失败默认返回 `DataValue.Bad`；写入失败仍抛异常。调用方需要按 `Quality` 判断读取结果。
+- 核心平台模型已建立，但 Demo、PollingScheduler、S7、MC 还未全面接入 `ProtocolCapabilities` 和 `BatchSplitPlan`。
 - 环境里无法保证所有变更都经过本地 `dotnet test`，后续每次功能修改必须优先补齐本地或 CI 验证。
 
 ## JSON 快速部署
