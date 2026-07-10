@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using IndustrialCommSdk.Abstractions;
+using IndustrialCommSdk.Protocols.Mc;
+using IndustrialCommSdk.Protocols.S7;
 using NUnit.Framework;
 
 namespace IndustrialCommSdk.Tests
@@ -47,6 +49,34 @@ namespace IndustrialCommSdk.Tests
         }
 
         [Test]
+        public void S7AddressParser_ShouldExposeIndustrialAddressShape()
+        {
+            var parser = new S7AddressParser();
+            var address = (IIndustrialAddress)parser.ParseTyped("%DB1.DBX0.1");
+
+            Assert.That(address.Original, Is.EqualTo("%DB1.DBX0.1"));
+            Assert.That(address.Normalized, Is.EqualTo("DB1.DBX0.1"));
+            Assert.That(address.Area, Is.EqualTo("Db"));
+            Assert.That(address.Offset, Is.EqualTo(0));
+            Assert.That(address.Bit, Is.EqualTo(1));
+            Assert.That(address.IsBitAddress, Is.True);
+        }
+
+        [Test]
+        public void McAddressParser_ShouldExposeIndustrialAddressShape()
+        {
+            var parser = new McAddressParser();
+            var address = (IIndustrialAddress)parser.ParseTyped("D100");
+
+            Assert.That(address.Original, Is.EqualTo("D100"));
+            Assert.That(address.Normalized, Is.EqualTo("D100"));
+            Assert.That(address.Area, Is.EqualTo("D"));
+            Assert.That(address.Offset, Is.EqualTo(100));
+            Assert.That(address.Bit, Is.Null);
+            Assert.That(address.IsBitAddress, Is.False);
+        }
+
+        [Test]
         public void BatchOptions_ShouldRejectInvalidLimits()
         {
             Assert.Throws<ArgumentOutOfRangeException>(() => new BatchReadOptions(maxItemsPerBatch: 0));
@@ -76,7 +106,7 @@ namespace IndustrialCommSdk.Tests
         public void GetCapabilities_ShouldUseProviderOverride()
         {
             var client = new CapabilityClient();
-            var capabilities = IndustrialCommSdk.IndustrialClientPlatformExtensions.GetCapabilities(client);
+            var capabilities = IndustrialClientPlatformExtensions.GetCapabilities(client);
 
             Assert.That(capabilities.DisplayName, Is.EqualTo("Custom Protocol"));
             Assert.That(capabilities.MaxReadItems, Is.EqualTo(9));
@@ -86,7 +116,7 @@ namespace IndustrialCommSdk.Tests
         public void GetCapabilities_ShouldFallbackToProtocolDefaults()
         {
             var client = new PlainClient();
-            var capabilities = IndustrialCommSdk.IndustrialClientPlatformExtensions.GetCapabilities(client);
+            var capabilities = IndustrialClientPlatformExtensions.GetCapabilities(client);
 
             Assert.That(capabilities.Kind, Is.EqualTo(ProtocolKind.SiemensS7));
             Assert.That(capabilities.SupportsBitAddress, Is.True);
