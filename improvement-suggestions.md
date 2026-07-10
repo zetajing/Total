@@ -91,9 +91,9 @@
 
 - restore
 - build `IndustrialCommSdk`
-- test `IndustrialCommSdk.Tests`
-- build `IndustrialCommDemo`，必要时跳过旧式 `Refresh Logs`
-- 上传测试结果
+- build `IndustrialCommDemo`
+- build `Total.sln`
+- 上传构建结果
 
 建议工作流：
 
@@ -145,21 +145,14 @@ docs/mes.md
 docs/troubleshooting.md
 ```
 
-### 4. 增加真实构建限制说明
+### 4. 增加统一构建入口
 
-当前 `Total.sln` 可能被旧项目 `Refresh Logs` 拖累，建议明确拆分：
-
-```text
-Total.sln                // 保留全部项目
-IndustrialCommSdk.sln    // 只包含 SDK + Tests + Demo
-```
-
-或者至少增加：
+当前 `Total.sln` 只保留 SDK、Demo 和日志组件，可增加：
 
 ```text
 build-sdk.ps1
 build-demo.ps1
-test-sdk.ps1
+build-all.ps1
 ```
 
 ## P1：把 SDK 核心做成可扩展平台

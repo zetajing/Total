@@ -11,7 +11,6 @@
   - `IndustrialCommSdk/Protocols/S7/SiemensS7Client.cs`
   - `IndustrialCommSdk/Internal/IndustrialClientBase.cs`
   - `IndustrialCommSdk/Polling/PollingScheduler.cs`
-  - `IndustrialCommSdk.Tests/PollingSchedulerTests.cs`
 
 ## P0：必须先做稳的部分
 
@@ -69,7 +68,7 @@ S7 客户端生命周期已按成熟 S7.NetPlus 使用方式做加固：
 
 ### 测试覆盖
 
-`PollingSchedulerTests` 已覆盖：
+移除测试项目之前，轮询调度曾覆盖：
 
 - 基础订阅事件触发
 - ByteArray 内容变化检测
@@ -89,8 +88,8 @@ S7 客户端生命周期已按成熟 S7.NetPlus 使用方式做加固：
 
 优先级从高到低：
 
-1. 在 Windows + VS/MSBuild 环境跑完整 `dotnet test` 和 Demo 构建。
-2. 给 S7/MC 增加更多协议级单元测试和模拟响应测试。
+1. 在 Windows + VS/MSBuild 环境跑完整解决方案和 Demo 构建。
+2. 使用独立验证工程或实机验证补充 S7/MC 协议级回归检查。
 3. 为 S7/MC 实现协议级批量读写优化。
 4. 增加 `readGroup`、`writable`、单位、量程、报警上下限等点位运行元数据。
 5. 根据真实现场需求再扩 Omron FINS、EtherNet/IP、OPC UA、MQTT 等模块。

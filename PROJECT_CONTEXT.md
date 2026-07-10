@@ -17,10 +17,8 @@
 | 目录/项目 | 职责 |
 | --- | --- |
 | `IndustrialCommSdk` | 核心 SDK：统一客户端、协议实现、点位表、配置、轮询、诊断、存储和 MES。 |
-| `IndustrialCommSdk.Tests` | SDK 单元和回环通讯测试。测试数量会随功能继续增加，提交前优先运行该项目。 |
 | `IndustrialCommDemo` | WPF 演示程序，包含协议调试、JSON 部署、MES、数据库、网卡和存储设置页面。 |
 | `LogHelper` | Demo 使用的日志组件。 |
-| `Refresh Logs` | 旧式 WPF 工具项目，不属于 SDK/Demo 主链路。 |
 
 ## 支持的协议
 
@@ -46,7 +44,6 @@
 - `IndustrialCommSdk/IndustrialClientPlatformExtensions.cs`
 - `IndustrialCommSdk/Diagnostics/BatchPlanDiagnostics.cs`
 - `IndustrialCommDemo/Helpers/CapabilityDisplayHelper.cs`
-- `IndustrialCommSdk.Tests/PlatformModelTests.cs`
 - `CORE_EXTENSIBILITY.md`
 
 新增/接入能力：
@@ -102,7 +99,7 @@
 
 9. 测试更新
    - `PlatformModelTests` 覆盖能力模型、统一地址、Modbus/S7/MC parser 的平台地址形状、Modbus/S7/MC 读计划、批量计划和能力 provider fallback。
-   - `PollingSchedulerTests` 已覆盖协议不支持订阅、低于推荐轮询周期、DeviceId 不匹配、同设备不同客户端拒绝、重复点位合并读取、无 planner 拆批和 planner 拆批。
+   - 移除测试项目之前，曾覆盖协议不支持订阅、低于推荐轮询周期、DeviceId 不匹配、同设备不同客户端拒绝、重复点位合并读取、无 planner 拆批和 planner 拆批。
 
 ## P0/P1 可靠性优化现状
 
@@ -140,8 +137,8 @@
    - 同一 `DeviceId` 不允许绑定不同客户端实例，避免轮询挂到错误连接。
    - Worker 停止与新订阅并发时会移除旧 Worker 并重新绑定。
 
-2. `PollingSchedulerTests`
-   - 已覆盖基础订阅事件、ByteArray 变化检测、DeviceId 不匹配、同设备不同客户端拒绝、重复点位合并读取。
+2. 轮询调度历史回归场景
+   - 移除测试项目之前，曾覆盖基础订阅事件、ByteArray 变化检测、DeviceId 不匹配、同设备不同客户端拒绝、重复点位合并读取。
 
 ## 当前设计边界
 
@@ -152,7 +149,7 @@
 - `BatchPlanDiagnostics` 已建立统一日志格式，但 Modbus / PollingScheduler 的旧手写 batch 日志仍需逐步替换。
 - Demo 已显示 `ProtocolCapabilities`，但还未根据能力动态禁用控件或预警输入。
 - `ReadAsync` 通信失败默认返回 `DataValue.Bad`；写入失败仍抛异常。调用方需要按 `Quality` 判断读取结果。
-- 环境里无法保证所有变更都经过本地 `dotnet test`，后续每次功能修改必须优先补齐本地或 CI 验证。
+- 当前仓库不再包含独立测试项目；修改核心协议后至少应完成 SDK、Demo 和整个解决方案的构建验证。
 
 ## JSON 快速部署
 
@@ -226,10 +223,10 @@ using (var device = IndustrialDeployment.Open("Config/devices.json", "plc1"))
 
 ## 验证命令
 
-SDK 测试：
+解决方案构建：
 
 ```powershell
-dotnet test IndustrialCommSdk.Tests\IndustrialCommSdk.Tests.csproj --no-restore
+dotnet build Total.sln --no-restore
 ```
 
 Demo 构建：
@@ -238,18 +235,15 @@ Demo 构建：
 dotnet build IndustrialCommDemo\IndustrialCommDemo.csproj --no-restore
 ```
 
-优先验证：
+SDK 构建：
 
 ```powershell
-dotnet test .\IndustrialCommSdk.Tests\IndustrialCommSdk.Tests.csproj
-dotnet build .\IndustrialCommDemo\IndustrialCommDemo.csproj -p:BuildProjectReferences=false
+dotnet build .\IndustrialCommSdk\IndustrialCommSdk.csproj --no-restore
 ```
 
 ## 已知限制
 
-`dotnet build Total.sln --no-restore` 目前会在 `Refresh Logs` 项目失败。该项目是旧式 .NET Framework WPF 工程，当前 .NET SDK 无法创建其 x86 `GenerateResource` 任务宿主。
-
-SDK 与 `IndustrialCommDemo` 单独构建正常。解决整个解决方案构建问题时，优先考虑迁移 `Refresh Logs` 为 SDK 风格项目，或使用完整 Visual Studio MSBuild 构建该旧项目。
+当前仓库不包含自动化测试项目，构建成功不能替代协议实机验证。
 
 ## 已完成：DeviceHost 基础运行时
 

@@ -13,7 +13,6 @@ IndustrialCommSdk/Abstractions/PlatformInterfaces.cs
 IndustrialCommSdk/IndustrialClientPlatformExtensions.cs
 IndustrialCommSdk/Diagnostics/BatchPlanDiagnostics.cs
 IndustrialCommDemo/Helpers/CapabilityDisplayHelper.cs
-IndustrialCommSdk.Tests/PlatformModelTests.cs
 ```
 
 ## 1. 协议能力模型
@@ -174,7 +173,7 @@ Demo 已经在协议页面展示能力信息：
 - 批量计划统计
 - 能力 provider override 与 fallback
 
-`PollingSchedulerTests` 已覆盖：
+移除测试项目之前，轮询调度曾覆盖以下场景：
 
 - 协议不支持订阅时拒绝
 - 订阅周期低于推荐最小值时拒绝

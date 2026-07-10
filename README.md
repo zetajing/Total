@@ -1,7 +1,7 @@
 # IndustrialCommSdk
 
 统一工业通讯 SDK，当前目标运行时为 `net472`。  
-当前工程包含 SDK 类库、测试项目，以及一个可直接调试的 WPF 示例程序。
+当前工程包含 SDK 类库、日志组件，以及一个可直接调试的 WPF 示例程序。
 
 ## 当前能力
 
@@ -36,9 +36,6 @@ PR #1 已合并到 `master`，对应合并提交为 `1afa2eb44394361548f8fd3d313
 - `IndustrialCommSdk`
   SDK 主类库。
 
-- `IndustrialCommSdk.Tests`
-  NUnit 测试项目，用来验证地址解析、数据编解码、轮询调度等逻辑。
-
 - `IndustrialCommDemo`
   WPF 示例程序，已经包含在 [Total.sln]中，可直接作为启动项目调试。
 
@@ -47,7 +44,7 @@ PR #1 已合并到 `master`，对应合并提交为 `1afa2eb44394361548f8fd3d313
 ```powershell
 dotnet restore
 dotnet build .\IndustrialCommSdk\IndustrialCommSdk.csproj
-dotnet test .\IndustrialCommSdk.Tests\IndustrialCommSdk.Tests.csproj
+dotnet build .\Total.sln
 ```
 
 ## 3 分钟跑通
@@ -800,15 +797,12 @@ await s7Client.WriteDbClassAsync(db200, 200);
 - [SiemensS7Client.cs]
 - [MitsubishiMcClient.cs]
 - [PollingScheduler.cs]
-- [PollingSchedulerTests.cs]
 - [MainWindow.xaml.cs]
 
 ## 验证
 
-当前本地验证通过：
+当前构建验证命令：
 
-- `dotnet test Total.sln`
-- `dotnet test .\IndustrialCommSdk.Tests\IndustrialCommSdk.Tests.csproj`
+- `dotnet build .\Total.sln --no-restore`
+- `dotnet build .\IndustrialCommSdk\IndustrialCommSdk.csproj --no-restore`
 - `dotnet build .\IndustrialCommDemo\IndustrialCommDemo.csproj -p:BuildProjectReferences=false`
-
-PR #1 合并时，本环境无法克隆仓库执行本地 `dotnet test`，因此已通过 GitHub diff 和测试代码复查完成文档更新。建议在本机或 CI 再跑一次 SDK 测试与 Demo 构建。
