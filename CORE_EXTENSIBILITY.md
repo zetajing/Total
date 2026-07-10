@@ -160,7 +160,25 @@ IAddressParser<McAddress>.Parse(string)
 2. 拒绝 `SupportsSubscriptions == false` 的协议，例如原始 TCP Socket。
 3. 拒绝低于 `RecommendedMinPollingInterval` 的订阅周期。
 4. Worker 内保存协议能力，用于后续批量拆分和日志增强。
-5. 当合并后的轮询请求数量超过 `MaxReadItems` 时记录能力越界日志。
+5. 当合并后的轮询请求数量超过 `MaxReadItems` 时记录能力越界警告。
+
+### 5. 测试覆盖
+
+`PlatformModelTests` 已覆盖：
+
+- 协议能力默认值
+- 通用 `IndustrialAddress`
+- S7 / MC parser 输出的 `IIndustrialAddress` 形状
+- 批量计划统计
+- 能力 provider override 与 fallback
+
+`PollingSchedulerTests` 已覆盖：
+
+- 协议不支持订阅时拒绝
+- 订阅周期低于推荐最小值时拒绝
+- DeviceId 不匹配
+- 同设备不同客户端实例拒绝
+- 重复点位合并读取
 
 ## 当前边界
 
