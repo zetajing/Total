@@ -165,11 +165,9 @@ namespace IndustrialCommSdk.Protocols.Modbus
             var parsedItems = BuildReadItems(requests);
             var plan = new BatchSplitPlan(Kind, BatchOperationKind.Read, BuildReadPlanGroups(parsedItems), requests.Count);
 
-            Logger.Info(string.Format(
-                "Modbus batch read plan | OriginalRequests={0} | PlannedRequests={1} | SavedRequests={2}",
-                plan.OriginalRequestCount,
-                plan.PlannedRequestCount,
-                plan.SavedRequestCount));
+            Logger.Info(BatchPlanDiagnostics.FormatSummary("Modbus.ReadMany", DeviceId, plan));
+            foreach (var planGroup in plan.Groups)
+                Logger.Trace(BatchPlanDiagnostics.FormatGroup("Modbus.ReadMany", DeviceId, plan, planGroup));
 
             var groups = parsedItems.GroupBy(x => x.Address.Area);
 
@@ -247,24 +245,22 @@ namespace IndustrialCommSdk.Protocols.Modbus
                     }
 
                     batchStopwatch.Stop();
-                    Logger.Info(string.Format(
-                        "Modbus batch read merged {0} requests into 1 call | Area={1} | Start={2} | Length={3} | Addresses=[{4}] | Elapsed={5}ms",
+                    Logger.Info(BatchPlanDiagnostics.FormatExecutedGroup(
+                        "Modbus.ReadMany",
+                        DeviceId,
+                        Kind,
+                        BatchOperationKind.Read,
                         batch.Count,
-                        group.Key,
+                        group.Key.ToString(),
                         startAddr,
                         totalLength,
-                        string.Join(", ", batch.Select(item => item.Request.Address).ToArray()),
-                        batchStopwatch.ElapsedMilliseconds));
+                        batchStopwatch.ElapsedMilliseconds,
+                        batch.Select(item => item.Request.Address).ToArray()));
                 }
             }
 
             overallStopwatch.Stop();
-            Logger.Info(string.Format(
-                "Modbus batch read summary | OriginalRequests={0} | PlannedRequests={1} | SavedRequests={2} | Elapsed={3}ms",
-                plan.OriginalRequestCount,
-                plan.PlannedRequestCount,
-                plan.SavedRequestCount,
-                overallStopwatch.ElapsedMilliseconds));
+            Logger.Info(BatchPlanDiagnostics.FormatSummary("Modbus.ReadMany", DeviceId, plan, overallStopwatch.ElapsedMilliseconds));
 
             return new BatchReadResult(values);
         }
