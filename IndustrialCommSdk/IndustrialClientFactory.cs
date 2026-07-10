@@ -381,21 +381,8 @@ namespace IndustrialCommSdk
                 return defaultProfile;
             }
 
-            var normalized = NormalizeToken(key);
-            if (normalized == "generic" || normalized == "modbus")
-            {
-                return ModbusDeviceProfiles.Generic;
-            }
-
-            foreach (var profile in ModbusDeviceProfiles.All)
-            {
-                if (NormalizeToken(profile.Key) == normalized || NormalizeToken(profile.DisplayName) == normalized)
-                {
-                    return profile;
-                }
-            }
-
-            throw new ArgumentException(string.Format("Unsupported Modbus device profile: {0}", key), nameof(key));
+            return ModbusDeviceProfiles.Find(key)
+                ?? throw new ArgumentException(string.Format("Unsupported Modbus device profile: {0}", key), nameof(key));
         }
 
         private static CpuType ParseCpuType(string value)

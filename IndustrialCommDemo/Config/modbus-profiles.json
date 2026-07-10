@@ -1,0 +1,42 @@
+{
+  "profiles": [
+    {
+      "key": "inovance-easyplc",
+      "displayName": "Inovance EasyPLC",
+      "defaultAddress": "D100",
+      "exampleAddresses": "D100, R200, M0, S10, B5, X17, Y20",
+      "addressPattern": "^([A-Z])(\\d+)$",
+      "lowWordFirst": true,
+      "mappings": [
+        { "prefix": "D", "area": "HoldingRegister", "base": 0,      "max": 8000,  "radix": "decimal" },
+        { "prefix": "R", "area": "HoldingRegister", "base": 12288,  "max": 32768, "radix": "decimal" },
+        { "prefix": "M", "area": "Coil",             "base": 0,      "max": 8000,  "radix": "decimal" },
+        { "prefix": "B", "area": "Coil",             "base": 12288,  "max": 32768, "radix": "decimal" },
+        { "prefix": "S", "area": "Coil",             "base": 57344,  "max": 4096,  "radix": "decimal" },
+        { "prefix": "X", "area": "DiscreteInput",    "base": 63488,  "max": 1024,  "radix": "octal" },
+        { "prefix": "Y", "area": "Coil",             "base": 64512,  "max": 1024,  "radix": "octal" }
+      ]
+    },
+    {
+      "key": "mitsubishi-modbus-tcp",
+      "displayName": "Mitsubishi Modbus TCP",
+      "defaultAddress": "D100",
+      "exampleAddresses": "D100, SD0, W10, TN50, M0, SM100, L30, B0, X10, Y20",
+      "addressPattern": "^([A-Z]{1,2})([0-9A-F]+)$",
+      "lowWordFirst": false,
+      "mappings": [
+        { "prefix": "Y",  "area": "Coil",             "base": 0,      "max": 1024,  "radix": "hex" },
+        { "prefix": "M",  "area": "Coil",             "base": 8192,   "max": 7680,  "radix": "decimal" },
+        { "prefix": "SM", "area": "Coil",             "base": 20480,  "max": 2048,  "radix": "decimal" },
+        { "prefix": "L",  "area": "Coil",             "base": 22528,  "max": 7680,  "radix": "decimal" },
+        { "prefix": "B",  "area": "Coil",             "base": 30720,  "max": 256,   "radix": "decimal" },
+        { "prefix": "X",  "area": "DiscreteInput",    "base": 0,      "max": 1024,  "radix": "hex" },
+        { "prefix": "D",  "area": "HoldingRegister",  "base": 0,      "max": 8000,  "radix": "decimal" },
+        { "prefix": "SD", "area": "HoldingRegister",  "base": 20480,  "max": 10000, "radix": "decimal" },
+        { "prefix": "W",  "area": "HoldingRegister",  "base": 30720,  "max": 512,   "radix": "hex" },
+        { "prefix": "SW", "area": "HoldingRegister",  "base": 40960,  "max": 512,   "radix": "hex" },
+        { "prefix": "TN", "area": "HoldingRegister",  "base": 53248,  "max": 512,   "radix": "decimal" }
+      ]
+    }
+  ]
+}

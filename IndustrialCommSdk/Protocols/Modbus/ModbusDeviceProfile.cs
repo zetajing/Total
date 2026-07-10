@@ -1,4 +1,8 @@
+using System;
 using System.Collections.Generic;
+using System.IO;
+using System.Runtime.Serialization.Json;
+using System.Text;
 using IndustrialCommSdk.Abstractions;
 
 namespace IndustrialCommSdk.Protocols.Modbus
@@ -107,6 +111,7 @@ namespace IndustrialCommSdk.Protocols.Modbus
     /// <see cref="ModbusDeviceProfiles"/> 是一个静态类，充当设备配置文件的注册中心。
     /// 所有内置支持的设备配置文件都作为静态属性在此公开，
     /// 可通过 <see cref="All"/> 属性获取完整的配置文件列表。
+    /// 可通过 <see cref="LoadJsonProfiles"/> 加载 JSON 配置的外置品牌映射。
     /// </remarks>
     public static class ModbusDeviceProfiles
     {
@@ -136,23 +141,141 @@ namespace IndustrialCommSdk.Protocols.Modbus
         /// </value>
         public static MitsubishiModbusTcpProfile MitsubishiModbusTcp { get; } = new MitsubishiModbusTcpProfile();
 
+        // 通过 JSON 注册的外置设备配置文件
+        private static readonly Dictionary<string, IModbusDeviceProfile> _jsonProfiles =
+            new Dictionary<string, IModbusDeviceProfile>(StringComparer.OrdinalIgnoreCase);
+
+        // 标记是否已尝试从默认路径加载
+        private static bool _defaultLoaded;
+
         /// <summary>
         /// 获取所有已注册的设备配置文件的只读列表。
+        /// 包含内置配置文件（Generic、InovanceEasyPlc、MitsubishiModbusTcp）
+        /// 以及通过 <see cref="LoadJsonProfiles"/> 加载的所有 JSON 配置文件。
         /// </summary>
         /// <value>
-        /// 一个 <see cref="IReadOnlyList{T}"/>，包含所有内置支持的
+        /// 一个 <see cref="IReadOnlyList{T}"/>，包含所有可用的
         /// <see cref="IModbusDeviceProfile"/> 实现。
         /// </value>
-        /// <remarks>
-        /// 此列表可用于在用户界面中提供设备类型选择选项，
-        /// 或在需要遍历所有支持的设备时使用。
-        /// 当前包含的设备：<see cref="InovanceEasyPlc"/>。
-        /// </remarks>
-        public static IReadOnlyList<IModbusDeviceProfile> All { get; } = new IModbusDeviceProfile[]
+        public static IReadOnlyList<IModbusDeviceProfile> All
         {
-            Generic,
-            InovanceEasyPlc,
-            MitsubishiModbusTcp,
-        };
+            get
+            {
+                TryLoadDefaultConfig();
+                var list = new List<IModbusDeviceProfile> { Generic, InovanceEasyPlc, MitsubishiModbusTcp };
+                list.AddRange(_jsonProfiles.Values);
+                return list.AsReadOnly();
+            }
+        }
+
+        /// <summary>
+        /// 从 JSON 文件加载设备配置文件并注册到全局配置库。
+        /// 已存在的同 key 配置会被覆盖（大小写不敏感）。
+        /// </summary>
+        /// <param name="filePath">modbus-profiles.json 的完整路径。</param>
+        /// <exception cref="System.ArgumentException">filePath 为 null 或空。</exception>
+        /// <exception cref="System.IO.FileNotFoundException">文件不存在。</exception>
+        /// <exception cref="System.Runtime.Serialization.SerializationException">JSON 格式无效。</exception>
+        public static void LoadJsonProfiles(string filePath)
+        {
+            if (string.IsNullOrWhiteSpace(filePath))
+                throw new System.ArgumentException("File path cannot be null or empty.", nameof(filePath));
+
+            var collection = LoadDefinitionCollection(filePath);
+            if (collection?.Profiles == null || collection.Profiles.Count == 0)
+                return;
+
+            foreach (var definition in collection.Profiles)
+            {
+                if (string.IsNullOrWhiteSpace(definition.Key))
+                    continue;
+
+                _jsonProfiles[definition.Key] = new JsonModbusProfile(definition);
+            }
+        }
+
+        /// <summary>
+        /// 按 key 查找设备配置文件。先在硬编码配置中查找，找不到再去 JSON 注册表中查找。
+        /// 如果都找不到则返回 null。
+        /// </summary>
+        /// <param name="key">配置文件标识键（大小写不敏感）。</param>
+        /// <returns>匹配的 <see cref="IModbusDeviceProfile"/>，或 null。</returns>
+        public static IModbusDeviceProfile Find(string key)
+        {
+            if (string.IsNullOrWhiteSpace(key))
+                return null;
+
+            var normalized = NormalizeToken(key);
+
+            // 检查硬编码配置
+            if (normalized == "generic" || normalized == "modbus")
+                return Generic;
+
+            foreach (var profile in new[] { (IModbusDeviceProfile)InovanceEasyPlc, MitsubishiModbusTcp })
+            {
+                if (NormalizeToken(profile.Key) == normalized || NormalizeToken(profile.DisplayName) == normalized)
+                    return profile;
+            }
+
+            // 检查 JSON 注册表
+            TryLoadDefaultConfig();
+            IModbusDeviceProfile jsonProfile;
+            if (_jsonProfiles.TryGetValue(key, out jsonProfile))
+                return jsonProfile;
+
+            // 也允许用 NormalizeToken 匹配 JSON Profile 的 Key
+            foreach (var kvp in _jsonProfiles)
+            {
+                if (NormalizeToken(kvp.Key) == normalized || NormalizeToken(kvp.Value.DisplayName) == normalized)
+                    return kvp.Value;
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// 尝试从默认路径加载 modbus-profiles.json。
+        /// 查找顺序：当前工作目录下的 Config/modbus-profiles.json。
+        /// 文件不存在时静默跳过。
+        /// </summary>
+        private static void TryLoadDefaultConfig()
+        {
+            if (_defaultLoaded)
+                return;
+
+            _defaultLoaded = true;
+
+            try
+            {
+                var defaultPath = Path.Combine(Directory.GetCurrentDirectory(), "Config", "modbus-profiles.json");
+                if (File.Exists(defaultPath))
+                {
+                    LoadJsonProfiles(defaultPath);
+                }
+            }
+            catch
+            {
+                // 默认配置文件可选，静默忽略加载失败
+            }
+        }
+
+        private static ModbusProfileDefinitionCollection LoadDefinitionCollection(string filePath)
+        {
+            using (var stream = File.OpenRead(filePath))
+            {
+                var serializer = new DataContractJsonSerializer(typeof(ModbusProfileDefinitionCollection));
+                return (ModbusProfileDefinitionCollection)serializer.ReadObject(stream);
+            }
+        }
+
+        private static string NormalizeToken(string value)
+        {
+            return (value ?? string.Empty)
+                .Trim()
+                .Replace("-", string.Empty)
+                .Replace("_", string.Empty)
+                .Replace(" ", string.Empty)
+                .ToLowerInvariant();
+        }
     }
 }
