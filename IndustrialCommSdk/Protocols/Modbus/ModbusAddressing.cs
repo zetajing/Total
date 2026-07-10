@@ -128,6 +128,11 @@ namespace IndustrialCommSdk.Protocols.Modbus
             return ParseTyped(address);
         }
 
+        ModbusAddress IAddressParser<ModbusAddress>.Parse(string address)
+        {
+            return ParseTyped(address);
+        }
+
         /// <summary>
         /// 将地址字符串解析为强类型 <see cref="ModbusAddress"/> 对象。
         /// </summary>
