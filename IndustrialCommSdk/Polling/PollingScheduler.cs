@@ -46,6 +46,19 @@ namespace IndustrialCommSdk.Polling
             if (request.Items == null || request.Items.Count == 0)
                 throw new ArgumentException("Subscription must contain at least one read request.", nameof(request));
 
+            var capabilities = IndustrialCommSdk.IndustrialClientPlatformExtensions.GetCapabilities(client);
+            if (!capabilities.SupportsSubscriptions)
+                throw new NotSupportedException(string.Format("Protocol '{0}' does not support polling subscriptions.", capabilities.DisplayName));
+            if (request.Interval < capabilities.RecommendedMinPollingInterval)
+                throw new ArgumentOutOfRangeException(
+                    nameof(request),
+                    string.Format(
+                        CultureInfo.InvariantCulture,
+                        "Subscription interval {0}ms is below the recommended minimum {1}ms for {2}.",
+                        request.Interval.TotalMilliseconds,
+                        capabilities.RecommendedMinPollingInterval.TotalMilliseconds,
+                        capabilities.DisplayName));
+
             cancellationToken.ThrowIfCancellationRequested();
 
             var registration = new SubscriptionRegistration(request, handler);
@@ -61,16 +74,17 @@ namespace IndustrialCommSdk.Polling
 
                     var worker = _workers.GetOrAdd(
                         client.DeviceId,
-                        _ => new DeviceWorker(client, _logger, RemoveStoppedWorker));
+                        _ => new DeviceWorker(client, capabilities, _logger, RemoveStoppedWorker));
 
                     if (worker.TryAdd(client, registration))
                     {
                         _logger.Info(string.Format(
-                            "SUBSCRIPTION started | Key={0} | Device={1} | Items={2} | Interval={3}ms",
+                            "SUBSCRIPTION started | Key={0} | Device={1} | Items={2} | Interval={3}ms | Protocol={4}",
                             request.SubscriptionKey,
                             client.DeviceId,
                             request.Items.Count,
-                            request.Interval.TotalMilliseconds));
+                            request.Interval.TotalMilliseconds,
+                            capabilities.DisplayName));
                         return Task.FromResult(request.SubscriptionKey);
                     }
 
@@ -194,6 +208,7 @@ namespace IndustrialCommSdk.Polling
         private sealed class DeviceWorker : IDisposable
         {
             private readonly IIndustrialClient _client;
+            private readonly ProtocolCapabilities _capabilities;
             private readonly IIndustrialLogger _logger;
             private readonly Action<string, DeviceWorker> _onStopped;
             private readonly ConcurrentDictionary<string, SubscriptionRegistration> _registrations =
@@ -205,10 +220,12 @@ namespace IndustrialCommSdk.Polling
 
             public DeviceWorker(
                 IIndustrialClient client,
+                ProtocolCapabilities capabilities,
                 IIndustrialLogger logger,
                 Action<string, DeviceWorker> onStopped)
             {
                 _client = client;
+                _capabilities = capabilities ?? ProtocolCapabilities.ForProtocol(client.Kind);
                 _logger = logger;
                 _onStopped = onStopped;
                 _loopTask = Task.Run(LoopAsync);
@@ -310,6 +327,19 @@ namespace IndustrialCommSdk.Polling
                             mergedRequests.Add(request);
                         }
                     }
+                }
+
+                if (mergedRequests.Count > _capabilities.MaxReadItems)
+                {
+                    _logger.Error(
+                        string.Format(
+                            CultureInfo.InvariantCulture,
+                            "Merged polling read exceeds protocol capability | Device={0} | Protocol={1} | Requests={2} | MaxReadItems={3}",
+                            _client.DeviceId,
+                            _capabilities.DisplayName,
+                            mergedRequests.Count,
+                            _capabilities.MaxReadItems),
+                        null);
                 }
 
                 BatchReadResult mergedResult;
