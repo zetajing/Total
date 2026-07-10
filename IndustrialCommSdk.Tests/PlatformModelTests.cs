@@ -76,7 +76,7 @@ namespace IndustrialCommSdk.Tests
         public void GetCapabilities_ShouldUseProviderOverride()
         {
             var client = new CapabilityClient();
-            var capabilities = IndustrialClientPlatformExtensions.GetCapabilities(client);
+            var capabilities = IndustrialCommSdk.IndustrialClientPlatformExtensions.GetCapabilities(client);
 
             Assert.That(capabilities.DisplayName, Is.EqualTo("Custom Protocol"));
             Assert.That(capabilities.MaxReadItems, Is.EqualTo(9));
@@ -86,7 +86,7 @@ namespace IndustrialCommSdk.Tests
         public void GetCapabilities_ShouldFallbackToProtocolDefaults()
         {
             var client = new PlainClient();
-            var capabilities = IndustrialClientPlatformExtensions.GetCapabilities(client);
+            var capabilities = IndustrialCommSdk.IndustrialClientPlatformExtensions.GetCapabilities(client);
 
             Assert.That(capabilities.Kind, Is.EqualTo(ProtocolKind.SiemensS7));
             Assert.That(capabilities.SupportsBitAddress, Is.True);
