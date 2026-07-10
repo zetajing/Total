@@ -54,6 +54,10 @@ namespace IndustrialCommDemo.Views
 
         private void UpdateModeDependentVisibility()
         {
+            // XAML 尚未完全加载时，ComboBox SelectionChanged 在 InitializeComponent 期间触发，
+            // 部分命名元素可能还未创建，直接返回即可；Loaded 后会再次调用。
+            if (MesHostLabel == null) return;
+
             // TCP 专用字段
             var isTcp = !_isHttpMode;
             MesHostLabel.Visibility = isTcp ? Visibility.Visible : Visibility.Collapsed;
