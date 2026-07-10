@@ -2,9 +2,11 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
+using System.Linq;
 using System.Runtime.Serialization;
 using System.Runtime.Serialization.Json;
 using System.Text;
+using System.Xml;
 using IndustrialCommSdk.Abstractions;
 
 namespace IndustrialCommSdk
@@ -104,6 +106,40 @@ namespace IndustrialCommSdk
             {
                 throw new FormatException(BuildJsonFormatMessage("points JSON"), ex);
             }
+        }
+
+        /// <summary>将点位表序列化为便于人工维护的 JSON 文本。</summary>
+        public string ToJson()
+        {
+            var dto = new TagTableDto
+            {
+                Tags = Tags.Select(tag => new TagDto
+                {
+                    Name = tag.Name,
+                    Address = tag.Address,
+                    Type = tag.DataType.ToString(),
+                    Length = tag.Length == 1 ? (ushort?)null : tag.Length,
+                }).ToList(),
+            };
+
+            using (var stream = new MemoryStream())
+            using (var writer = JsonReaderWriterFactory.CreateJsonWriter(stream, Encoding.UTF8, false, true))
+            {
+                new DataContractJsonSerializer(typeof(TagTableDto)).WriteObject(writer, dto);
+                writer.Flush();
+                return Encoding.UTF8.GetString(stream.ToArray()).Replace("\\/", "/");
+            }
+        }
+
+        /// <summary>将点位表保存为 UTF-8 JSON 文件。</summary>
+        public void SaveJson(string filePath)
+        {
+            if (string.IsNullOrWhiteSpace(filePath))
+                throw new ArgumentException("Tag table file path cannot be null or empty.", nameof(filePath));
+            var fullPath = Path.GetFullPath(filePath);
+            var directory = Path.GetDirectoryName(fullPath);
+            if (!string.IsNullOrWhiteSpace(directory)) Directory.CreateDirectory(directory);
+            File.WriteAllText(fullPath, ToJson(), new UTF8Encoding(false));
         }
 
         /// <summary>从 UTF-8 CSV 文件加载点位表。</summary>
@@ -381,7 +417,7 @@ namespace IndustrialCommSdk
         [DataContract]
         private sealed class TagDto
         {
-            [DataMember(Name = "name")]
+            [DataMember(Name = "name", EmitDefaultValue = false)]
             public string Name { get; set; }
 
             [DataMember(Name = "address")]
@@ -390,7 +426,7 @@ namespace IndustrialCommSdk
             [DataMember(Name = "type")]
             public string Type { get; set; }
 
-            [DataMember(Name = "length")]
+            [DataMember(Name = "length", EmitDefaultValue = false)]
             public ushort? Length { get; set; }
         }
     }

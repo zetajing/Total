@@ -2,22 +2,77 @@
 
 ## 项目目标
 
-`Total` 是一个面向工业现场的 .NET 通讯 SDK 与 WPF Demo。当前重点是通过外置 JSON 配置完成快速部署：部署人员只需修改 `Config` 目录中的设备与点位文件，即可读取、写入、批量读取、轮询订阅和保存历史数据。
+`Total` 是一个面向工业现场的 .NET 通讯 SDK 与 WPF 上位机应用。当前方向是让 `IndustrialCommDemo` 成为可以实际运行的软件，但连接、读写、轮询、重连、配置和存储能力必须继续由 `IndustrialCommSdk` 提供，应用层不复制协议实现。
+
+## 上下文维护规则
+
+- 本文件是项目在仓库内的持续记忆和下一次工作的首要入口。
+- 每轮代码或结构调整后，必须同步更新：当前状态、已完成内容、验证结果、已知限制和未完成任务。
+- 尚未完成、尚未验证或仅有设计结论的事项，也必须写入“未完成任务”，不能只留在聊天记录里。
+- `README.md` 面向使用者；本文件面向后续开发和接手项目的人，允许记录实现边界与技术债务。
 
 ## 当前分支与提交
 
 - 默认分支：`master`
-- 当前代码状态：已合并 `PR #1 Optimize industrial SDK reliability for P0/P1`。
+- 当前远端提交：`bb1d5ae Remove tests and legacy refresh tool`。
 - P0/P1 合并提交：`1afa2eb44394361548f8fd3d313b7c939bed89ca`
-- 当前正在推进：`core-extensible-platform`，目标是把 SDK 核心做成可扩展平台。
+- 核心扩展平台已通过 PR #2 合并到 `master`，合并提交为 `efd7b47`。
+- 当前工作区正在推进“Demo 产品化与结构收敛”，修改尚未提交。
 - 每次修改代码或文档后都需要提交并推送到 Git。
+
+## 当前工作区：Demo 产品化与结构收敛
+
+本轮目标不是继续堆协议页面，而是形成清晰的两层结构：
+
+```text
+IndustrialCommDemo（上位机应用、交互、展示）
+    -> IndustrialApplicationRuntime（应用运行边界）
+        -> IndustrialCommSdk（连接、协议、轮询、重连、配置、存储）
+```
+
+本轮已完成但尚未提交：
+
+1. 新增 `IndustrialCommDemo/Services/IndustrialApplicationRuntime.cs`
+   - 统一持有 SDK 的 `IndustrialDeviceHost`。
+   - 提供加载、启动、停止和重新加载配置的应用级生命周期。
+   - 转换设备状态和实时点位事件供 UI 使用。
+   - 隔离多个事件订阅者异常，单个 UI 或数据库处理器失败不会阻断其他处理器。
+
+2. 新增“运行中心”
+   - 文件：`IndustrialCommDemo/Views/DeviceRuntimeTab.xaml(.cs)`。
+   - 从 `Config/devices.json` 加载全部启用设备。
+   - 显示设备名称、协议、端点、连接状态、最近错误和实时点位。
+   - 运行中心采集结果会进入已有数据库记录链路。
+
+3. 重组主导航
+   - 一级页面：运行中心、设备配置、历史数据、调试与维护。
+   - Modbus、S7、MC、Socket、MES、网卡和存储页面归入“调试与维护”。
+   - 应用可见名称改为“工业设备运行中心”，应用日志标识由 `DEMO` 改为 `APP`。
+
+4. 产品化设备配置
+   - 常用参数使用表单编辑：设备名、协议、IP、端口、串口、从站号、点位文件、轮询周期、重连周期和启用状态。
+   - 支持新增、删除设备。
+   - 点位使用可增删的表格编辑名称、地址、类型和长度。
+   - 设备 JSON 和点位 JSON 继续作为高级入口保留。
+   - 新设备点位文件不存在时允许先在界面创建，保存时生成文件。
+
+5. SDK 配置写入能力
+   - `IndustrialSdkConfig.ToJson/Save` 统一保存设备配置。
+   - `TagTable.ToJson/SaveJson` 统一保存点位表。
+   - 序列化会缩进并省略未使用的空字段，Demo 不自行拼 JSON。
+
+本轮验证：
+
+- `dotnet build Total.sln -c Release --no-restore`：成功，0 警告，0 错误。
+- `IndustrialSdkConfig` JSON 往返：2 台设备，0 个 `null` 字段。
+- `TagTable` JSON 往返：5 个点位，0 个 `null` 字段。
 
 ## 解决方案结构
 
 | 目录/项目 | 职责 |
 | --- | --- |
 | `IndustrialCommSdk` | 核心 SDK：统一客户端、协议实现、点位表、配置、轮询、诊断、存储和 MES。 |
-| `IndustrialCommDemo` | WPF 演示程序，包含协议调试、JSON 部署、MES、数据库、网卡和存储设置页面。 |
+| `IndustrialCommDemo` | WPF 上位机应用：运行中心负责设备状态和实时点位，其他页面提供协议调试、JSON 配置、MES、数据库、网卡和存储设置。 |
 | `LogHelper` | Demo 使用的日志组件。 |
 
 ## 支持的协议
@@ -179,7 +234,7 @@ Demo 配置模板位于：
 }
 ```
 
-新增设备时：复制一段设备配置，创建对应的点位 JSON，然后在 Demo 的“JSON 配置”页点击“重新加载”和“校验配置”。
+新增设备时：在“设备配置”页点击“新增设备”，填写常用连接参数，在点位表格中添加点位，然后保存并校验。熟悉配置格式的维护人员也可以使用高级 JSON 入口。
 
 ### Modbus 品牌 JSON 配置
 
@@ -221,6 +276,8 @@ using (var device = IndustrialDeployment.Open("Config/devices.json", "plc1"))
 
 多设备后台运行使用 `IndustrialDeviceHost.Load("Config/devices.json")`：仅加载 `enabled` 不为 false 的设备，管理连接、按 `pollingIntervalMilliseconds` 批量轮询、断线重连、状态事件和数据事件。
 
+Demo 的“设备配置”页提供设备常用参数表单、点位表格和高级 JSON 三种入口。`IndustrialSdkConfig.ToJson/Save` 与 `TagTable.ToJson/SaveJson` 负责统一序列化，Demo 不自行拼接配置 JSON。
+
 ## 验证命令
 
 解决方案构建：
@@ -254,6 +311,42 @@ dotnet build .\IndustrialCommSdk\IndustrialCommSdk.csproj --no-restore
 3. 按设备的点位表执行周期批量读取并上报事件。
 4. 提供按“设备名 + 点位名”的读写入口和状态事件。
 
-下一优先级：替换 Modbus / PollingScheduler 旧手写 batch 日志，或让 Demo 根据 `ProtocolCapabilities` 动态禁用不支持的输入项。
-
 Modbus 品牌差异通过 `IModbusDeviceProfile` 隔离，JSON 数据驱动，新增品牌不改 C# 代码、不重新编译。非 Modbus 协议扩展采用插件式：只有真实现场需要时才增加 Omron、Allen-Bradley、OPC UA 等模块，并保持 `IIndustrialClient` 抽象不变。
+
+## 未完成任务
+
+以下任务按当前优先级排序。完成后应移动到对应“已完成”章节，并记录验证结果。
+
+### P0：先完成本轮产品化闭环
+
+- [ ] 对新的主导航、运行中心、设备表单和点位表格执行一次人工界面冒烟验证；当前只完成编译和序列化往返验证。
+- [ ] 保存设备配置后，明确提示运行中心配置已变化，并提供安全的“保存并重新加载运行中心”；运行中不能静默重载导致设备突然断开。
+- [ ] 增加配置未保存状态，切换设备、重新加载或关闭软件前提示，避免表格编辑丢失。
+- [ ] 根据协议动态显示表单字段：TCP 显示 IP/端口，RTU 显示串口参数，S7 显示 CPU/Rack/Slot，避免现场人员看到无关输入项。
+- [ ] 为新增设备提供可选的点位模板，不只创建空白点位行。
+- [ ] 本轮完成后提交并推送，随后更新本节的提交号和远端状态。
+
+### P1：让运行中心成为真正的操作页面
+
+- [ ] 增加设备总数、在线数、故障数、Bad 点位数等概览卡片。
+- [ ] 增加设备筛选、点位搜索、质量筛选和最后更新时间提示。
+- [ ] 为可写点位增加受控写入入口和确认提示，写入仍必须调用 SDK 的点位名 API。
+- [ ] 增加报警/异常列表，区分连接故障、轮询失败、Bad 质量和数据库记录失败。
+- [ ] 明确应用启动策略：手动启动、启动后自动运行，或由设置项控制；当前为手动启动。
+- [ ] 数据库记录开关与运行中心状态需要更直观地联动和展示。
+
+### P1：SDK 与质量保障
+
+- [ ] 仓库已按用户要求移除 `IndustrialCommSdk.Tests`，需要确定新的回归策略：独立验证工具、现场模拟器或恢复轻量测试工程三选一。
+- [ ] 为 `IndustrialSdkConfig.ToJson/Save` 和 `TagTable.ToJson/SaveJson` 补自动化回归验证；当前只有 PowerShell 运行时往返检查。
+- [ ] 替换 Modbus / PollingScheduler 剩余手写 batch 日志，统一使用 `BatchPlanDiagnostics`。
+- [ ] 根据 `ProtocolCapabilities` 动态禁用调试页面不支持的操作和输入项。
+- [ ] S7 / MC 当前只有批量计划，仍需实现真正的协议级连续合并读取。
+- [ ] 写批量计划目前仍是保守单点组，需结合真实设备限制决定是否合并。
+
+### P2：交付与维护
+
+- [ ] 增加发布目录生成方式和最小部署说明，输出应包含 EXE、SDK 依赖和可编辑 `Config` 目录。
+- [ ] 评估是否把项目名 `IndustrialCommDemo` 改为正式产品名；在功能稳定前不做大范围命名迁移。
+- [ ] 将过长的 README 逐步拆到 `docs`，README 只保留安装、快速开始和文档入口。
+- [ ] 只有真实项目需要时才扩展 Omron、Allen-Bradley、OPC UA 等协议，当前不提前堆模块。

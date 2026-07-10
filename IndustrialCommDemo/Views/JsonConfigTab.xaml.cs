@@ -19,6 +19,7 @@ namespace IndustrialCommDemo.Views
     public partial class JsonConfigTab : UserControl
     {
         private readonly ObservableCollection<JsonReadResultRow> _rows = new ObservableCollection<JsonReadResultRow>();
+        private readonly ObservableCollection<PointEditorRow> _pointRows = new ObservableCollection<PointEditorRow>();
         private DemoAppContext _ctx;
         private string _deviceConfigPath;
         private string _pointConfigPath;
@@ -28,13 +29,15 @@ namespace IndustrialCommDemo.Views
         {
             InitializeComponent();
             JsonReadResultGrid.ItemsSource = _rows;
+            PointEditorGrid.ItemsSource = _pointRows;
+            PointTypeColumn.ItemsSource = Enum.GetNames(typeof(DataType));
         }
 
         /// <summary>绑定共享上下文并在页面启动时加载 JSON 配置。</summary>
         public void Initialize(DemoAppContext ctx)
         {
             _ctx = ctx ?? throw new ArgumentNullException(nameof(ctx));
-            _deviceConfigPath = ResolveConfigPath("devices.json");
+            _deviceConfigPath = _ctx.Runtime.ConfigFilePath;
             LoadConfigFiles();
         }
 
@@ -70,12 +73,104 @@ namespace IndustrialCommDemo.Views
 
             try
             {
+                LoadDeviceForm();
                 LoadSelectedPointConfig();
                 SetStatus("已切换点位表：" + _pointConfigPath, Brushes.ForestGreen);
             }
             catch (Exception ex)
             {
                 SetStatus("切换设备失败：" + ex.Message, Brushes.IndianRed);
+            }
+        }
+
+        // 常用参数表单只修改 SDK 配置模型，再由 SDK 统一序列化回 JSON。
+        private void ApplyDeviceFormButton_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var config = IndustrialSdkConfig.FromJson(DeviceJsonTextBox.Text);
+                var originalName = GetSelectedDeviceName();
+                var device = config.FindDevice(originalName);
+                var newName = RequireText(DeviceNameTextBox.Text, "设备名称不能为空。");
+
+                if (config.Devices.Any(item => item != device && string.Equals(item.Name, newName, StringComparison.OrdinalIgnoreCase)))
+                    throw new InvalidOperationException("设备名称不能重复：" + newName);
+
+                device.Name = newName;
+                device.Protocol = GetSelectedProtocol();
+                device.Host = EmptyToNull(HostTextBox.Text);
+                device.Port = ParseOptionalInt(PortTextBox.Text, "TCP 端口");
+                device.PortName = EmptyToNull(PortNameTextBox.Text);
+                device.SlaveId = ParseOptionalByte(SlaveIdTextBox.Text, "从站号");
+                device.PointsFile = RequireText(PointsFileTextBox.Text, "点位文件不能为空。");
+                device.PollingIntervalMilliseconds = ParseOptionalInt(PollingIntervalTextBox.Text, "轮询周期");
+                device.ReconnectDelayMilliseconds = ParseOptionalInt(ReconnectDelayTextBox.Text, "重连周期");
+                device.Enabled = EnabledCheckBox.IsChecked != false;
+
+                DeviceJsonTextBox.Text = config.ToJson();
+                RefreshDeviceList(config);
+                DeviceNameComboBox.SelectedItem = newName;
+                SetStatus("常用参数已应用，请点击“保存配置”写入磁盘。", Brushes.ForestGreen);
+            }
+            catch (Exception ex)
+            {
+                SetStatus("应用设备参数失败：" + ex.Message, Brushes.IndianRed);
+                _ctx.HandleError("应用设备参数失败。", ex, true);
+            }
+        }
+
+        private void AddDeviceButton_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var config = IndustrialSdkConfig.FromJson(DeviceJsonTextBox.Text);
+                var index = 1;
+                string name;
+                do { name = "device" + index++; }
+                while (config.Devices.Any(item => item != null && string.Equals(item.Name, name, StringComparison.OrdinalIgnoreCase)));
+
+                config.Devices.Add(new IndustrialDeviceConfig
+                {
+                    Name = name,
+                    Protocol = "modbus-tcp",
+                    Host = "127.0.0.1",
+                    Port = 502,
+                    SlaveId = 1,
+                    PointsFile = "points/" + name + ".json",
+                    Enabled = false,
+                    PollingIntervalMilliseconds = 1000,
+                    ReconnectDelayMilliseconds = 3000,
+                });
+
+                DeviceJsonTextBox.Text = config.ToJson();
+                RefreshDeviceList(config);
+                DeviceNameComboBox.SelectedItem = name;
+                LoadDeviceForm();
+                SetStatus("已新增 " + name + "，请完善参数和点位文件后保存。", Brushes.ForestGreen);
+            }
+            catch (Exception ex)
+            {
+                _ctx.HandleError("新增设备失败。", ex, true);
+            }
+        }
+
+        private void DeleteDeviceButton_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var config = IndustrialSdkConfig.FromJson(DeviceJsonTextBox.Text);
+                if (config.Devices.Count <= 1) throw new InvalidOperationException("至少需要保留一台设备。");
+                var name = GetSelectedDeviceName();
+                config.Devices.Remove(config.FindDevice(name));
+                DeviceJsonTextBox.Text = config.ToJson();
+                RefreshDeviceList(config);
+                LoadDeviceForm();
+                LoadSelectedPointConfig(true, false);
+                SetStatus("已从配置中删除 " + name + "，保存后生效。", Brushes.DarkGoldenrod);
+            }
+            catch (Exception ex)
+            {
+                _ctx.HandleError("删除设备失败。", ex, true);
             }
         }
 
@@ -180,17 +275,18 @@ namespace IndustrialCommDemo.Views
             var config = SaveDeviceConfig();
             RefreshDeviceList(config);
             _pointConfigPath = ResolveSelectedPointConfigPath();
+            if (PointEditorTabControl.SelectedIndex == 0) ApplyPointRowsToJson();
             TagTable.FromJson(PointJsonTextBox.Text);
-            Directory.CreateDirectory(Path.GetDirectoryName(_pointConfigPath));
-            File.WriteAllText(_pointConfigPath, PointJsonTextBox.Text);
+            TagTable.FromJson(PointJsonTextBox.Text).SaveJson(_pointConfigPath);
+            PointJsonTextBox.Text = TagTable.FromJson(PointJsonTextBox.Text).ToJson();
             PointConfigGroupBox.Header = GetPointConfigDisplayName(_pointConfigPath);
         }
 
         private IndustrialSdkConfig SaveDeviceConfig()
         {
             var config = IndustrialSdkConfig.FromJson(DeviceJsonTextBox.Text);
-            Directory.CreateDirectory(Path.GetDirectoryName(_deviceConfigPath));
-            File.WriteAllText(_deviceConfigPath, DeviceJsonTextBox.Text);
+            config.Save(_deviceConfigPath);
+            DeviceJsonTextBox.Text = config.ToJson();
             return config;
         }
 
@@ -284,6 +380,74 @@ namespace IndustrialCommDemo.Views
             {
                 _isRefreshingDeviceList = false;
             }
+
+            LoadDeviceForm();
+        }
+
+        private void LoadDeviceForm()
+        {
+            var selectedName = DeviceNameComboBox.SelectedItem as string;
+            if (string.IsNullOrWhiteSpace(selectedName) || string.IsNullOrWhiteSpace(DeviceJsonTextBox.Text)) return;
+
+            var device = IndustrialSdkConfig.FromJson(DeviceJsonTextBox.Text).FindDevice(selectedName);
+            DeviceNameTextBox.Text = device.Name ?? string.Empty;
+            SelectProtocol(device.Protocol);
+            HostTextBox.Text = device.Host ?? string.Empty;
+            PortTextBox.Text = device.Port.HasValue ? device.Port.Value.ToString() : string.Empty;
+            PortNameTextBox.Text = device.PortName ?? string.Empty;
+            SlaveIdTextBox.Text = device.SlaveId.HasValue ? device.SlaveId.Value.ToString() : string.Empty;
+            PointsFileTextBox.Text = device.PointsFile ?? string.Empty;
+            PollingIntervalTextBox.Text = device.PollingIntervalMilliseconds.HasValue ? device.PollingIntervalMilliseconds.Value.ToString() : string.Empty;
+            ReconnectDelayTextBox.Text = device.ReconnectDelayMilliseconds.HasValue ? device.ReconnectDelayMilliseconds.Value.ToString() : string.Empty;
+            EnabledCheckBox.IsChecked = device.Enabled.GetValueOrDefault(true);
+        }
+
+        private void SelectProtocol(string protocol)
+        {
+            foreach (var item in ProtocolComboBox.Items.OfType<ComboBoxItem>())
+            {
+                if (string.Equals(item.Content as string, protocol, StringComparison.OrdinalIgnoreCase))
+                {
+                    ProtocolComboBox.SelectedItem = item;
+                    return;
+                }
+            }
+            ProtocolComboBox.SelectedIndex = 0;
+        }
+
+        private string GetSelectedProtocol()
+        {
+            var item = ProtocolComboBox.SelectedItem as ComboBoxItem;
+            return RequireText(item == null ? null : item.Content as string, "请选择协议。");
+        }
+
+        private static string RequireText(string value, string errorMessage)
+        {
+            if (string.IsNullOrWhiteSpace(value)) throw new InvalidOperationException(errorMessage);
+            return value.Trim();
+        }
+
+        private static string EmptyToNull(string value)
+        {
+            return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+        }
+
+        private static int? ParseOptionalInt(string text, string fieldName)
+        {
+            if (string.IsNullOrWhiteSpace(text)) return null;
+            int value;
+            if (!int.TryParse(text.Trim(), out value) || value <= 0)
+                throw new InvalidOperationException(fieldName + "必须是大于 0 的整数。");
+            return value;
+        }
+
+        private static byte? ParseOptionalByte(string text, string fieldName)
+        {
+            if (string.IsNullOrWhiteSpace(text)) return null;
+            byte value;
+            if (!byte.TryParse(text.Trim(), out value) || value == 0)
+                throw new InvalidOperationException(fieldName + "必须是 1 到 255 的整数。");
+            return value;
         }
 
         private string GetSelectedDeviceName()
@@ -307,17 +471,65 @@ namespace IndustrialCommDemo.Views
 
             if (saveCurrent && !string.IsNullOrWhiteSpace(_pointConfigPath) && File.Exists(_pointConfigPath))
             {
+                if (PointEditorTabControl.SelectedIndex == 0) ApplyPointRowsToJson();
                 File.WriteAllText(_pointConfigPath, PointJsonTextBox.Text);
             }
 
             if (!File.Exists(selectedPath))
             {
-                throw new FileNotFoundException("设备点位配置文件不存在，请按模板创建。", selectedPath);
+                _pointConfigPath = selectedPath;
+                _pointRows.Clear();
+                _pointRows.Add(new PointEditorRow());
+                PointJsonTextBox.Text = "{\r\n  \"tags\": []\r\n}";
+                PointConfigGroupBox.Header = GetPointConfigDisplayName(_pointConfigPath) + "（待创建）";
+                SetStatus("点位文件尚未创建，请添加点位后保存：" + _pointConfigPath, Brushes.DarkGoldenrod);
+                return;
             }
 
             _pointConfigPath = selectedPath;
             PointJsonTextBox.Text = File.ReadAllText(_pointConfigPath);
+            LoadPointRows();
             PointConfigGroupBox.Header = GetPointConfigDisplayName(_pointConfigPath);
+        }
+
+        private void LoadPointRows()
+        {
+            var table = TagTable.FromJson(PointJsonTextBox.Text);
+            _pointRows.Clear();
+            foreach (var tag in table.Tags)
+            {
+                _pointRows.Add(new PointEditorRow
+                {
+                    Name = tag.Name,
+                    Address = tag.Address,
+                    Type = tag.DataType.ToString(),
+                    Length = tag.Length,
+                });
+            }
+        }
+
+        private void ApplyPointRowsToJson()
+        {
+            PointEditorGrid.CommitEdit(DataGridEditingUnit.Cell, true);
+            PointEditorGrid.CommitEdit(DataGridEditingUnit.Row, true);
+
+            var tags = new List<IndustrialTag>();
+            var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var row in _pointRows.Where(item => item != null &&
+                         (!string.IsNullOrWhiteSpace(item.Name) || !string.IsNullOrWhiteSpace(item.Address))))
+            {
+                var name = RequireText(row.Name, "点位名称不能为空。");
+                if (!names.Add(name)) throw new InvalidOperationException("点位名称不能重复：" + name);
+                var address = RequireText(row.Address, "点位地址不能为空。");
+                DataType dataType;
+                if (!Enum.TryParse(row.Type, true, out dataType))
+                    throw new InvalidOperationException("不支持的点位类型：" + row.Type);
+                if (row.Length == 0) throw new InvalidOperationException("点位长度必须大于 0：" + name);
+                tags.Add(new IndustrialTag(address, dataType, row.Length, name));
+            }
+
+            if (tags.Count == 0) throw new InvalidOperationException("点位表至少需要一个点位。");
+            PointJsonTextBox.Text = new TagTable(tags).ToJson();
         }
 
         private string GetPointConfigDisplayName(string path)
@@ -362,6 +574,14 @@ namespace IndustrialCommDemo.Views
             public string Value { get; set; }
             public string Quality { get; set; }
             public string Error { get; set; }
+        }
+
+        private sealed class PointEditorRow
+        {
+            public string Name { get; set; }
+            public string Address { get; set; }
+            public string Type { get; set; } = DataType.Int16.ToString();
+            public ushort Length { get; set; } = 1;
         }
     }
 }

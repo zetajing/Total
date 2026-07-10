@@ -18,26 +18,102 @@
                 <RowDefinition Height="*" />
             </Grid.RowDefinitions>
 
-            <GroupBox Header="devices.json">
-                <TextBox x:Name="DeviceJsonTextBox"
-                         AcceptsReturn="True"
-                         AcceptsTab="True"
-                         FontFamily="Consolas"
-                         FontSize="13"
-                         HorizontalScrollBarVisibility="Auto"
-                         VerticalScrollBarVisibility="Auto"
-                         TextWrapping="NoWrap" />
+            <GroupBox Header="设备配置">
+                <TabControl>
+                    <TabItem Header="常用参数">
+                        <ScrollViewer VerticalScrollBarVisibility="Auto">
+                            <Grid Margin="12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="90" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="90" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                </Grid.RowDefinitions>
+
+                                <TextBlock VerticalAlignment="Center" Text="设备名称" />
+                                <TextBox x:Name="DeviceNameTextBox" Grid.Column="1" Margin="4" />
+                                <TextBlock Grid.Column="2" VerticalAlignment="Center" Text="协议" />
+                                <ComboBox x:Name="ProtocolComboBox" Grid.Column="3" Margin="4">
+                                    <ComboBoxItem Content="modbus-tcp" />
+                                    <ComboBoxItem Content="modbus-rtu" />
+                                    <ComboBoxItem Content="siemens-s7" />
+                                    <ComboBoxItem Content="mitsubishi-mc" />
+                                </ComboBox>
+
+                                <TextBlock Grid.Row="1" VerticalAlignment="Center" Text="主机/IP" />
+                                <TextBox x:Name="HostTextBox" Grid.Row="1" Grid.Column="1" Margin="4" />
+                                <TextBlock Grid.Row="1" Grid.Column="2" VerticalAlignment="Center" Text="TCP 端口" />
+                                <TextBox x:Name="PortTextBox" Grid.Row="1" Grid.Column="3" Margin="4" />
+
+                                <TextBlock Grid.Row="2" VerticalAlignment="Center" Text="串口" />
+                                <TextBox x:Name="PortNameTextBox" Grid.Row="2" Grid.Column="1" Margin="4" />
+                                <TextBlock Grid.Row="2" Grid.Column="2" VerticalAlignment="Center" Text="从站号" />
+                                <TextBox x:Name="SlaveIdTextBox" Grid.Row="2" Grid.Column="3" Margin="4" />
+
+                                <TextBlock Grid.Row="3" VerticalAlignment="Center" Text="点位文件" />
+                                <TextBox x:Name="PointsFileTextBox" Grid.Row="3" Grid.Column="1" Grid.ColumnSpan="3" Margin="4" />
+
+                                <TextBlock Grid.Row="4" VerticalAlignment="Center" Text="轮询(ms)" />
+                                <TextBox x:Name="PollingIntervalTextBox" Grid.Row="4" Grid.Column="1" Margin="4" />
+                                <TextBlock Grid.Row="4" Grid.Column="2" VerticalAlignment="Center" Text="重连(ms)" />
+                                <TextBox x:Name="ReconnectDelayTextBox" Grid.Row="4" Grid.Column="3" Margin="4" />
+
+                                <CheckBox x:Name="EnabledCheckBox" Grid.Row="5" Margin="4,10" VerticalAlignment="Center" Content="启用并由运行中心管理" />
+                                <WrapPanel Grid.Row="5" Grid.Column="1" Grid.ColumnSpan="3" HorizontalAlignment="Right">
+                                    <Button Margin="4" Click="AddDeviceButton_Click" Content="新增设备" />
+                                    <Button Margin="4" Click="DeleteDeviceButton_Click" Content="删除设备" />
+                                    <Button Margin="4" Background="#2563EB" Foreground="White" Click="ApplyDeviceFormButton_Click" Content="应用到 JSON" />
+                                </WrapPanel>
+                            </Grid>
+                        </ScrollViewer>
+                    </TabItem>
+                    <TabItem Header="高级 JSON">
+                        <TextBox x:Name="DeviceJsonTextBox"
+                                 AcceptsReturn="True"
+                                 AcceptsTab="True"
+                                 FontFamily="Consolas"
+                                 FontSize="13"
+                                 HorizontalScrollBarVisibility="Auto"
+                                 VerticalScrollBarVisibility="Auto"
+                                 TextWrapping="NoWrap" />
+                    </TabItem>
+                </TabControl>
             </GroupBox>
 
             <GroupBox x:Name="PointConfigGroupBox" Grid.Row="2" Header="points/*.json">
-                <TextBox x:Name="PointJsonTextBox"
-                         AcceptsReturn="True"
-                         AcceptsTab="True"
-                         FontFamily="Consolas"
-                         FontSize="13"
-                         HorizontalScrollBarVisibility="Auto"
-                         VerticalScrollBarVisibility="Auto"
-                         TextWrapping="NoWrap" />
+                <TabControl x:Name="PointEditorTabControl">
+                    <TabItem Header="点位表格">
+                        <DataGrid x:Name="PointEditorGrid"
+                                  AutoGenerateColumns="False"
+                                  CanUserAddRows="True"
+                                  CanUserDeleteRows="True">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Width="1.1*" Header="名称" Binding="{Binding Name}" />
+                                <DataGridTextColumn Width="1.2*" Header="地址" Binding="{Binding Address}" />
+                                <DataGridComboBoxColumn x:Name="PointTypeColumn" Width="1*" Header="类型" SelectedItemBinding="{Binding Type}" />
+                                <DataGridTextColumn Width="0.7*" Header="长度" Binding="{Binding Length}" />
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </TabItem>
+                    <TabItem Header="高级 JSON">
+                        <TextBox x:Name="PointJsonTextBox"
+                                 AcceptsReturn="True"
+                                 AcceptsTab="True"
+                                 FontFamily="Consolas"
+                                 FontSize="13"
+                                 HorizontalScrollBarVisibility="Auto"
+                                 VerticalScrollBarVisibility="Auto"
+                                 TextWrapping="NoWrap" />
+                    </TabItem>
+                </TabControl>
             </GroupBox>
         </Grid>
 

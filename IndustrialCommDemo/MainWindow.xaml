@@ -5,7 +5,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:views="clr-namespace:IndustrialCommDemo.Views"
         mc:Ignorable="d"
-        Title="通讯"
+        Title="工业设备运行中心"
         Icon="Assets/industrial-comm-icon.png"
         Width="1280"
         Height="860"
@@ -57,8 +57,8 @@
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
                 <StackPanel>
-                    <TextBlock FontSize="22" FontWeight="SemiBold" Foreground="White" Text="工业通讯 Demo" />
-                    <TextBlock Margin="0,4,0,0" FontSize="12" Foreground="#A8C2DB" Text="设备连接、数据读写与运行诊断" />
+                    <TextBlock FontSize="22" FontWeight="SemiBold" Foreground="White" Text="工业设备运行中心" />
+                    <TextBlock Margin="0,4,0,0" FontSize="12" Foreground="#A8C2DB" Text="配置驱动的设备运行、实时监控与通讯诊断" />
                 </StackPanel>
                 <Border Grid.Column="1" Padding="14,8" VerticalAlignment="Center" CornerRadius="12" Background="#244D73">
                     <StackPanel Orientation="Horizontal">
@@ -72,32 +72,48 @@
         <!-- Tab control: all tabs are now UserControls -->
         <Border Grid.Row="1" Margin="0,12" Padding="12" CornerRadius="18" Background="White">
             <TabControl x:Name="ProtocolTabControl">
-                <TabItem Header="Modbus TCP / RTU">
-                    <views:ModbusTab x:Name="ModbusControlTag" />
+                <TabItem Header="运行中心">
+                    <views:DeviceRuntimeTab x:Name="RuntimeControlTag" />
                 </TabItem>
-                <TabItem Header="Siemens S7">
-                    <views:SiemensS7Tab x:Name="S7ControlTag" />
-                </TabItem>
-                <TabItem Header="Mitsubishi MC">
-                    <views:MitsubishiMcTab x:Name="McControlTag" />
-                </TabItem>
-                <TabItem Header="JSON 配置">
+                <TabItem Header="设备配置">
                     <views:JsonConfigTab x:Name="JsonConfigControlTag" />
                 </TabItem>
-                <TabItem Header="Socket TCP">
-                    <views:SocketTcpTab x:Name="SocketControlTag" />
-                </TabItem>
-                <TabItem Header="MES">
-                    <views:MesTab x:Name="MesControlTag" />
-                </TabItem>
-                <TabItem Header="数据库">
+                <TabItem Header="历史数据">
                     <views:DatabaseTab x:Name="DatabaseControlTag" />
                 </TabItem>
-                <TabItem Header="网卡设置">
-                    <views:NetworkSettingsTab x:Name="NetworkControlTag" />
-                </TabItem>
-                <TabItem Header="存储设置">
-                    <views:StorageTab x:Name="StorageControlTag" />
+                <TabItem Header="调试与维护">
+                    <Grid Margin="4">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+                        <Border Padding="12,9" CornerRadius="8" Background="#FFF7ED">
+                            <TextBlock Foreground="#9A3412" Text="以下页面面向调试和维护人员；日常运行请使用运行中心。" />
+                        </Border>
+                        <TabControl x:Name="MaintenanceTabControl" Grid.Row="1" Margin="0,8,0,0">
+                            <TabItem Header="Modbus TCP / RTU">
+                                <views:ModbusTab x:Name="ModbusControlTag" />
+                            </TabItem>
+                            <TabItem Header="Siemens S7">
+                                <views:SiemensS7Tab x:Name="S7ControlTag" />
+                            </TabItem>
+                            <TabItem Header="Mitsubishi MC">
+                                <views:MitsubishiMcTab x:Name="McControlTag" />
+                            </TabItem>
+                            <TabItem Header="Socket TCP">
+                                <views:SocketTcpTab x:Name="SocketControlTag" />
+                            </TabItem>
+                            <TabItem Header="MES">
+                                <views:MesTab x:Name="MesControlTag" />
+                            </TabItem>
+                            <TabItem Header="网卡设置">
+                                <views:NetworkSettingsTab x:Name="NetworkControlTag" />
+                            </TabItem>
+                            <TabItem Header="存储设置">
+                                <views:StorageTab x:Name="StorageControlTag" />
+                            </TabItem>
+                        </TabControl>
+                    </Grid>
                 </TabItem>
             </TabControl>
         </Border>
@@ -118,7 +134,7 @@
                     <Button Grid.Column="1" Padding="8" Background="#E2E8F0" BorderBrush="#CBD5E1" Click="ClearLogButton_Click" Content="清空日志" />
                 </Grid>
                 <TabControl x:Name="LogTabControl" Grid.Row="1" Margin="0,10,0,0">
-                    <TabItem Header="Demo Log">
+                    <TabItem Header="应用日志">
                         <TextBox x:Name="LogTextBox" IsReadOnly="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" AcceptsReturn="True" FontFamily="Consolas" Background="#0F172A" Foreground="#D4E4FF" BorderThickness="0" />
                     </TabItem>
                     <TabItem Header="SDK Log">

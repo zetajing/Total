@@ -18,6 +18,7 @@ namespace IndustrialCommDemo
             Dispatcher dispatcher,
             AppLogger demoLogger,
             AppLogger sdkLogger,
+            IndustrialApplicationRuntime runtime,
             UiStateStore uiStateStore,
             DemoUiState uiState,
             Action<string, Brush> setHeaderStatus,
@@ -26,6 +27,7 @@ namespace IndustrialCommDemo
             Dispatcher = dispatcher ?? throw new ArgumentNullException(nameof(dispatcher));
             DemoLogger = demoLogger ?? throw new ArgumentNullException(nameof(demoLogger));
             SdkLogger = sdkLogger ?? throw new ArgumentNullException(nameof(sdkLogger));
+            Runtime = runtime ?? throw new ArgumentNullException(nameof(runtime));
             UiStateStore = uiStateStore ?? throw new ArgumentNullException(nameof(uiStateStore));
             UiState = uiState ?? throw new ArgumentNullException(nameof(uiState));
             SetHeaderStatus = setHeaderStatus ?? throw new ArgumentNullException(nameof(setHeaderStatus));
@@ -35,6 +37,7 @@ namespace IndustrialCommDemo
         public Dispatcher Dispatcher { get; }
         public AppLogger DemoLogger { get; }
         public AppLogger SdkLogger { get; }
+        public IndustrialApplicationRuntime Runtime { get; }
         public UiStateStore UiStateStore { get; }
         public DemoUiState UiState { get; }
         public Action<string, Brush> SetHeaderStatus { get; }

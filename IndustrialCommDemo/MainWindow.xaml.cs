@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
@@ -16,6 +17,7 @@ namespace IndustrialCommDemo
         private AppLogger _demoLogger;
         private AppLogger _sdkLogger;
         private UiStateStore _uiStateStore;
+        private IndustrialApplicationRuntime _runtime;
         private DemoUiState _uiState;
         private bool _closeCleanupStarted;
         private bool _closeCleanupCompleted;
@@ -25,8 +27,11 @@ namespace IndustrialCommDemo
             InitializeComponent();
 
             // Create loggers
-            _demoLogger = new AppLogger(Dispatcher, AppendLogBatch, "DEMO");
+            _demoLogger = new AppLogger(Dispatcher, AppendLogBatch, "APP");
             _sdkLogger = new AppLogger(Dispatcher, AppendSdkLogBatch, "SDK");
+            _runtime = new IndustrialApplicationRuntime(
+                Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Config", "devices.json"),
+                _sdkLogger);
 
             // Load persisted UI state
             _uiStateStore = new UiStateStore();
@@ -34,10 +39,12 @@ namespace IndustrialCommDemo
 
             // Create shared app context
             _ctx = new DemoAppContext(
-                Dispatcher, _demoLogger, _sdkLogger, _uiStateStore, _uiState,
+                Dispatcher, _demoLogger, _sdkLogger, _runtime, _uiStateStore, _uiState,
                 SetHeaderStatus, () => this);
+            _runtime.ValuesReceived += (sender, args) => _ctx.QueueDatabaseValues(args.Client, args.RawValues);
 
             // Initialize all tab UserControls
+            RuntimeControlTag.Initialize(_ctx);
             ModbusControlTag.Initialize(_ctx);
             S7ControlTag.Initialize(_ctx);
             McControlTag.Initialize(_ctx);
@@ -48,15 +55,15 @@ namespace IndustrialCommDemo
             NetworkControlTag.Initialize(_ctx);
             StorageControlTag.Initialize(_ctx);
 
-            // Wire up network tab loaded event
-            ProtocolTabControl.SelectionChanged += (s, e) =>
+            // 网卡页面进入时再刷新，避免程序启动就执行系统管理查询。
+            MaintenanceTabControl.SelectionChanged += (s, e) =>
             {
-                if (ProtocolTabControl.SelectedItem is TabItem tab && tab.Content == NetworkControlTag)
+                if (MaintenanceTabControl.SelectedItem is TabItem tab && tab.Content == NetworkControlTag)
                     _ = NetworkControlTag.OnTabLoadedAsync();
             };
 
             SetHeaderStatus("就绪", Brushes.LightGreen);
-            _demoLogger.Info("工业通讯演示已就绪。");
+            _demoLogger.Info("工业设备运行中心已就绪。");
         }
 
         // ── Window cleanup ──
@@ -78,8 +85,10 @@ namespace IndustrialCommDemo
                 await SocketControlTag.ResetAllAsync();
                 await MesControlTag.ResetClientAsync();
                 await DatabaseControlTag.StopRecorderAsync();
+                await _runtime.StopAsync();
 
                 if (_ctx.DatabaseRecorder != null) { _ctx.DatabaseRecorder.Dispose(); _ctx.DatabaseRecorder = null; }
+                _runtime.Dispose();
             }
             catch (Exception ex)
             {
