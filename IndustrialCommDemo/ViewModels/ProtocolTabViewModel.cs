@@ -20,6 +20,7 @@ namespace IndustrialCommDemo.ViewModels
         private string _statusText = "未连接";
         private Brush _statusBrush = Brushes.IndianRed;
         private string _resultText = "等待中...";
+        private string _capabilityText = "协议能力：连接后显示。";
         private string _deviceId;
         private string _host;
         private string _portOrRack;
@@ -57,6 +58,12 @@ namespace IndustrialCommDemo.ViewModels
         {
             get => _resultText;
             protected set => SetProperty(ref _resultText, value);
+        }
+
+        public string CapabilityText
+        {
+            get => _capabilityText;
+            private set => SetProperty(ref _capabilityText, value);
         }
 
         /// <summary>
@@ -128,12 +135,14 @@ namespace IndustrialCommDemo.ViewModels
                 _client = CreateClient();
                 await _client.ConnectAsync(CancellationToken.None);
                 OnAfterConnect();
+                RefreshCapabilityText();
                 UpdateStatus(true);
                 Ctx.SetHeaderStatus(ProtocolTag + " 已连接", Brushes.LightGreen);
                 LogInfo(ProtocolTag + " 已连接。");
             }
             catch (Exception ex)
             {
+                RefreshCapabilityText();
                 UpdateStatus(false);
                 HandleError(ProtocolTag + " 连接失败。", ex, true);
             }
@@ -145,6 +154,7 @@ namespace IndustrialCommDemo.ViewModels
             {
                 await ResetClientInternalAsync();
                 ResultText = "已断开。";
+                RefreshCapabilityText();
                 UpdateStatus(false);
                 Ctx.SetHeaderStatus(ProtocolTag + " 已断开", Brushes.Khaki);
                 LogInfo(ProtocolTag + " 已断开。");
@@ -210,6 +220,16 @@ namespace IndustrialCommDemo.ViewModels
         {
             await ResetClientInternalAsync();
             UpdateStatus(false);
+            RefreshCapabilityText();
+        }
+
+        public void RefreshCapabilityText()
+        {
+            var client = _client;
+            var capabilities = client == null
+                ? ProtocolCapabilities.ForProtocol(ProtocolKind)
+                : IndustrialClientPlatformExtensions.GetCapabilities(client);
+            CapabilityText = CapabilityDisplayHelper.Format(capabilities);
         }
 
         private bool EnsureConnected()

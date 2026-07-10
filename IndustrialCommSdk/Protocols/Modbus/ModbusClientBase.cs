@@ -18,7 +18,7 @@ namespace IndustrialCommSdk.Protocols.Modbus
     /// Modbus 协议客户端的公共基类，封装所有传输无关的 Modbus 读写逻辑。
     /// TCP 和 RTU 子类只需实现连接/断开和 <see cref="Master"/> 属性即可复用完整的协议能力。
     /// </summary>
-    public abstract class ModbusClientBase : IndustrialClientBase
+    public abstract class ModbusClientBase : IndustrialClientBase, IBatchOperationPlanner
     {
         /// <summary>设备配置文件，用于处理寄存器规范化和字节序。</summary>
         protected readonly IModbusDeviceProfile DeviceProfile;
@@ -29,16 +29,6 @@ namespace IndustrialCommSdk.Protocols.Modbus
         /// <summary>Modbus 从站 ID（站号）。</summary>
         protected readonly byte SlaveId;
 
-        /// <summary>
-        /// 初始化 <see cref="ModbusClientBase"/> 类的新实例。
-        /// </summary>
-        /// <param name="deviceId">设备标识。</param>
-        /// <param name="kind">协议类型（TCP 或 RTU）。</param>
-        /// <param name="slaveId">Modbus 从站 ID。</param>
-        /// <param name="deviceProfile">设备配置文件。为 null 时使用默认汇川配置。</param>
-        /// <param name="addressParser">地址解析器。为 null 时使用设备配置文件的默认解析器。</param>
-        /// <param name="pollingScheduler">轮询调度器实例。</param>
-        /// <param name="logger">日志记录器实例。</param>
         protected ModbusClientBase(
             string deviceId,
             ProtocolKind kind,
@@ -54,18 +44,14 @@ namespace IndustrialCommSdk.Protocols.Modbus
             AddressParser = addressParser ?? new ModbusAddressParser(DeviceProfile);
         }
 
-        /// <summary>
-        /// 获取当前活跃的 NModbus 主站实例。子类在连接后赋值，断开后置 null。
-        /// </summary>
+        /// <summary>获取当前活跃的 NModbus 主站实例。子类在连接后赋值，断开后置 null。</summary>
         protected abstract ModbusMaster Master { get; }
 
-        /// <summary>
-        /// 从 Modbus 设备读取数据的核心异步方法。
-        /// </summary>
+        /// <summary>从 Modbus 设备读取数据的核心异步方法。</summary>
         protected override async Task<DataValue> ReadCoreAsync(ReadRequest request, CancellationToken cancellationToken)
         {
             EnsureConnected();
-            var parsed = (ModbusAddress)AddressParser.Parse(request.Address);
+            var parsed = AddressParser.ParseTyped(request.Address);
             var normalizedRequest = NormalizeReadRequest(request, parsed);
             switch (parsed.Area)
             {
@@ -88,13 +74,11 @@ namespace IndustrialCommSdk.Protocols.Modbus
             }
         }
 
-        /// <summary>
-        /// 向 Modbus 设备写入数据的核心异步方法。
-        /// </summary>
+        /// <summary>向 Modbus 设备写入数据的核心异步方法。</summary>
         protected override async Task WriteCoreAsync(WriteRequest request, CancellationToken cancellationToken)
         {
             EnsureConnected();
-            var parsed = (ModbusAddress)AddressParser.Parse(request.Address);
+            var parsed = AddressParser.ParseTyped(request.Address);
             var normalizedRequest = NormalizeWriteRequest(request, parsed);
             var master = Master;
             switch (parsed.Area)
@@ -125,6 +109,50 @@ namespace IndustrialCommSdk.Protocols.Modbus
         }
 
         /// <summary>
+        /// Plans a Modbus read batch using the same area grouping and contiguous-range merge rules used by execution.
+        /// </summary>
+        public BatchSplitPlan PlanRead(IReadOnlyCollection<ReadRequest> requests, BatchReadOptions options, ProtocolCapabilities capabilities)
+        {
+            if (requests == null) throw new ArgumentNullException(nameof(requests));
+            if (requests.Count == 0)
+                return new BatchSplitPlan(Kind, BatchOperationKind.Read, new BatchRequestGroup[0], 0);
+
+            var parsedItems = BuildReadItems(requests);
+            var groups = BuildReadPlanGroups(parsedItems);
+            return new BatchSplitPlan(Kind, BatchOperationKind.Read, groups, requests.Count);
+        }
+
+        /// <summary>
+        /// Plans Modbus writes conservatively: each logical write remains one physical write group.
+        /// Future work can safely optimize adjacent holding-register writes through this contract.
+        /// </summary>
+        public BatchSplitPlan PlanWrite(IReadOnlyCollection<WriteRequest> requests, BatchWriteOptions options, ProtocolCapabilities capabilities)
+        {
+            if (requests == null) throw new ArgumentNullException(nameof(requests));
+            if (requests.Count == 0)
+                return new BatchSplitPlan(Kind, BatchOperationKind.Write, new BatchRequestGroup[0], 0);
+
+            var groups = new List<BatchRequestGroup>();
+            var sequence = 0;
+            foreach (var request in requests)
+            {
+                var address = AddressParser.ParseTyped(request.Address);
+                var normalized = NormalizeWriteRequest(request, address);
+                var start = (int)address.ZeroBasedAddress;
+                var end = start + normalized.Length - 1;
+                groups.Add(BatchRequestGroup.ForWrite(
+                    sequence++,
+                    address.Area.ToString(),
+                    start,
+                    end,
+                    normalized.DataType,
+                    new[] { request }));
+            }
+
+            return new BatchSplitPlan(Kind, BatchOperationKind.Write, groups, requests.Count);
+        }
+
+        /// <summary>
         /// 批量读取 Modbus 设备数据的核心异步方法，支持自动合并连续的地址范围以减少通信次数。
         /// </summary>
         protected override async Task<BatchReadResult> ReadManyCoreAsync(
@@ -133,24 +161,23 @@ namespace IndustrialCommSdk.Protocols.Modbus
             EnsureConnected();
             var values = new DataValue[requests.Count];
             var overallStopwatch = Stopwatch.StartNew();
-            var mergedBatchCount = 0;
 
-            var parsedItems = requests
-                .Select((r, index) => new { Request = r, Address = (ModbusAddress)AddressParser.Parse(r.Address), Index = index })
-                .ToList();
+            var parsedItems = BuildReadItems(requests);
+            var plan = new BatchSplitPlan(Kind, BatchOperationKind.Read, BuildReadPlanGroups(parsedItems), requests.Count);
 
-            var groups = parsedItems
-                .GroupBy(x => x.Address.Area);
+            Logger.Info(BatchPlanDiagnostics.FormatSummary("Modbus.ReadMany", DeviceId, plan));
+            foreach (var planGroup in plan.Groups)
+                Logger.Trace(BatchPlanDiagnostics.FormatGroup("Modbus.ReadMany", DeviceId, plan, planGroup));
+
+            var groups = parsedItems.GroupBy(x => x.Address.Area);
 
             foreach (var group in groups)
             {
                 var sortedItems = group
-                    .Select(x => new MergeItem { Request = x.Request, Address = x.Address, Norm = NormalizeReadRequest(x.Request, x.Address), OriginalIndex = x.Index })
                     .OrderBy(x => x.Address.ZeroBasedAddress)
                     .ToList();
 
                 var mergedBatches = MergeContiguous(sortedItems);
-                mergedBatchCount += mergedBatches.Count;
 
                 foreach (var batch in mergedBatches)
                 {
@@ -218,31 +245,27 @@ namespace IndustrialCommSdk.Protocols.Modbus
                     }
 
                     batchStopwatch.Stop();
-                    Logger.Info(string.Format(
-                        "Modbus batch read merged {0} requests into 1 call | Area={1} | Start={2} | Length={3} | Addresses=[{4}] | Elapsed={5}ms",
+                    Logger.Info(BatchPlanDiagnostics.FormatExecutedGroup(
+                        "Modbus.ReadMany",
+                        DeviceId,
+                        Kind,
+                        BatchOperationKind.Read,
                         batch.Count,
-                        group.Key,
+                        group.Key.ToString(),
                         startAddr,
                         totalLength,
-                        string.Join(", ", batch.Select(item => item.Request.Address).ToArray()),
-                        batchStopwatch.ElapsedMilliseconds));
+                        batchStopwatch.ElapsedMilliseconds,
+                        batch.Select(item => item.Request.Address).ToArray()));
                 }
             }
 
             overallStopwatch.Stop();
-            Logger.Info(string.Format(
-                "Modbus batch read summary | OriginalRequests={0} | MergedCalls={1} | SavedCalls={2} | Elapsed={3}ms",
-                requests.Count,
-                mergedBatchCount,
-                Math.Max(0, requests.Count - mergedBatchCount),
-                overallStopwatch.ElapsedMilliseconds));
+            Logger.Info(BatchPlanDiagnostics.FormatSummary("Modbus.ReadMany", DeviceId, plan, overallStopwatch.ElapsedMilliseconds));
 
             return new BatchReadResult(values);
         }
 
-        /// <summary>
-        /// 分块读取位（线圈/离散输入）数据，单次最多 2000 个位。
-        /// </summary>
+        /// <summary>分块读取位（线圈/离散输入）数据，单次最多 2000 个位。</summary>
         private async Task<bool[]> ReadBitsInChunksAsync(
             ModbusArea area,
             ushort startAddress,
@@ -268,9 +291,7 @@ namespace IndustrialCommSdk.Protocols.Modbus
             return result;
         }
 
-        /// <summary>
-        /// 分块读取寄存器（输入/保持）数据，单次最多 125 个寄存器。
-        /// </summary>
+        /// <summary>分块读取寄存器（输入/保持）数据，单次最多 125 个寄存器。</summary>
         private async Task<ushort[]> ReadRegistersInChunksAsync(
             ModbusArea area,
             ushort startAddress,
@@ -296,9 +317,7 @@ namespace IndustrialCommSdk.Protocols.Modbus
             return result;
         }
 
-        /// <summary>
-        /// 校验读取范围是否超出 16 位地址空间。
-        /// </summary>
+        /// <summary>校验读取范围是否超出 16 位地址空间。</summary>
         private static void ValidateAddressRange(ushort startAddress, int totalLength)
         {
             if (totalLength <= 0 || (long)startAddress + totalLength > ushort.MaxValue + 1L)
@@ -307,9 +326,7 @@ namespace IndustrialCommSdk.Protocols.Modbus
             }
         }
 
-        /// <summary>
-        /// 确保客户端已连接，否则抛出异常。
-        /// </summary>
+        /// <summary>确保客户端已连接，否则抛出异常。</summary>
         protected void EnsureConnected()
         {
             if (!IsConnected)
@@ -318,9 +335,65 @@ namespace IndustrialCommSdk.Protocols.Modbus
             }
         }
 
-        /// <summary>
-        /// 规范化读取请求，确保请求的长度符合 Modbus 协议和设备配置文件的要求。
-        /// </summary>
+        private List<MergeItem> BuildReadItems(IReadOnlyCollection<ReadRequest> requests)
+        {
+            return requests
+                .Select((r, index) =>
+                {
+                    var address = AddressParser.ParseTyped(r.Address);
+                    return new MergeItem
+                    {
+                        Request = r,
+                        Address = address,
+                        Norm = NormalizeReadRequest(r, address),
+                        OriginalIndex = index,
+                    };
+                })
+                .ToList();
+        }
+
+        private List<BatchRequestGroup> BuildReadPlanGroups(IReadOnlyCollection<MergeItem> parsedItems)
+        {
+            var planGroups = new List<BatchRequestGroup>();
+            var sequence = 0;
+            foreach (var areaGroup in parsedItems.GroupBy(x => x.Address.Area))
+            {
+                var sortedItems = areaGroup.OrderBy(x => x.Address.ZeroBasedAddress).ToList();
+                var mergedBatches = MergeContiguous(sortedItems);
+                foreach (var batch in mergedBatches)
+                {
+                    var startAddr = (int)batch[0].Address.ZeroBasedAddress;
+                    var endAddressExclusive = batch.Max(item => (int)item.Address.ZeroBasedAddress + item.Norm.Length);
+                    planGroups.Add(BatchRequestGroup.ForRead(
+                        sequence++,
+                        areaGroup.Key.ToString(),
+                        startAddr,
+                        endAddressExclusive - 1,
+                        GetCommonDataType(batch),
+                        batch.Select(item => item.Request).ToList()));
+                }
+            }
+            return planGroups;
+        }
+
+        private static DataType? GetCommonDataType(IReadOnlyCollection<MergeItem> batch)
+        {
+            DataType? value = null;
+            foreach (var item in batch)
+            {
+                if (!value.HasValue)
+                {
+                    value = item.Norm.DataType;
+                    continue;
+                }
+
+                if (value.Value != item.Norm.DataType)
+                    return null;
+            }
+            return value;
+        }
+
+        /// <summary>规范化读取请求，确保请求的长度符合 Modbus 协议和设备配置文件的要求。</summary>
         private static ReadRequest NormalizeReadRequest(ReadRequest request, ModbusAddress address)
         {
             if (address.IsBitArea)
@@ -342,9 +415,7 @@ namespace IndustrialCommSdk.Protocols.Modbus
             return new ReadRequest(request.DeviceId, request.Address, request.DataType, normalizedLength, request.Timeout);
         }
 
-        /// <summary>
-        /// 规范化写入请求，确保请求的长度和数据类型符合 Modbus 协议和设备配置文件的要求。
-        /// </summary>
+        /// <summary>规范化写入请求，确保请求的长度和数据类型符合 Modbus 协议和设备配置文件的要求。</summary>
         private static WriteRequest NormalizeWriteRequest(WriteRequest request, ModbusAddress address)
         {
             if (address.IsBitArea)
@@ -366,9 +437,7 @@ namespace IndustrialCommSdk.Protocols.Modbus
             return new WriteRequest(request.DeviceId, request.Address, request.DataType, request.Value, normalizedLength, request.Timeout);
         }
 
-        /// <summary>
-        /// 用于批量读取合并操作的内部数据项。
-        /// </summary>
+        /// <summary>用于批量读取合并操作的内部数据项。</summary>
         private sealed class MergeItem
         {
             public ReadRequest Request { get; set; }
@@ -377,9 +446,7 @@ namespace IndustrialCommSdk.Protocols.Modbus
             public int OriginalIndex { get; set; }
         }
 
-        /// <summary>
-        /// 将已按地址排序的合并项列表中的连续地址范围合并为多个批次。
-        /// </summary>
+        /// <summary>将已按地址排序的合并项列表中的连续地址范围合并为多个批次。</summary>
         private static List<List<MergeItem>> MergeContiguous(List<MergeItem> sortedItems)
         {
             var batches = new List<List<MergeItem>>();

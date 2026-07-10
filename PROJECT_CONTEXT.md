@@ -9,6 +9,7 @@
 - 默认分支：`master`
 - 当前代码状态：已合并 `PR #1 Optimize industrial SDK reliability for P0/P1`。
 - P0/P1 合并提交：`1afa2eb44394361548f8fd3d313b7c939bed89ca`
+- 当前正在推进：`core-extensible-platform`，目标是把 SDK 核心做成可扩展平台。
 - 每次修改代码或文档后都需要提交并推送到 Git。
 
 ## 解决方案结构
@@ -30,6 +31,78 @@
 - FA MES TCP
 
 统一抽象位于 `IndustrialCommSdk/Abstractions/IIndustrialClient`。协议客户端应继续遵循该接口，不在业务层直接依赖某个 PLC 驱动库。
+
+## 核心可扩展平台现状
+
+`core-extensible-platform` 最初采用非破坏式建模，现在已经推进到“直接接入现有核心实现”：不修改 `IIndustrialClient` 现有方法签名，但核心基类、Modbus/S7/MC 地址模型、三大 PLC 协议批量规划、轮询调度、统一批量诊断和 Demo 能力展示已经开始使用平台模型。
+
+新增文件：
+
+- `IndustrialCommSdk/Abstractions/ProtocolCapabilities.cs`
+- `IndustrialCommSdk/Abstractions/IndustrialAddress.cs`
+- `IndustrialCommSdk/Abstractions/BatchOptions.cs`
+- `IndustrialCommSdk/Abstractions/BatchSplitPlan.cs`
+- `IndustrialCommSdk/Abstractions/PlatformInterfaces.cs`
+- `IndustrialCommSdk/IndustrialClientPlatformExtensions.cs`
+- `IndustrialCommSdk/Diagnostics/BatchPlanDiagnostics.cs`
+- `IndustrialCommDemo/Helpers/CapabilityDisplayHelper.cs`
+- `IndustrialCommSdk.Tests/PlatformModelTests.cs`
+- `CORE_EXTENSIBILITY.md`
+
+新增/接入能力：
+
+1. `ProtocolCapabilities`
+   - 描述协议是否支持批量、位地址、字符串、ByteArray、原始传输、原生异步、推荐轮询周期、最大批量数量、最大地址跨度和 PDU 限制。
+   - 通过 `client.GetCapabilities()` 读取。
+   - 第三方协议客户端可实现 `IProtocolCapabilityProvider` 覆盖默认能力。
+
+2. `IndustrialClientBase : IProtocolCapabilityProvider`
+   - 所有继承基类的协议客户端默认具备协议能力。
+   - 默认返回 `ProtocolCapabilities.ForProtocol(Kind)`。
+   - 具体协议可 override `Capabilities` 来描述运行时差异。
+
+3. `IIndustrialAddress` / `IndustrialAddress`
+   - 提供统一地址形状：Original、Normalized、Area、Offset、Bit、IsBitAddress。
+   - `ModbusAddress`、`S7Address` 和 `McAddress` 已实现该接口。
+
+4. 强类型地址 Parser
+   - `ModbusAddressParser` 已实现 `IAddressParser<ModbusAddress>`，并保留旧 `IAddressParser`。
+   - `S7AddressParser` 已实现 `IAddressParser<S7Address>`，并保留旧 `IAddressParser`。
+   - `McAddressParser` 已实现 `IAddressParser<McAddress>`，并保留旧 `IAddressParser`。
+   - 协议内部已开始使用 `ParseTyped`，减少 object cast。
+
+5. `BatchReadOptions` / `BatchWriteOptions` / `BatchSplitPlan`
+   - 为批量读写的超时、拆分、合并、顺序保持、错误继续策略提供协议无关模型。
+   - `ModbusClientBase` 已实现 `IBatchOperationPlanner`。
+   - `SiemensS7Client` 已实现 `IBatchOperationPlanner`。
+   - `MitsubishiMcClient` 已实现 `IBatchOperationPlanner`。
+   - Modbus 现有连续地址合并已映射为 `BatchSplitPlan`。
+   - S7 planner 按 Area / DB / DataType / ByteOffset / BitOffset / MaxReadItems / MaxAddressSpan 生成读计划。
+   - MC planner 按 DeviceType / 位字属性 / DataType / DeviceIndex / MaxReadItems / MaxAddressSpan 生成读计划。
+   - 三个协议的 `PlanWrite` 当前都保持保守单点组，暂不自动合并写操作。
+
+6. `BatchPlanDiagnostics`
+   - 统一格式化 `BATCH_PLAN summary`、`BATCH_PLAN group` 和 `BATCH_PLAN executed_group`。
+   - 后续 Modbus、PollingScheduler、S7/MC 优化读取和 Demo 诊断面板都应复用这套字段。
+   - 关键字段包括 Source、Device、Protocol、Operation、OriginalRequests、PlannedRequests、SavedRequests、Area、Start、End、Length、Requests、Elapsed 和 Addresses。
+
+7. `PollingScheduler` 接入能力模型和批量计划
+   - `SubscribeAsync` 会读取 `client.GetCapabilities()`。
+   - 拒绝不支持订阅的协议，例如原始 TCP Socket。
+   - 拒绝低于 `RecommendedMinPollingInterval` 的订阅周期。
+   - Worker 内保存协议能力。
+   - 每轮会合并重复点位，优先用 `IBatchOperationPlanner.PlanRead(...)` 拆批，没有 planner 时按 `MaxReadItems` 保守拆批。
+   - 批次独立容错，失败批次返回 `QualityStatus.Bad`，不阻断其他批次。
+
+8. Demo 能力展示
+   - 新增 `CapabilityDisplayHelper` 统一格式化协议能力。
+   - `ModbusTab` 会根据 TCP / RTU 连接方式显示默认能力，连接后显示实际 client 能力。
+   - `SiemensS7Tab` 和 `MitsubishiMcTab` 通过 `ProtocolTabViewModel.CapabilityText` 显示协议能力。
+   - 当前只是展示能力，还未根据能力自动隐藏或禁用 UI 控件。
+
+9. 测试更新
+   - `PlatformModelTests` 覆盖能力模型、统一地址、Modbus/S7/MC parser 的平台地址形状、Modbus/S7/MC 读计划、批量计划和能力 provider fallback。
+   - `PollingSchedulerTests` 已覆盖协议不支持订阅、低于推荐轮询周期、DeviceId 不匹配、同设备不同客户端拒绝、重复点位合并读取、无 planner 拆批和 planner 拆批。
 
 ## P0/P1 可靠性优化现状
 
@@ -74,7 +147,10 @@
 
 - 轮询订阅仍是“SDK 主动周期读取”，不是 PLC 主动推送。
 - `IIndustrialClient` 的操作仍按客户端串行化执行，避免同一 TCP/串口连接上的请求响应错位。
-- 轮询调度已按设备合并，但协议级连续地址合并仍由具体协议实现负责；当前 Modbus TCP 已有连续地址合并能力。
+- 轮询调度已按设备合并、协议能力校验，并可用 `IBatchOperationPlanner` / `MaxReadItems` 拆分轮询批次。
+- Modbus / S7 / MC 都已映射到 `BatchSplitPlan`；S7 / MC 当前只是计划化拆批，底层仍复用现有逐项读取路径，真正协议级合并读取后续单独做。
+- `BatchPlanDiagnostics` 已建立统一日志格式，但 Modbus / PollingScheduler 的旧手写 batch 日志仍需逐步替换。
+- Demo 已显示 `ProtocolCapabilities`，但还未根据能力动态禁用控件或预警输入。
 - `ReadAsync` 通信失败默认返回 `DataValue.Bad`；写入失败仍抛异常。调用方需要按 `Quality` 判断读取结果。
 - 环境里无法保证所有变更都经过本地 `dotnet test`，后续每次功能修改必须优先补齐本地或 CI 验证。
 
@@ -184,6 +260,6 @@ SDK 与 `IndustrialCommDemo` 单独构建正常。解决整个解决方案构建
 3. 按设备的点位表执行周期批量读取并上报事件。
 4. 提供按“设备名 + 点位名”的读写入口和状态事件。
 
-下一优先级：增加 `readGroup`、`writable`、单位等少量点位运行元数据；再根据真实现场需求扩展协议模块。
+下一优先级：替换 Modbus / PollingScheduler 旧手写 batch 日志，或让 Demo 根据 `ProtocolCapabilities` 动态禁用不支持的输入项。
 
 Modbus 品牌差异通过 `IModbusDeviceProfile` 隔离，JSON 数据驱动，新增品牌不改 C# 代码、不重新编译。非 Modbus 协议扩展采用插件式：只有真实现场需要时才增加 Omron、Allen-Bradley、OPC UA 等模块，并保持 `IIndustrialClient` 抽象不变。

@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
@@ -22,29 +24,42 @@ namespace IndustrialCommSdk.Protocols.S7
         Output,
     }
 
-    public sealed class S7Address
+    public sealed class S7Address : IIndustrialAddress
     {
-        public S7Address(S7Area area, int dbNumber, int byteOffset, int bitOffset, string normalized)
+        public S7Address(S7Area area, int dbNumber, int byteOffset, int bitOffset, string normalized, string original = null)
         {
+            if (string.IsNullOrWhiteSpace(normalized)) throw new ArgumentException("Normalized S7 address is required.", nameof(normalized));
             Area = area;
             DbNumber = dbNumber;
             ByteOffset = byteOffset;
             BitOffset = bitOffset;
             Normalized = normalized;
+            Original = string.IsNullOrWhiteSpace(original) ? normalized : original;
         }
 
         public S7Area Area { get; private set; }
         public int DbNumber { get; private set; }
         public int ByteOffset { get; private set; }
         public int BitOffset { get; private set; }
+        public string Original { get; private set; }
         public string Normalized { get; private set; }
+        public bool IsBitAddress { get { return BitOffset >= 0; } }
+
+        string IIndustrialAddress.Area { get { return Area.ToString(); } }
+        int IIndustrialAddress.Offset { get { return ByteOffset; } }
+        int? IIndustrialAddress.Bit { get { return IsBitAddress ? (int?)BitOffset : null; } }
+
+        public override string ToString()
+        {
+            return Normalized;
+        }
     }
 
     /// <summary>
     /// S7 address parser aligned with S7.NetPlus address conventions.
     /// Supports DB1.DBX0.0 / DB1.DBB0 / DB1.DBW0 / DB1.DBD0 and M/I/Q areas.
     /// </summary>
-    public sealed class S7AddressParser : IAddressParser
+    public sealed class S7AddressParser : IAddressParser, IAddressParser<S7Address>
     {
         private static readonly Regex DbRegex = new Regex(
             @"^DB(?<db>\d+)\.DB(?<type>[XBWDL])(?<offset>\d+)(?:\.(?<bit>\d+))?$",
@@ -55,6 +70,16 @@ namespace IndustrialCommSdk.Protocols.S7
             RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
         public object Parse(string address)
+        {
+            return ParseTyped(address);
+        }
+
+        S7Address IAddressParser<S7Address>.Parse(string address)
+        {
+            return ParseTyped(address);
+        }
+
+        public S7Address ParseTyped(string address)
         {
             if (string.IsNullOrWhiteSpace(address))
                 throw new IndustrialAddressParseException("S7 address is required.");
@@ -76,7 +101,8 @@ namespace IndustrialCommSdk.Protocols.S7
                     dbNumber,
                     ParseNonNegative(dbMatch.Groups["offset"].Value, "byte offset"),
                     bit,
-                    input);
+                    input,
+                    address);
             }
 
             var areaMatch = AreaRegex.Match(input);
@@ -91,7 +117,8 @@ namespace IndustrialCommSdk.Protocols.S7
                     0,
                     ParseNonNegative(areaMatch.Groups["offset"].Value, "byte offset"),
                     bit,
-                    input);
+                    input,
+                    address);
             }
 
             throw new IndustrialAddressParseException("Unsupported S7 address: " + address);
@@ -156,7 +183,7 @@ namespace IndustrialCommSdk.Protocols.S7
     /// Siemens S7 client built on S7.NetPlus. The wrapper owns connection lifecycle,
     /// serializes access through IndustrialClientBase, and retries one time after a stale session.
     /// </summary>
-    public sealed class SiemensS7Client : IndustrialClientBase
+    public sealed class SiemensS7Client : IndustrialClientBase, IBatchOperationPlanner
     {
         private readonly SiemensS7ClientOptions _options;
         private readonly S7AddressParser _parser;
@@ -196,6 +223,44 @@ namespace IndustrialCommSdk.Protocols.S7
             }
         }
 
+        public BatchSplitPlan PlanRead(IReadOnlyCollection<ReadRequest> requests, BatchReadOptions options, ProtocolCapabilities capabilities)
+        {
+            if (requests == null) throw new ArgumentNullException(nameof(requests));
+            options = options ?? BatchReadOptions.Default;
+            capabilities = capabilities ?? Capabilities;
+
+            var planned = requests
+                .Select(request => new PlannedS7Read(request, _parser.ParseTyped(request.Address), EstimateEndOffset(_parser.ParseTyped(request.Address), request)))
+                .OrderBy(item => item.Address.Area)
+                .ThenBy(item => item.Address.DbNumber)
+                .ThenBy(item => item.Request.DataType)
+                .ThenBy(item => item.Address.ByteOffset)
+                .ThenBy(item => item.Address.BitOffset)
+                .ToList();
+
+            var groups = BuildReadGroups(planned, options, capabilities);
+            return new BatchSplitPlan(ProtocolKind.SiemensS7, BatchOperationKind.Read, groups, requests.Count);
+        }
+
+        public BatchSplitPlan PlanWrite(IReadOnlyCollection<WriteRequest> requests, BatchWriteOptions options, ProtocolCapabilities capabilities)
+        {
+            if (requests == null) throw new ArgumentNullException(nameof(requests));
+            var groups = new List<BatchRequestGroup>();
+            var sequence = 0;
+            foreach (var request in requests)
+            {
+                var address = _parser.ParseTyped(request.Address);
+                groups.Add(BatchRequestGroup.ForWrite(
+                    sequence++,
+                    BuildAreaKey(address),
+                    address.ByteOffset,
+                    EstimateEndOffset(address, request),
+                    request.DataType,
+                    new[] { request }));
+            }
+            return new BatchSplitPlan(ProtocolKind.SiemensS7, BatchOperationKind.Write, groups, requests.Count);
+        }
+
         protected override async Task ConnectCoreAsync(CancellationToken cancellationToken)
         {
             ClosePlc();
@@ -228,7 +293,7 @@ namespace IndustrialCommSdk.Protocols.S7
 
         protected override Task<DataValue> ReadCoreAsync(ReadRequest request, CancellationToken cancellationToken)
         {
-            var address = (S7Address)_parser.Parse(request.Address);
+            var address = _parser.ParseTyped(request.Address);
             return ExecuteWithReconnectAsync(async token =>
             {
                 var value = await ReadValueAsync(address, request, token).ConfigureAwait(false);
@@ -239,7 +304,7 @@ namespace IndustrialCommSdk.Protocols.S7
 
         protected override Task WriteCoreAsync(WriteRequest request, CancellationToken cancellationToken)
         {
-            var address = (S7Address)_parser.Parse(request.Address);
+            var address = _parser.ParseTyped(request.Address);
             return ExecuteWithReconnectAsync(async token =>
             {
                 await WriteValueAsync(address, request, token).ConfigureAwait(false);
@@ -390,6 +455,109 @@ namespace IndustrialCommSdk.Protocols.S7
             }
         }
 
+        private static IReadOnlyList<BatchRequestGroup> BuildReadGroups(
+            IReadOnlyList<PlannedS7Read> planned,
+            BatchReadOptions options,
+            ProtocolCapabilities capabilities)
+        {
+            var groups = new List<BatchRequestGroup>();
+            if (planned.Count == 0) return groups;
+
+            var maxItems = options.MaxItemsPerBatch ?? capabilities.MaxReadItems;
+            var maxSpan = options.MaxAddressSpan ?? capabilities.MaxAddressSpan;
+            var current = new List<PlannedS7Read>();
+            var sequence = 0;
+
+            foreach (var item in planned)
+            {
+                if (current.Count == 0)
+                {
+                    current.Add(item);
+                    continue;
+                }
+
+                if (!CanJoin(current, item, maxItems, maxSpan))
+                {
+                    groups.Add(CreateReadGroup(sequence++, current));
+                    current = new List<PlannedS7Read>();
+                }
+                current.Add(item);
+            }
+
+            if (current.Count > 0)
+                groups.Add(CreateReadGroup(sequence, current));
+            return groups;
+        }
+
+        private static bool CanJoin(IReadOnlyList<PlannedS7Read> current, PlannedS7Read next, int maxItems, int maxSpan)
+        {
+            if (current.Count >= maxItems) return false;
+            var first = current[0];
+            if (first.Address.Area != next.Address.Area) return false;
+            if (first.Address.DbNumber != next.Address.DbNumber) return false;
+            if (first.Request.DataType != next.Request.DataType) return false;
+            var start = Math.Min(current.Min(item => item.Address.ByteOffset), next.Address.ByteOffset);
+            var end = Math.Max(current.Max(item => item.EndOffset), next.EndOffset);
+            return end - start + 1 <= maxSpan;
+        }
+
+        private static BatchRequestGroup CreateReadGroup(int sequence, IReadOnlyList<PlannedS7Read> current)
+        {
+            var start = current.Min(item => item.Address.ByteOffset);
+            var end = current.Max(item => item.EndOffset);
+            return BatchRequestGroup.ForRead(
+                sequence,
+                BuildAreaKey(current[0].Address),
+                start,
+                end,
+                current[0].Request.DataType,
+                current.Select(item => item.Request).ToList());
+        }
+
+        private static string BuildAreaKey(S7Address address)
+        {
+            return address.Area == S7Area.Db
+                ? string.Format("DB{0}", address.DbNumber)
+                : address.Area.ToString();
+        }
+
+        private static int EstimateEndOffset(S7Address address, ReadRequest request)
+        {
+            if (address.IsBitAddress) return address.ByteOffset;
+            return address.ByteOffset + Math.Max(1, EstimateByteLength(request.DataType, request.Length)) - 1;
+        }
+
+        private static int EstimateEndOffset(S7Address address, WriteRequest request)
+        {
+            if (address.IsBitAddress) return address.ByteOffset;
+            return address.ByteOffset + Math.Max(1, EstimateByteLength(request.DataType, request.Length)) - 1;
+        }
+
+        private static int EstimateByteLength(Abstractions.DataType dataType, ushort length)
+        {
+            var count = Math.Max(1, (int)length);
+            switch (dataType)
+            {
+                case Abstractions.DataType.Bool:
+                case Abstractions.DataType.Byte:
+                case Abstractions.DataType.Char:
+                case Abstractions.DataType.String:
+                case Abstractions.DataType.ByteArray:
+                    return count;
+                case Abstractions.DataType.Int16:
+                case Abstractions.DataType.UInt16:
+                    return count * 2;
+                case Abstractions.DataType.Int32:
+                case Abstractions.DataType.UInt32:
+                case Abstractions.DataType.Float:
+                    return count * 4;
+                case Abstractions.DataType.Double:
+                    return count * 8;
+                default:
+                    return count;
+            }
+        }
+
         private static PlcArea ToPlcArea(S7Area area)
         {
             switch (area)
@@ -436,6 +604,20 @@ namespace IndustrialCommSdk.Protocols.S7
         {
             if (plc == null) return;
             try { plc.Close(); } catch { }
+        }
+
+        private sealed class PlannedS7Read
+        {
+            public PlannedS7Read(ReadRequest request, S7Address address, int endOffset)
+            {
+                Request = request;
+                Address = address;
+                EndOffset = endOffset;
+            }
+
+            public ReadRequest Request { get; private set; }
+            public S7Address Address { get; private set; }
+            public int EndOffset { get; private set; }
         }
     }
 }

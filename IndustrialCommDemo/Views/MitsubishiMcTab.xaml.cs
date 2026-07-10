@@ -23,11 +23,13 @@ namespace IndustrialCommDemo.Views
             _vm.PropertyChanged += OnVmPropertyChanged;
             _vm.RecentAddressChanged += OnRecentAddressChanged;
             _vm.RestoreState();
+            _vm.RefreshCapabilityText();
             ComboHelper.SelectDataType(McDataTypeComboBox, _vm.SelectedDataType);
 
             StatusTextBlock.Text = _vm.StatusText;
             StatusTextBlock.Foreground = _vm.StatusBrush;
             ResultTextBlock.Text = _vm.ResultText;
+            CapabilityTextBlock.Text = _vm.CapabilityText;
 
             if (!string.IsNullOrWhiteSpace(_vm.DeviceId)) McDeviceIdTextBox.Text = _vm.DeviceId;
             if (!string.IsNullOrWhiteSpace(_vm.Host)) McHostTextBox.Text = _vm.Host;
@@ -56,6 +58,9 @@ namespace IndustrialCommDemo.Views
                     break;
                 case nameof(_vm.ResultText):
                     ResultTextBlock.Text = _vm.ResultText;
+                    break;
+                case nameof(_vm.CapabilityText):
+                    CapabilityTextBlock.Text = _vm.CapabilityText;
                     break;
             }
         }

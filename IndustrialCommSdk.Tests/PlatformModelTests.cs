@@ -1,0 +1,305 @@
+using System;
+using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
+using IndustrialCommSdk.Abstractions;
+using IndustrialCommSdk.Diagnostics;
+using IndustrialCommSdk.Polling;
+using IndustrialCommSdk.Protocols.Mc;
+using IndustrialCommSdk.Protocols.Modbus;
+using IndustrialCommSdk.Protocols.S7;
+using Modbus.Device;
+using NUnit.Framework;
+
+namespace IndustrialCommSdk.Tests
+{
+    [TestFixture]
+    public class PlatformModelTests
+    {
+        [Test]
+        public void ProtocolCapabilities_ForModbusTcp_ShouldExposeOptimizedBatching()
+        {
+            var capabilities = ProtocolCapabilities.ForProtocol(ProtocolKind.ModbusTcp);
+
+            Assert.That(capabilities.DisplayName, Is.EqualTo("Modbus TCP"));
+            Assert.That(capabilities.SupportsBatchRead, Is.True);
+            Assert.That(capabilities.SupportsOptimizedBatchRead, Is.True);
+            Assert.That(capabilities.SupportsBitAddress, Is.True);
+            Assert.That(capabilities.MaxAddressSpan, Is.GreaterThan(1));
+        }
+
+        [Test]
+        public void ProtocolCapabilities_ForTcpSocket_ShouldRepresentRawTransport()
+        {
+            var capabilities = ProtocolCapabilities.ForProtocol(ProtocolKind.TcpSocket);
+
+            Assert.That(capabilities.SupportsRawTransport, Is.True);
+            Assert.That(capabilities.SupportsBatchRead, Is.False);
+            Assert.That(capabilities.SupportsSubscriptions, Is.False);
+        }
+
+        [Test]
+        public void IndustrialAddress_ShouldPreserveNormalizedShape()
+        {
+            var address = new IndustrialAddress("%DB1.DBX0.1", "DB1.DBX0.1", "DB", 0, 1);
+
+            Assert.That(address.Original, Is.EqualTo("%DB1.DBX0.1"));
+            Assert.That(address.Normalized, Is.EqualTo("DB1.DBX0.1"));
+            Assert.That(address.Area, Is.EqualTo("DB"));
+            Assert.That(address.Offset, Is.EqualTo(0));
+            Assert.That(address.Bit, Is.EqualTo(1));
+            Assert.That(address.IsBitAddress, Is.True);
+            Assert.That(address.ToString(), Is.EqualTo("DB1.DBX0.1"));
+        }
+
+        [Test]
+        public void ModbusAddressParser_ShouldExposeIndustrialAddressShape()
+        {
+            var parser = new ModbusAddressParser();
+            var address = (IIndustrialAddress)parser.ParseTyped("D100");
+
+            Assert.That(address.Original, Is.EqualTo("D100"));
+            Assert.That(address.Normalized, Is.EqualTo("D100"));
+            Assert.That(address.Area, Is.EqualTo("HoldingRegister"));
+            Assert.That(address.Offset, Is.EqualTo(100));
+            Assert.That(address.Bit, Is.Null);
+            Assert.That(address.IsBitAddress, Is.False);
+        }
+
+        [Test]
+        public void S7AddressParser_ShouldExposeIndustrialAddressShape()
+        {
+            var parser = new S7AddressParser();
+            var address = (IIndustrialAddress)parser.ParseTyped("%DB1.DBX0.1");
+
+            Assert.That(address.Original, Is.EqualTo("%DB1.DBX0.1"));
+            Assert.That(address.Normalized, Is.EqualTo("DB1.DBX0.1"));
+            Assert.That(address.Area, Is.EqualTo("Db"));
+            Assert.That(address.Offset, Is.EqualTo(0));
+            Assert.That(address.Bit, Is.EqualTo(1));
+            Assert.That(address.IsBitAddress, Is.True);
+        }
+
+        [Test]
+        public void McAddressParser_ShouldExposeIndustrialAddressShape()
+        {
+            var parser = new McAddressParser();
+            var address = (IIndustrialAddress)parser.ParseTyped("D100");
+
+            Assert.That(address.Original, Is.EqualTo("D100"));
+            Assert.That(address.Normalized, Is.EqualTo("D100"));
+            Assert.That(address.Area, Is.EqualTo("D"));
+            Assert.That(address.Offset, Is.EqualTo(100));
+            Assert.That(address.Bit, Is.Null);
+            Assert.That(address.IsBitAddress, Is.False);
+        }
+
+        [Test]
+        public void BatchOptions_ShouldRejectInvalidLimits()
+        {
+            Assert.Throws<ArgumentOutOfRangeException>(() => new BatchReadOptions(maxItemsPerBatch: 0));
+            Assert.Throws<ArgumentOutOfRangeException>(() => new BatchWriteOptions(totalTimeout: TimeSpan.Zero));
+        }
+
+        [Test]
+        public void BatchSplitPlan_ShouldCalculateSavedRequestCount()
+        {
+            var requests = new[]
+            {
+                new ReadRequest("dev", "D100", DataType.Int16),
+                new ReadRequest("dev", "D101", DataType.Int16),
+                new ReadRequest("dev", "D102", DataType.Int16),
+            };
+
+            var group = BatchRequestGroup.ForRead(0, "D", 100, 102, DataType.Int16, requests);
+            var plan = new BatchSplitPlan(ProtocolKind.ModbusTcp, BatchOperationKind.Read, new[] { group }, requests.Length);
+
+            Assert.That(plan.OriginalRequestCount, Is.EqualTo(3));
+            Assert.That(plan.PlannedRequestCount, Is.EqualTo(1));
+            Assert.That(plan.SavedRequestCount, Is.EqualTo(2));
+            Assert.That(plan.Groups[0].ReadRequests.Count, Is.EqualTo(3));
+        }
+
+        [Test]
+        public void ModbusPlanner_ShouldMapContiguousReadsToSplitPlan()
+        {
+            var client = new PlanningModbusClient();
+            var requests = new[]
+            {
+                new ReadRequest("modbus", "D100", DataType.Int16),
+                new ReadRequest("modbus", "D101", DataType.Int16),
+                new ReadRequest("modbus", "D102", DataType.Int16),
+            };
+
+            var plan = client.PlanRead(requests, BatchReadOptions.Default, client.Capabilities);
+
+            Assert.That(plan.ProtocolKind, Is.EqualTo(ProtocolKind.ModbusTcp));
+            Assert.That(plan.OperationKind, Is.EqualTo(BatchOperationKind.Read));
+            Assert.That(plan.OriginalRequestCount, Is.EqualTo(3));
+            Assert.That(plan.PlannedRequestCount, Is.EqualTo(1));
+            Assert.That(plan.SavedRequestCount, Is.EqualTo(2));
+            Assert.That(plan.Groups[0].Area, Is.EqualTo("HoldingRegister"));
+            Assert.That(plan.Groups[0].StartOffset, Is.EqualTo(100));
+            Assert.That(plan.Groups[0].EndOffset, Is.EqualTo(102));
+        }
+
+        [Test]
+        public void ModbusPlanner_ShouldKeepSeparatedRangesInDifferentGroups()
+        {
+            var client = new PlanningModbusClient();
+            var requests = new[]
+            {
+                new ReadRequest("modbus", "D100", DataType.Int16),
+                new ReadRequest("modbus", "D200", DataType.Int16),
+            };
+
+            var plan = client.PlanRead(requests, BatchReadOptions.Default, client.Capabilities);
+
+            Assert.That(plan.OriginalRequestCount, Is.EqualTo(2));
+            Assert.That(plan.PlannedRequestCount, Is.EqualTo(2));
+            Assert.That(plan.SavedRequestCount, Is.EqualTo(0));
+        }
+
+        [Test]
+        public void S7Planner_ShouldGroupSameDbRange()
+        {
+            var client = new SiemensS7Client(new SiemensS7ClientOptions
+            {
+                DeviceId = "s7",
+                Host = "127.0.0.1",
+                Rack = 0,
+                Slot = 1,
+            });
+            try
+            {
+                var planner = (IBatchOperationPlanner)client;
+                var requests = new[]
+                {
+                    new ReadRequest("s7", "DB1.DBW0", DataType.Int16),
+                    new ReadRequest("s7", "DB1.DBW2", DataType.Int16),
+                    new ReadRequest("s7", "DB1.DBW4", DataType.Int16),
+                };
+
+                var plan = planner.PlanRead(requests, new BatchReadOptions(maxItemsPerBatch: 10, maxAddressSpan: 16), client.Capabilities);
+
+                Assert.That(plan.ProtocolKind, Is.EqualTo(ProtocolKind.SiemensS7));
+                Assert.That(plan.PlannedRequestCount, Is.EqualTo(1));
+                Assert.That(plan.Groups[0].Area, Is.EqualTo("DB1"));
+                Assert.That(plan.Groups[0].StartOffset, Is.EqualTo(0));
+                Assert.That(plan.Groups[0].EndOffset, Is.EqualTo(5));
+            }
+            finally
+            {
+                client.Dispose();
+            }
+        }
+
+        [Test]
+        public void McPlanner_ShouldGroupSameDeviceRange()
+        {
+            var client = new MitsubishiMcClient(new MitsubishiMcClientOptions
+            {
+                DeviceId = "mc",
+                Host = "127.0.0.1",
+                Port = 5000,
+            });
+            try
+            {
+                var planner = (IBatchOperationPlanner)client;
+                var requests = new[]
+                {
+                    new ReadRequest("mc", "D100", DataType.UInt16),
+                    new ReadRequest("mc", "D101", DataType.UInt16),
+                    new ReadRequest("mc", "D102", DataType.UInt16),
+                };
+
+                var plan = planner.PlanRead(requests, new BatchReadOptions(maxItemsPerBatch: 10, maxAddressSpan: 16), client.Capabilities);
+
+                Assert.That(plan.ProtocolKind, Is.EqualTo(ProtocolKind.MitsubishiMc));
+                Assert.That(plan.PlannedRequestCount, Is.EqualTo(1));
+                Assert.That(plan.Groups[0].Area, Is.EqualTo("D"));
+                Assert.That(plan.Groups[0].StartOffset, Is.EqualTo(100));
+                Assert.That(plan.Groups[0].EndOffset, Is.EqualTo(102));
+            }
+            finally
+            {
+                client.Dispose();
+            }
+        }
+
+        [Test]
+        public void GetCapabilities_ShouldUseProviderOverride()
+        {
+            var client = new CapabilityClient();
+            var capabilities = IndustrialCommSdk.IndustrialClientPlatformExtensions.GetCapabilities(client);
+
+            Assert.That(capabilities.DisplayName, Is.EqualTo("Custom Protocol"));
+            Assert.That(capabilities.MaxReadItems, Is.EqualTo(9));
+        }
+
+        [Test]
+        public void GetCapabilities_ShouldFallbackToProtocolDefaults()
+        {
+            var client = new PlainClient();
+            var capabilities = IndustrialCommSdk.IndustrialClientPlatformExtensions.GetCapabilities(client);
+
+            Assert.That(capabilities.Kind, Is.EqualTo(ProtocolKind.SiemensS7));
+            Assert.That(capabilities.SupportsBitAddress, Is.True);
+        }
+
+        private sealed class PlanningModbusClient : ModbusClientBase
+        {
+            public PlanningModbusClient()
+                : base(
+                    "modbus",
+                    ProtocolKind.ModbusTcp,
+                    1,
+                    ModbusDeviceProfiles.InovanceEasyPlc,
+                    null,
+                    new PollingScheduler(),
+                    NullIndustrialLogger.Instance)
+            {
+            }
+
+            public override bool IsConnected { get { return true; } }
+            protected override ModbusMaster Master { get { return null; } }
+            protected override Task ConnectCoreAsync(CancellationToken cancellationToken) { return Task.CompletedTask; }
+            protected override Task DisconnectCoreAsync(CancellationToken cancellationToken) { return Task.CompletedTask; }
+        }
+
+        private sealed class CapabilityClient : PlainClient, IProtocolCapabilityProvider
+        {
+            public ProtocolCapabilities Capabilities
+            {
+                get { return new ProtocolCapabilities(ProtocolKind.TcpSocket, "Custom Protocol", maxReadItems: 9, maxWriteItems: 9); }
+            }
+        }
+
+        private class PlainClient : IIndustrialClient
+        {
+            public string DeviceId { get { return "dev"; } }
+            public ProtocolKind Kind { get { return ProtocolKind.SiemensS7; } }
+            public bool IsConnected { get { return true; } }
+
+            public Task ConnectAsync(CancellationToken cancellationToken) { return Task.CompletedTask; }
+            public Task DisconnectAsync(CancellationToken cancellationToken) { return Task.CompletedTask; }
+            public Task<DataValue> ReadAsync(ReadRequest request, CancellationToken cancellationToken)
+            {
+                return Task.FromResult(new DataValue(request.Address, request.DataType, null, null, QualityStatus.Bad, DateTimeOffset.UtcNow, null));
+            }
+            public Task<BatchReadResult> ReadManyAsync(IReadOnlyCollection<ReadRequest> requests, CancellationToken cancellationToken)
+            {
+                return Task.FromResult(new BatchReadResult(new DataValue[0]));
+            }
+            public Task WriteAsync(WriteRequest request, CancellationToken cancellationToken) { return Task.CompletedTask; }
+            public Task WriteManyAsync(IReadOnlyCollection<WriteRequest> requests, CancellationToken cancellationToken) { return Task.CompletedTask; }
+            public Task<string> SubscribeAsync(SubscriptionRequest request, EventHandler<SubscriptionEvent> handler, CancellationToken cancellationToken)
+            {
+                return Task.FromResult("sub");
+            }
+            public Task UnsubscribeAsync(string subscriptionId, CancellationToken cancellationToken) { return Task.CompletedTask; }
+            public HealthSnapshot GetHealth() { return new HealthSnapshot(ConnectionStatus.Connected, DateTimeOffset.UtcNow, 0, null); }
+            public void Dispose() { }
+        }
+    }
+}

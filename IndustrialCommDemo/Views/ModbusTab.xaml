@@ -21,6 +21,7 @@
                         <RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
                     <TextBlock Grid.Row="0" Grid.Column="0" Margin="0,8" VerticalAlignment="Center" Text="连接方式" />
                     <ComboBox x:Name="ConnectionTypeComboBox" Grid.Row="0" Grid.Column="1" Margin="0,6,0,6" SelectedIndex="0" SelectionChanged="ConnectionTypeComboBox_SelectionChanged">
@@ -65,7 +66,10 @@
                     <TextBlock x:Name="ExampleAddressTextBlock" Grid.Row="9" Grid.Column="1" Margin="0,8,0,0" TextWrapping="Wrap" Foreground="#5B6F82" Text="D100, R200, M0, S10, B5, X17, Y20" />
                     <TextBlock x:Name="RtuTimeoutLabel" Grid.Row="10" Grid.Column="0" Margin="0,8" VerticalAlignment="Center" Text="响应超时（ms）" Visibility="Collapsed" />
                     <TextBox x:Name="RtuTimeoutTextBox" Grid.Row="10" Grid.Column="1" Margin="0,6,0,6" Text="3000" Visibility="Collapsed" />
-                    <StackPanel Grid.Row="11" Grid.ColumnSpan="2" Orientation="Horizontal" Margin="0,16,0,0">
+                    <Border Grid.Row="11" Grid.ColumnSpan="2" Margin="0,10,0,0" Padding="10" CornerRadius="10" Background="#F8FAFC" BorderBrush="#D8E2EE" BorderThickness="1">
+                        <TextBlock x:Name="CapabilityTextBlock" TextWrapping="Wrap" Foreground="#475569" Text="协议能力：等待初始化。" />
+                    </Border>
+                    <StackPanel Grid.Row="12" Grid.ColumnSpan="2" Orientation="Horizontal" Margin="0,16,0,0">
                         <Button Width="120" Margin="0,0,12,0" Padding="10" Background="#1D4ED8" Foreground="White" BorderThickness="0" Click="ConnectButton_Click" Content="连接" />
                         <Button Width="120" Margin="0,0,12,0" Padding="10" Background="#334155" Foreground="White" BorderThickness="0" Click="DisconnectButton_Click" Content="断开" />
                         <TextBlock Margin="8,0,0,0" VerticalAlignment="Center" FontWeight="SemiBold" Text="状态：" />
