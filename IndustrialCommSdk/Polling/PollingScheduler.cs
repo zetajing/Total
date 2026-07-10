@@ -208,6 +208,7 @@ namespace IndustrialCommSdk.Polling
         private sealed class DeviceWorker : IDisposable
         {
             private readonly IIndustrialClient _client;
+            private readonly IBatchOperationPlanner _planner;
             private readonly ProtocolCapabilities _capabilities;
             private readonly IIndustrialLogger _logger;
             private readonly Action<string, DeviceWorker> _onStopped;
@@ -225,6 +226,7 @@ namespace IndustrialCommSdk.Polling
                 Action<string, DeviceWorker> onStopped)
             {
                 _client = client;
+                _planner = client as IBatchOperationPlanner;
                 _capabilities = capabilities ?? ProtocolCapabilities.ForProtocol(client.Kind);
                 _logger = logger;
                 _onStopped = onStopped;
@@ -329,42 +331,23 @@ namespace IndustrialCommSdk.Polling
                     }
                 }
 
-                if (mergedRequests.Count > _capabilities.MaxReadItems)
-                {
-                    _logger.Warn(
-                        string.Format(
-                            CultureInfo.InvariantCulture,
-                            "Merged polling read exceeds protocol capability | Device={0} | Protocol={1} | Requests={2} | MaxReadItems={3}",
-                            _client.DeviceId,
-                            _capabilities.DisplayName,
-                            mergedRequests.Count,
-                            _capabilities.MaxReadItems));
-                }
-
-                BatchReadResult mergedResult;
-                try
-                {
-                    mergedResult = await _client.ReadManyAsync(mergedRequests, _cts.Token).ConfigureAwait(false);
-                }
-                catch (OperationCanceledException) when (_cts.IsCancellationRequested)
-                {
-                    throw;
-                }
-                catch (Exception ex)
-                {
-                    _logger.Error("Merged polling read failed | Device=" + _client.DeviceId, ex);
+                if (mergedRequests.Count == 0)
                     return;
-                }
+
+                var valuesByKey = await ExecutePollingReadsAsync(mergedRequests).ConfigureAwait(false);
 
                 foreach (var registration in due)
                 {
                     var values = new List<DataValue>(registration.Request.Items.Count);
                     foreach (var request in registration.Request.Items)
                     {
-                        int index;
-                        if (requestIndexes.TryGetValue(CreateRequestKey(request), out index) && index < mergedResult.Values.Count)
-                            values.Add(mergedResult.Values[index]);
+                        DataValue value;
+                        if (valuesByKey.TryGetValue(CreateRequestKey(request), out value))
+                        {
+                            values.Add(value);
+                        }
                         else
+                        {
                             values.Add(new DataValue(
                                 request.Address,
                                 request.DataType,
@@ -372,7 +355,8 @@ namespace IndustrialCommSdk.Polling
                                 null,
                                 QualityStatus.Bad,
                                 DateTimeOffset.UtcNow,
-                                "Merged polling result did not contain the requested item."));
+                                "Polling batch result did not contain the requested item."));
+                        }
                     }
 
                     if (!registration.ShouldReport(values))
@@ -388,6 +372,169 @@ namespace IndustrialCommSdk.Polling
                     {
                         _logger.Error("Subscription handler failed | Key=" + registration.Request.SubscriptionKey, ex);
                     }
+                }
+            }
+
+            private async Task<Dictionary<string, DataValue>> ExecutePollingReadsAsync(IReadOnlyList<ReadRequest> mergedRequests)
+            {
+                var valuesByKey = new Dictionary<string, DataValue>(StringComparer.OrdinalIgnoreCase);
+                var batches = CreatePollingReadBatches(mergedRequests);
+
+                for (var i = 0; i < batches.Count; i++)
+                {
+                    var batch = batches[i];
+                    if (batch.Count == 0) continue;
+
+                    try
+                    {
+                        var result = await _client.ReadManyAsync(batch, _cts.Token).ConfigureAwait(false);
+                        MapBatchResults(batch, result, valuesByKey);
+                    }
+                    catch (OperationCanceledException) when (_cts.IsCancellationRequested)
+                    {
+                        throw;
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.Error(
+                            string.Format(
+                                CultureInfo.InvariantCulture,
+                                "Polling read batch failed | Device={0} | Protocol={1} | Batch={2}/{3} | Requests={4}",
+                                _client.DeviceId,
+                                _capabilities.DisplayName,
+                                i + 1,
+                                batches.Count,
+                                batch.Count),
+                            ex);
+                        MapFailedBatch(batch, valuesByKey, ex.Message);
+                    }
+                }
+
+                return valuesByKey;
+            }
+
+            private IReadOnlyList<IReadOnlyList<ReadRequest>> CreatePollingReadBatches(IReadOnlyList<ReadRequest> mergedRequests)
+            {
+                if (_planner != null)
+                {
+                    try
+                    {
+                        var options = new BatchReadOptions(
+                            maxItemsPerBatch: _capabilities.MaxReadItems,
+                            maxAddressSpan: _capabilities.MaxAddressSpan,
+                            maxPduBytes: _capabilities.MaxPduBytes > 0 ? (int?)_capabilities.MaxPduBytes : null);
+                        var plan = _planner.PlanRead(mergedRequests, options, _capabilities);
+                        var planned = ExtractReadBatches(plan);
+                        if (planned.Count > 0)
+                        {
+                            _logger.Info(
+                                string.Format(
+                                    CultureInfo.InvariantCulture,
+                                    "Polling batch plan | Device={0} | Protocol={1} | Planner={2} | OriginalRequests={3} | PlannedBatches={4} | SavedCalls={5}",
+                                    _client.DeviceId,
+                                    _capabilities.DisplayName,
+                                    _planner.GetType().Name,
+                                    plan.OriginalRequestCount,
+                                    plan.PlannedRequestCount,
+                                    plan.SavedRequestCount));
+                            return planned;
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.Error(
+                            string.Format(
+                                CultureInfo.InvariantCulture,
+                                "Polling batch planner failed; using fallback split | Device={0} | Protocol={1}",
+                                _client.DeviceId,
+                                _capabilities.DisplayName),
+                            ex);
+                    }
+                }
+
+                return CreateFallbackReadBatches(mergedRequests);
+            }
+
+            private IReadOnlyList<IReadOnlyList<ReadRequest>> ExtractReadBatches(BatchSplitPlan plan)
+            {
+                var batches = new List<IReadOnlyList<ReadRequest>>();
+                if (plan == null || plan.Groups == null || plan.Groups.Count == 0)
+                    return batches;
+
+                foreach (var group in plan.Groups.OrderBy(item => item.Sequence))
+                {
+                    if (group.ReadRequests == null || group.ReadRequests.Count == 0)
+                        continue;
+                    batches.Add(group.ReadRequests.ToList());
+                }
+                return batches;
+            }
+
+            private IReadOnlyList<IReadOnlyList<ReadRequest>> CreateFallbackReadBatches(IReadOnlyList<ReadRequest> mergedRequests)
+            {
+                var maxItems = Math.Max(1, _capabilities.MaxReadItems);
+                var batches = new List<IReadOnlyList<ReadRequest>>();
+
+                if (mergedRequests.Count <= maxItems)
+                {
+                    batches.Add(mergedRequests.ToList());
+                    return batches;
+                }
+
+                _logger.Warn(
+                    string.Format(
+                        CultureInfo.InvariantCulture,
+                        "Polling read split by capability | Device={0} | Protocol={1} | Requests={2} | MaxReadItems={3}",
+                        _client.DeviceId,
+                        _capabilities.DisplayName,
+                        mergedRequests.Count,
+                        maxItems));
+
+                for (var offset = 0; offset < mergedRequests.Count; offset += maxItems)
+                {
+                    batches.Add(mergedRequests.Skip(offset).Take(maxItems).ToList());
+                }
+
+                return batches;
+            }
+
+            private static void MapBatchResults(
+                IReadOnlyList<ReadRequest> batch,
+                BatchReadResult result,
+                IDictionary<string, DataValue> valuesByKey)
+            {
+                var values = result == null || result.Values == null ? new DataValue[0] : result.Values;
+                for (var i = 0; i < batch.Count; i++)
+                {
+                    var request = batch[i];
+                    valuesByKey[CreateRequestKey(request)] = i < values.Count
+                        ? values[i]
+                        : new DataValue(
+                            request.Address,
+                            request.DataType,
+                            null,
+                            null,
+                            QualityStatus.Bad,
+                            DateTimeOffset.UtcNow,
+                            "Polling batch returned fewer values than requested.");
+                }
+            }
+
+            private static void MapFailedBatch(
+                IReadOnlyList<ReadRequest> batch,
+                IDictionary<string, DataValue> valuesByKey,
+                string error)
+            {
+                foreach (var request in batch)
+                {
+                    valuesByKey[CreateRequestKey(request)] = new DataValue(
+                        request.Address,
+                        request.DataType,
+                        null,
+                        null,
+                        QualityStatus.Bad,
+                        DateTimeOffset.UtcNow,
+                        error);
                 }
             }
 
