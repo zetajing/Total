@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -12,285 +13,430 @@ using IndustrialCommSdk.Diagnostics;
 namespace IndustrialCommSdk.Polling
 {
     /// <summary>
-    /// 轮询调度器。实现 <see cref="IPollingScheduler"/> 接口，管理多个订阅的轮询任务，
-    /// 按指定的时间间隔从工业客户端读取数据并通过事件通知订阅者。支持仅在数据变化时报告。
+    /// 按设备合并轮询的调度器。同一客户端仅运行一个后台循环，多个订阅到期时会合并重复点位，
+    /// 减少重复请求，并使用固定节拍推进下一次轮询时间，避免“读取耗时 + Interval”造成累计漂移。
     /// </summary>
     public sealed class PollingScheduler : IPollingScheduler
     {
-        /// <summary>
-        /// 所有活跃订阅的并发字典，以订阅键（不区分大小写）为键，对应的 <see cref="SubscriptionWorker"/> 为值。
-        /// </summary>
-        private readonly ConcurrentDictionary<string, SubscriptionWorker> _subscriptions = new ConcurrentDictionary<string, SubscriptionWorker>(StringComparer.OrdinalIgnoreCase);
+        private readonly ConcurrentDictionary<string, SubscriptionRegistration> _subscriptions =
+            new ConcurrentDictionary<string, SubscriptionRegistration>(StringComparer.OrdinalIgnoreCase);
 
-        /// <summary>
-        /// 用于记录日志的日志记录器实例。
-        /// </summary>
+        private readonly ConcurrentDictionary<string, DeviceWorker> _workers =
+            new ConcurrentDictionary<string, DeviceWorker>(StringComparer.OrdinalIgnoreCase);
+
         private readonly IIndustrialLogger _logger;
+        private int _disposed;
 
-        /// <summary>
-        /// 使用可选的日志记录器初始化 <see cref="PollingScheduler"/> 类的新实例。
-        /// </summary>
-        /// <param name="logger">用于记录日志的 <see cref="IIndustrialLogger"/> 实例。如果为 <c>null</c>，则使用 <see cref="NullIndustrialLogger.Instance"/>。</param>
         public PollingScheduler(IIndustrialLogger logger = null)
         {
             _logger = logger ?? NullIndustrialLogger.Instance;
         }
 
-        /// <summary>
-        /// 异步创建一个新的订阅。为指定的客户端和请求创建轮询工作线程，并将其添加到订阅集合中。
-        /// </summary>
-        /// <param name="client">要轮询读取数据的工业客户端。</param>
-        /// <param name="request">订阅请求，包含要读取的项列表、轮询间隔和订阅键。</param>
-        /// <param name="handler">当轮询到数据时调用的事件处理程序。</param>
-        /// <param name="cancellationToken">用于取消订阅操作的取消令牌。</param>
-        /// <returns>表示异步订阅操作的任务，结果包含新创建的订阅的唯一标识符（即请求的 <see cref="SubscriptionRequest.SubscriptionKey"/>）。</returns>
-        /// <exception cref="OperationCanceledException">取消令牌被触发时抛出。</exception>
-        /// <exception cref="InvalidOperationException">具有相同 <see cref="SubscriptionRequest.SubscriptionKey"/> 的订阅已存在时抛出。</exception>
-        public Task<string> SubscribeAsync(IIndustrialClient client, SubscriptionRequest request, EventHandler<SubscriptionEvent> handler, CancellationToken cancellationToken)
+        public Task<string> SubscribeAsync(
+            IIndustrialClient client,
+            SubscriptionRequest request,
+            EventHandler<SubscriptionEvent> handler,
+            CancellationToken cancellationToken)
         {
+            ThrowIfDisposed();
             if (client == null) throw new ArgumentNullException(nameof(client));
             if (request == null) throw new ArgumentNullException(nameof(request));
+            if (!string.Equals(client.DeviceId, request.DeviceId, StringComparison.OrdinalIgnoreCase))
+                throw new ArgumentException("Subscription device ID does not match the client device ID.", nameof(request));
+            if (request.Items == null || request.Items.Count == 0)
+                throw new ArgumentException("Subscription must contain at least one read request.", nameof(request));
+
             cancellationToken.ThrowIfCancellationRequested();
 
-            var worker = new SubscriptionWorker(client, request, handler, _logger);
-            if (!_subscriptions.TryAdd(request.SubscriptionKey, worker))
-            {
+            var registration = new SubscriptionRegistration(request, handler);
+            if (!_subscriptions.TryAdd(request.SubscriptionKey, registration))
                 throw new InvalidOperationException(string.Format("Subscription '{0}' already exists.", request.SubscriptionKey));
-            }
 
-            worker.Start();
-            _logger.Info(string.Format("SUBSCRIPTION started | Key={0} | Device={1} | Items={2} | Interval={3}ms", request.SubscriptionKey, client.DeviceId, request.Items.Count, request.Interval.TotalMilliseconds));
-            return Task.FromResult(request.SubscriptionKey);
+            try
+            {
+                var worker = _workers.GetOrAdd(
+                    client.DeviceId,
+                    _ => new DeviceWorker(client, _logger, RemoveStoppedWorker));
+                worker.Add(registration);
+                _logger.Info(string.Format(
+                    "SUBSCRIPTION started | Key={0} | Device={1} | Items={2} | Interval={3}ms",
+                    request.SubscriptionKey,
+                    client.DeviceId,
+                    request.Items.Count,
+                    request.Interval.TotalMilliseconds));
+                return Task.FromResult(request.SubscriptionKey);
+            }
+            catch
+            {
+                SubscriptionRegistration ignored;
+                _subscriptions.TryRemove(request.SubscriptionKey, out ignored);
+                throw;
+            }
         }
 
-        /// <summary>
-        /// 异步取消指定的订阅。从订阅集合中移除对应的轮询工作线程并释放其资源。
-        /// </summary>
-        /// <param name="subscriptionId">要取消的订阅标识符（即订阅键）。</param>
-        /// <param name="cancellationToken">用于取消操作的取消令牌。</param>
-        /// <returns>表示异步取消订阅操作的任务。</returns>
-        /// <exception cref="OperationCanceledException">取消令牌被触发时抛出。</exception>
         public Task UnsubscribeAsync(string subscriptionId, CancellationToken cancellationToken)
         {
+            ThrowIfDisposed();
             cancellationToken.ThrowIfCancellationRequested();
-            SubscriptionWorker worker;
-            if (_subscriptions.TryRemove(subscriptionId, out worker))
+            if (string.IsNullOrWhiteSpace(subscriptionId))
+                throw new ArgumentException("Subscription ID is required.", nameof(subscriptionId));
+
+            SubscriptionRegistration registration;
+            if (_subscriptions.TryRemove(subscriptionId, out registration))
             {
-                worker.Dispose();
+                DeviceWorker worker;
+                if (_workers.TryGetValue(registration.Request.DeviceId, out worker))
+                    worker.Remove(subscriptionId);
+
                 _logger.Info("SUBSCRIPTION stopped | Key=" + subscriptionId);
             }
 
             return Task.CompletedTask;
         }
 
-        /// <summary>
-        /// 释放调度器使用的所有资源。释放所有活跃的订阅工作线程并清空订阅集合。
-        /// </summary>
         public void Dispose()
         {
-            foreach (var worker in _subscriptions.Values)
-            {
+            if (Interlocked.Exchange(ref _disposed, 1) != 0)
+                return;
+
+            foreach (var worker in _workers.Values)
                 worker.Dispose();
-            }
+
+            _workers.Clear();
             _subscriptions.Clear();
         }
 
-        /// <summary>
-        /// 订阅工作线程。内部类，负责为单个订阅执行轮询循环，
-        /// 按指定间隔从工业客户端读取数据，计算数据指纹以支持仅变化报告，并通过事件处理程序通知订阅者。
-        /// </summary>
-        private sealed class SubscriptionWorker : IDisposable
+        private void RemoveStoppedWorker(string deviceId, DeviceWorker worker)
         {
-            /// <summary>
-            /// 用于执行数据读取操作的工业客户端。
-            /// </summary>
-            private readonly IIndustrialClient _client;
-
-            /// <summary>
-            /// 订阅请求配置，包含要读取的项列表、轮询间隔和订阅键。
-            /// </summary>
-            private readonly SubscriptionRequest _request;
-
-            /// <summary>
-            /// 当轮询到数据时调用的事件处理程序。
-            /// </summary>
-            private readonly EventHandler<SubscriptionEvent> _handler;
-
-            /// <summary>
-            /// 用于记录轮询过程中发生的错误和信息的日志记录器。
-            /// </summary>
-            private readonly IIndustrialLogger _logger;
-
-            /// <summary>
-            /// 用于控制轮询生命周期和取消操作的取消令牌源。
-            /// </summary>
-            private readonly CancellationTokenSource _cts = new CancellationTokenSource();
-
-            /// <summary>
-            /// 轮询循环的后台任务引用，用于在释放时等待循环结束。
-            /// </summary>
-            private Task _loopTask;
-            private int _disposed;
-
-            /// <summary>
-            /// 上次轮询的数据指纹，用于在 <see cref="SubscriptionRequest.ReportOnChangeOnly"/> 启用时判断数据是否发生变化。
-            /// </summary>
-            private string _lastFingerprint;
-
-            /// <summary>
-            /// 使用指定的客户端、请求、处理程序和日志记录器初始化 <see cref="SubscriptionWorker"/> 类的新实例。
-            /// </summary>
-            /// <param name="client">要轮询读取数据的工业客户端。</param>
-            /// <param name="request">订阅请求配置。</param>
-            /// <param name="handler">数据到达时的事件处理程序。</param>
-            /// <param name="logger">日志记录器实例。</param>
-            public SubscriptionWorker(IIndustrialClient client, SubscriptionRequest request, EventHandler<SubscriptionEvent> handler, IIndustrialLogger logger)
+            DeviceWorker current;
+            if (_workers.TryGetValue(deviceId, out current) && ReferenceEquals(current, worker))
             {
-                _client = client;
-                _request = request;
-                _handler = handler;
-                _logger = logger;
+                DeviceWorker removed;
+                _workers.TryRemove(deviceId, out removed);
+            }
+        }
+
+        private void ThrowIfDisposed()
+        {
+            if (Volatile.Read(ref _disposed) != 0)
+                throw new ObjectDisposedException(GetType().FullName);
+        }
+
+        private sealed class SubscriptionRegistration
+        {
+            private readonly object _sync = new object();
+            private string _lastFingerprint;
+            private DateTimeOffset _nextDueUtc;
+
+            public SubscriptionRegistration(SubscriptionRequest request, EventHandler<SubscriptionEvent> handler)
+            {
+                Request = request;
+                Handler = handler;
+                _nextDueUtc = DateTimeOffset.UtcNow;
             }
 
-            /// <summary>
-            /// 启动轮询循环。在后台任务中运行 <see cref="LoopAsync"/> 方法。
-            /// </summary>
-            public void Start()
+            public SubscriptionRequest Request { get; private set; }
+            public EventHandler<SubscriptionEvent> Handler { get; private set; }
+
+            public bool IsDue(DateTimeOffset now)
             {
-                _logger.Trace("SUBSCRIPTION loop starting | Key=" + _request.SubscriptionKey);
+                lock (_sync)
+                    return now >= _nextDueUtc;
+            }
+
+            public DateTimeOffset GetNextDueUtc()
+            {
+                lock (_sync)
+                    return _nextDueUtc;
+            }
+
+            public void AdvanceSchedule(DateTimeOffset now)
+            {
+                lock (_sync)
+                {
+                    do
+                    {
+                        _nextDueUtc = _nextDueUtc.Add(Request.Interval);
+                    }
+                    while (_nextDueUtc <= now);
+                }
+            }
+
+            public bool ShouldReport(IReadOnlyList<DataValue> values)
+            {
+                if (!Request.ReportOnChangeOnly)
+                    return true;
+
+                var fingerprint = BuildFingerprint(values);
+                lock (_sync)
+                {
+                    if (string.Equals(_lastFingerprint, fingerprint, StringComparison.Ordinal))
+                        return false;
+                    _lastFingerprint = fingerprint;
+                    return true;
+                }
+            }
+        }
+
+        private sealed class DeviceWorker : IDisposable
+        {
+            private readonly IIndustrialClient _client;
+            private readonly IIndustrialLogger _logger;
+            private readonly Action<string, DeviceWorker> _onStopped;
+            private readonly ConcurrentDictionary<string, SubscriptionRegistration> _registrations =
+                new ConcurrentDictionary<string, SubscriptionRegistration>(StringComparer.OrdinalIgnoreCase);
+            private readonly CancellationTokenSource _cts = new CancellationTokenSource();
+            private readonly SemaphoreSlim _wakeSignal = new SemaphoreSlim(0, 1);
+            private readonly Task _loopTask;
+            private int _disposed;
+
+            public DeviceWorker(
+                IIndustrialClient client,
+                IIndustrialLogger logger,
+                Action<string, DeviceWorker> onStopped)
+            {
+                _client = client;
+                _logger = logger;
+                _onStopped = onStopped;
                 _loopTask = Task.Run(LoopAsync);
             }
 
-            /// <summary>
-            /// 异步轮询循环。在取消令牌被触发前持续执行以下操作：
-            /// 读取数据、计算数据指纹、根据变化检测策略决定是否触发事件、等待指定的轮询间隔。
-            /// 循环中的异常会被记录，但不会终止循环（<see cref="OperationCanceledException"/> 除外）。
-            /// </summary>
-            /// <returns>表示异步轮询循环的任务。</returns>
+            public void Add(SubscriptionRegistration registration)
+            {
+                ThrowIfDisposed();
+                if (!_registrations.TryAdd(registration.Request.SubscriptionKey, registration))
+                    throw new InvalidOperationException("Subscription is already registered on this device worker.");
+                Wake();
+            }
+
+            public void Remove(string subscriptionId)
+            {
+                SubscriptionRegistration ignored;
+                _registrations.TryRemove(subscriptionId, out ignored);
+                Wake();
+            }
+
             private async Task LoopAsync()
             {
-                while (!_cts.Token.IsCancellationRequested)
+                try
                 {
-                    try
+                    while (!_cts.IsCancellationRequested)
                     {
-                        var result = await _client.ReadManyAsync(_request.Items, _cts.Token).ConfigureAwait(false);
-                        var values = result.Values;
-                        var fingerprint = BuildFingerprint(values);
-
-                        if (!_request.ReportOnChangeOnly || !string.Equals(_lastFingerprint, fingerprint, StringComparison.Ordinal))
+                        var snapshot = _registrations.Values.ToArray();
+                        if (snapshot.Length == 0)
                         {
-                            _lastFingerprint = fingerprint;
-                            var args = new SubscriptionEvent(_request.SubscriptionKey, values, DateTimeOffset.UtcNow);
-                            _handler?.Invoke(_client, args);
-                            _logger.Trace(string.Format("SUBSCRIPTION reported | Key={0} | Values={1}", _request.SubscriptionKey, values.Count));
+                            await WaitForWakeAsync(Timeout.InfiniteTimeSpan).ConfigureAwait(false);
+                            continue;
+                        }
+
+                        var now = DateTimeOffset.UtcNow;
+                        var due = snapshot.Where(item => item.IsDue(now)).ToArray();
+                        if (due.Length == 0)
+                        {
+                            var nextDue = snapshot.Min(item => item.GetNextDueUtc());
+                            var delay = nextDue - now;
+                            if (delay < TimeSpan.Zero) delay = TimeSpan.Zero;
+                            await WaitForWakeAsync(delay).ConfigureAwait(false);
+                            continue;
+                        }
+
+                        await PollDueSubscriptionsAsync(due, now).ConfigureAwait(false);
+                        foreach (var registration in due)
+                            registration.AdvanceSchedule(now);
+                    }
+                }
+                catch (OperationCanceledException)
+                {
+                }
+                catch (Exception ex)
+                {
+                    _logger.Error("Device polling worker terminated unexpectedly | Device=" + _client.DeviceId, ex);
+                }
+                finally
+                {
+                    if (_onStopped != null)
+                        _onStopped(_client.DeviceId, this);
+                }
+            }
+
+            private async Task PollDueSubscriptionsAsync(
+                IReadOnlyCollection<SubscriptionRegistration> due,
+                DateTimeOffset now)
+            {
+                var mergedRequests = new List<ReadRequest>();
+                var requestIndexes = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+
+                foreach (var registration in due)
+                {
+                    foreach (var request in registration.Request.Items)
+                    {
+                        var key = CreateRequestKey(request);
+                        if (!requestIndexes.ContainsKey(key))
+                        {
+                            requestIndexes[key] = mergedRequests.Count;
+                            mergedRequests.Add(request);
                         }
                     }
-                    catch (OperationCanceledException)
+                }
+
+                BatchReadResult mergedResult;
+                try
+                {
+                    mergedResult = await _client.ReadManyAsync(mergedRequests, _cts.Token).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException) when (_cts.IsCancellationRequested)
+                {
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    _logger.Error("Merged polling read failed | Device=" + _client.DeviceId, ex);
+                    return;
+                }
+
+                foreach (var registration in due)
+                {
+                    var values = new List<DataValue>(registration.Request.Items.Count);
+                    foreach (var request in registration.Request.Items)
                     {
-                        break;
+                        int index;
+                        if (requestIndexes.TryGetValue(CreateRequestKey(request), out index) && index < mergedResult.Values.Count)
+                            values.Add(mergedResult.Values[index]);
+                        else
+                            values.Add(new DataValue(
+                                request.Address,
+                                request.DataType,
+                                null,
+                                null,
+                                QualityStatus.Bad,
+                                DateTimeOffset.UtcNow,
+                                "Merged polling result did not contain the requested item."));
+                    }
+
+                    if (!registration.ShouldReport(values))
+                        continue;
+
+                    try
+                    {
+                        var handler = registration.Handler;
+                        if (handler != null)
+                            handler(_client, new SubscriptionEvent(registration.Request.SubscriptionKey, values, now));
                     }
                     catch (Exception ex)
                     {
-                        _logger.Error(string.Format("Subscription loop failed: {0}", _request.SubscriptionKey), ex);
-                    }
-
-                    try
-                    {
-                        await Task.Delay(_request.Interval, _cts.Token).ConfigureAwait(false);
-                    }
-                    catch (OperationCanceledException)
-                    {
-                        break;
+                        _logger.Error("Subscription handler failed | Key=" + registration.Request.SubscriptionKey, ex);
                     }
                 }
             }
 
-            /// <summary>
-            /// 根据数据值集合构建指纹字符串。将每个数据值的地址、质量和值连接成以竖线分隔的字符串，
-            /// 用于快速比较两组数据是否相同。空值显示为 "&lt;null&gt;"。
-            /// </summary>
-            /// <param name="values">要构建指纹的数据值集合。</param>
-            /// <returns>表示数据快照的指纹字符串。</returns>
-            private static string BuildFingerprint(IEnumerable<DataValue> values)
+            private async Task WaitForWakeAsync(TimeSpan delay)
             {
-                var builder = new StringBuilder();
-                foreach (var value in values)
+                if (delay == Timeout.InfiniteTimeSpan)
                 {
-                    if (builder.Length > 0) builder.Append('|');
-                    builder.Append(value.Address).Append(':').Append(value.Quality).Append(':');
-                    AppendValue(builder, value.Value);
+                    await _wakeSignal.WaitAsync(_cts.Token).ConfigureAwait(false);
+                    return;
                 }
-                return builder.ToString();
+
+                if (delay <= TimeSpan.Zero)
+                    return;
+
+                await Task.WhenAny(
+                    Task.Delay(delay, _cts.Token),
+                    _wakeSignal.WaitAsync(_cts.Token)).ConfigureAwait(false);
             }
 
-            private static void AppendValue(StringBuilder builder, object value)
+            private void Wake()
             {
-                if (value == null)
+                try
                 {
-                    builder.Append("<null>");
-                    return;
+                    if (_wakeSignal.CurrentCount == 0)
+                        _wakeSignal.Release();
                 }
-
-                var bytes = value as byte[];
-                if (bytes != null)
+                catch (ObjectDisposedException)
                 {
-                    builder.Append(Convert.ToBase64String(bytes));
-                    return;
                 }
-
-                if (!(value is string) && value is IEnumerable sequence)
+                catch (SemaphoreFullException)
                 {
-                    builder.Append('[');
-                    var first = true;
-                    foreach (var item in sequence)
-                    {
-                        if (!first) builder.Append(',');
-                        AppendValue(builder, item);
-                        first = false;
-                    }
-                    builder.Append(']');
-                    return;
                 }
-
-                builder.Append(Convert.ToString(value, CultureInfo.InvariantCulture));
             }
 
-            /// <summary>
-            /// 释放工作线程使用的所有资源。取消轮询循环，等待循环任务最多 1 秒后完成，然后释放取消令牌源。
-            /// </summary>
+            private void ThrowIfDisposed()
+            {
+                if (Volatile.Read(ref _disposed) != 0)
+                    throw new ObjectDisposedException(GetType().FullName);
+            }
+
             public void Dispose()
             {
                 if (Interlocked.Exchange(ref _disposed, 1) != 0)
-                {
                     return;
-                }
 
-                _logger.Trace("SUBSCRIPTION loop stopping | Key=" + _request.SubscriptionKey);
                 _cts.Cancel();
-                var completed = false;
+                Wake();
                 try
                 {
-                    completed = _loopTask == null || _loopTask.Wait(TimeSpan.FromSeconds(1));
+                    _loopTask.Wait(TimeSpan.FromSeconds(2));
                 }
                 catch
                 {
                 }
-
-                if (completed)
-                {
-                    _cts.Dispose();
-                }
-                else
-                {
-                    // 第三方客户端可能暂时不响应取消。不能提前释放仍被循环读取的 CTS；
-                    // 让任务真正退出后再回收，避免后台出现 ObjectDisposedException。
-                    _loopTask.ContinueWith(
-                        _ => _cts.Dispose(),
-                        CancellationToken.None,
-                        TaskContinuationOptions.ExecuteSynchronously,
-                        TaskScheduler.Default);
-                }
+                _wakeSignal.Dispose();
+                _cts.Dispose();
             }
+        }
+
+        private static string CreateRequestKey(ReadRequest request)
+        {
+            return string.Concat(
+                request.DeviceId, "|",
+                request.Address, "|",
+                request.DataType.ToString(), "|",
+                request.Length.ToString(CultureInfo.InvariantCulture), "|",
+                request.Timeout.HasValue ? request.Timeout.Value.Ticks.ToString(CultureInfo.InvariantCulture) : string.Empty);
+        }
+
+        private static string BuildFingerprint(IEnumerable<DataValue> values)
+        {
+            var builder = new StringBuilder();
+            foreach (var value in values)
+            {
+                if (builder.Length > 0) builder.Append('|');
+                builder.Append(value.Address).Append(':').Append(value.Quality).Append(':');
+                AppendValue(builder, value.Value);
+            }
+            return builder.ToString();
+        }
+
+        private static void AppendValue(StringBuilder builder, object value)
+        {
+            if (value == null)
+            {
+                builder.Append("<null>");
+                return;
+            }
+
+            var bytes = value as byte[];
+            if (bytes != null)
+            {
+                builder.Append(Convert.ToBase64String(bytes));
+                return;
+            }
+
+            if (!(value is string) && value is IEnumerable sequence)
+            {
+                builder.Append('[');
+                var first = true;
+                foreach (var item in sequence)
+                {
+                    if (!first) builder.Append(',');
+                    AppendValue(builder, item);
+                    first = false;
+                }
+                builder.Append(']');
+                return;
+            }
+
+            builder.Append(Convert.ToString(value, CultureInfo.InvariantCulture));
         }
     }
 }
