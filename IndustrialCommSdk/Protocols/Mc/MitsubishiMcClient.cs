@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
@@ -154,7 +155,7 @@ namespace IndustrialCommSdk.Protocols.Mc
         public int ReceiveTimeoutMilliseconds { get; set; } = 5000;
     }
 
-    public sealed class MitsubishiMcClient : IndustrialClientBase
+    public sealed class MitsubishiMcClient : IndustrialClientBase, IBatchOperationPlanner
     {
         private readonly ITransportClient _transport;
         private readonly McAddressParser _parser;
@@ -202,6 +203,42 @@ namespace IndustrialCommSdk.Protocols.Mc
 
         public override bool IsConnected { get { return _transport.IsConnected; } }
 
+        public BatchSplitPlan PlanRead(IReadOnlyCollection<ReadRequest> requests, BatchReadOptions options, ProtocolCapabilities capabilities)
+        {
+            if (requests == null) throw new ArgumentNullException(nameof(requests));
+            options = options ?? BatchReadOptions.Default;
+            capabilities = capabilities ?? Capabilities;
+
+            var planned = requests
+                .Select(request => new PlannedMcRead(request, _parser.ParseTyped(request.Address), EstimateEndOffset(_parser.ParseTyped(request.Address), request)))
+                .OrderBy(item => item.Address.DeviceType)
+                .ThenBy(item => item.Request.DataType)
+                .ThenBy(item => item.Address.Index)
+                .ToList();
+
+            var groups = BuildReadGroups(planned, options, capabilities);
+            return new BatchSplitPlan(ProtocolKind.MitsubishiMc, BatchOperationKind.Read, groups, requests.Count);
+        }
+
+        public BatchSplitPlan PlanWrite(IReadOnlyCollection<WriteRequest> requests, BatchWriteOptions options, ProtocolCapabilities capabilities)
+        {
+            if (requests == null) throw new ArgumentNullException(nameof(requests));
+            var groups = new List<BatchRequestGroup>();
+            var sequence = 0;
+            foreach (var request in requests)
+            {
+                var address = _parser.ParseTyped(request.Address);
+                groups.Add(BatchRequestGroup.ForWrite(
+                    sequence++,
+                    address.DeviceType.ToString(),
+                    address.Index,
+                    EstimateEndOffset(address, request),
+                    request.DataType,
+                    new[] { request }));
+            }
+            return new BatchSplitPlan(ProtocolKind.MitsubishiMc, BatchOperationKind.Write, groups, requests.Count);
+        }
+
         protected override Task ConnectCoreAsync(CancellationToken cancellationToken)
         {
             return _transport.ConnectAsync(cancellationToken);
@@ -246,6 +283,75 @@ namespace IndustrialCommSdk.Protocols.Mc
             McFrame3E.ParseResponse(McFrame3E.Combine(header, body));
         }
 
+        private static IReadOnlyList<BatchRequestGroup> BuildReadGroups(
+            IReadOnlyList<PlannedMcRead> planned,
+            BatchReadOptions options,
+            ProtocolCapabilities capabilities)
+        {
+            var groups = new List<BatchRequestGroup>();
+            if (planned.Count == 0) return groups;
+
+            var maxItems = options.MaxItemsPerBatch ?? capabilities.MaxReadItems;
+            var maxSpan = options.MaxAddressSpan ?? capabilities.MaxAddressSpan;
+            var current = new List<PlannedMcRead>();
+            var sequence = 0;
+
+            foreach (var item in planned)
+            {
+                if (current.Count == 0)
+                {
+                    current.Add(item);
+                    continue;
+                }
+
+                if (!CanJoin(current, item, maxItems, maxSpan))
+                {
+                    groups.Add(CreateReadGroup(sequence++, current));
+                    current = new List<PlannedMcRead>();
+                }
+                current.Add(item);
+            }
+
+            if (current.Count > 0)
+                groups.Add(CreateReadGroup(sequence, current));
+            return groups;
+        }
+
+        private static bool CanJoin(IReadOnlyList<PlannedMcRead> current, PlannedMcRead next, int maxItems, int maxSpan)
+        {
+            if (current.Count >= maxItems) return false;
+            var first = current[0];
+            if (first.Address.DeviceType != next.Address.DeviceType) return false;
+            if (first.Address.IsBitDevice != next.Address.IsBitDevice) return false;
+            if (first.Request.DataType != next.Request.DataType) return false;
+            var start = Math.Min(current.Min(item => item.Address.Index), next.Address.Index);
+            var end = Math.Max(current.Max(item => item.EndOffset), next.EndOffset);
+            return end - start + 1 <= maxSpan;
+        }
+
+        private static BatchRequestGroup CreateReadGroup(int sequence, IReadOnlyList<PlannedMcRead> current)
+        {
+            var start = current.Min(item => item.Address.Index);
+            var end = current.Max(item => item.EndOffset);
+            return BatchRequestGroup.ForRead(
+                sequence,
+                current[0].Address.DeviceType.ToString(),
+                start,
+                end,
+                current[0].Request.DataType,
+                current.Select(item => item.Request).ToList());
+        }
+
+        private static int EstimateEndOffset(McAddress address, ReadRequest request)
+        {
+            return address.Index + Math.Max(1, (int)request.Length) - 1;
+        }
+
+        private static int EstimateEndOffset(McAddress address, WriteRequest request)
+        {
+            return address.Index + Math.Max(1, (int)request.Length) - 1;
+        }
+
         private void EnsureConnected()
         {
             if (!IsConnected)
@@ -257,6 +363,20 @@ namespace IndustrialCommSdk.Protocols.Mc
         protected override void DisposeCore()
         {
             _transport.Dispose();
+        }
+
+        private sealed class PlannedMcRead
+        {
+            public PlannedMcRead(ReadRequest request, McAddress address, int endOffset)
+            {
+                Request = request;
+                Address = address;
+                EndOffset = endOffset;
+            }
+
+            public ReadRequest Request { get; private set; }
+            public McAddress Address { get; private set; }
+            public int EndOffset { get; private set; }
         }
     }
 }
