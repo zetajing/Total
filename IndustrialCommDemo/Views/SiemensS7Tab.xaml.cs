@@ -26,12 +26,14 @@ namespace IndustrialCommDemo.Views
             _vm.PropertyChanged += OnVmPropertyChanged;
             _vm.RecentAddressChanged += OnRecentAddressChanged;
             _vm.RestoreState();
+            _vm.RefreshCapabilityText();
             ComboHelper.SelectDataType(S7DataTypeComboBox, _vm.SelectedDataType);
 
             // Sync initial VM state to UI
             StatusTextBlock.Text = _vm.StatusText;
             StatusTextBlock.Foreground = _vm.StatusBrush;
             ResultTextBlock.Text = _vm.ResultText;
+            CapabilityTextBlock.Text = _vm.CapabilityText;
 
             // Load saved field values into TextBox controls
             if (!string.IsNullOrWhiteSpace(_vm.DeviceId)) S7DeviceIdTextBox.Text = _vm.DeviceId;
@@ -64,6 +66,9 @@ namespace IndustrialCommDemo.Views
                     break;
                 case nameof(_vm.ResultText):
                     ResultTextBlock.Text = _vm.ResultText;
+                    break;
+                case nameof(_vm.CapabilityText):
+                    CapabilityTextBlock.Text = _vm.CapabilityText;
                     break;
             }
         }
