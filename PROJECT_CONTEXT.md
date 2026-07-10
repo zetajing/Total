@@ -2,12 +2,13 @@
 
 ## 项目目标
 
-`Total` 是一个面向工业现场的 .NET 通讯 SDK 与 WPF Demo。当前重点是通过外置 JSON 配置完成快速部署：部署人员只需修改 `Config` 目录中的设备与点位文件，即可读取、写入和批量读取 PLC 数据。
+`Total` 是一个面向工业现场的 .NET 通讯 SDK 与 WPF Demo。当前重点是通过外置 JSON 配置完成快速部署：部署人员只需修改 `Config` 目录中的设备与点位文件，即可读取、写入、批量读取、轮询订阅和保存历史数据。
 
 ## 当前分支与提交
 
 - 默认分支：`master`
-- 当前代码状态：以 `master` 最新提交为准，使用 `git log --oneline -1` 查看。
+- 当前代码状态：已合并 `PR #1 Optimize industrial SDK reliability for P0/P1`。
+- P0/P1 合并提交：`1afa2eb44394361548f8fd3d313b7c939bed89ca`
 - 每次修改代码或文档后都需要提交并推送到 Git。
 
 ## 解决方案结构
@@ -15,7 +16,7 @@
 | 目录/项目 | 职责 |
 | --- | --- |
 | `IndustrialCommSdk` | 核心 SDK：统一客户端、协议实现、点位表、配置、轮询、诊断、存储和 MES。 |
-| `IndustrialCommSdk.Tests` | SDK 单元和回环通讯测试。当前应通过 138 项测试。 |
+| `IndustrialCommSdk.Tests` | SDK 单元和回环通讯测试。测试数量会随功能继续增加，提交前优先运行该项目。 |
 | `IndustrialCommDemo` | WPF 演示程序，包含协议调试、JSON 部署、MES、数据库、网卡和存储设置页面。 |
 | `LogHelper` | Demo 使用的日志组件。 |
 | `Refresh Logs` | 旧式 WPF 工具项目，不属于 SDK/Demo 主链路。 |
@@ -29,6 +30,53 @@
 - FA MES TCP
 
 统一抽象位于 `IndustrialCommSdk/Abstractions/IIndustrialClient`。协议客户端应继续遵循该接口，不在业务层直接依赖某个 PLC 驱动库。
+
+## P0/P1 可靠性优化现状
+
+本轮 P0/P1 已合并到 `master`，核心目标是先把工业通讯 SDK 的连接生命周期、批量超时、健康状态和轮询调度做稳，再继续扩协议。
+
+### P0 已完成
+
+1. `MitsubishiMcClient`
+   - MC 地址解析改成集中元数据表，统一维护设备代码、地址进制、位/字设备分类。
+   - 修正 `ZR` 地址不应按十六进制解析的问题。
+   - 增加 Host、Port、DeviceId、连接状态和地址范围校验。
+
+2. `SiemensS7Client`
+   - 参考成熟 S7.NetPlus 使用方式优化生命周期。
+   - 重复连接前先关闭旧 `Plc`。
+   - 连接失败时释放临时 `Plc`，避免残留半开连接。
+   - 读写失败遇到传输/连接类异常时关闭失效连接。
+   - 加强 DB、DBX、M/I/Q 位地址校验；Bool 写入必须使用明确 bit 地址。
+   - 保留 `ReadDbClassAsync` / `WriteDbClassAsync` 类映射能力。
+
+3. `IndustrialClientBase`
+   - 单点和批量操作统一超时语义。
+   - 批量操作校验请求 `DeviceId`。
+   - 全 Bad 批量结果不再把健康状态重置为成功。
+   - 地址错误、数据转换错误与连接/传输故障分离，不再把所有异常都记成连接 Faulted。
+   - 连接、超时、Socket、IO 等传输类故障才影响连接健康状态。
+
+### P1 已完成
+
+1. `PollingScheduler`
+   - 同一设备 / 同一客户端只保留一个后台 Worker。
+   - 多个订阅到期时合并重复点位读取。
+   - 轮询改为固定节拍，减少“读取耗时 + Interval”造成的累计漂移。
+   - 订阅回调异常被隔离，不会杀死轮询循环。
+   - 同一 `DeviceId` 不允许绑定不同客户端实例，避免轮询挂到错误连接。
+   - Worker 停止与新订阅并发时会移除旧 Worker 并重新绑定。
+
+2. `PollingSchedulerTests`
+   - 已覆盖基础订阅事件、ByteArray 变化检测、DeviceId 不匹配、同设备不同客户端拒绝、重复点位合并读取。
+
+## 当前设计边界
+
+- 轮询订阅仍是“SDK 主动周期读取”，不是 PLC 主动推送。
+- `IIndustrialClient` 的操作仍按客户端串行化执行，避免同一 TCP/串口连接上的请求响应错位。
+- 轮询调度已按设备合并，但协议级连续地址合并仍由具体协议实现负责；当前 Modbus TCP 已有连续地址合并能力。
+- `ReadAsync` 通信失败默认返回 `DataValue.Bad`；写入失败仍抛异常。调用方需要按 `Quality` 判断读取结果。
+- 环境里无法保证所有变更都经过本地 `dotnet test`，后续每次功能修改必须优先补齐本地或 CI 验证。
 
 ## JSON 快速部署
 
@@ -114,7 +162,12 @@ Demo 构建：
 dotnet build IndustrialCommDemo\IndustrialCommDemo.csproj --no-restore
 ```
 
-预期结果：SDK 140 项测试通过，Demo 构建 0 警告、0 错误。
+优先验证：
+
+```powershell
+dotnet test .\IndustrialCommSdk.Tests\IndustrialCommSdk.Tests.csproj
+dotnet build .\IndustrialCommDemo\IndustrialCommDemo.csproj -p:BuildProjectReferences=false
+```
 
 ## 已知限制
 
