@@ -11,7 +11,7 @@ using IndustrialCommSdk.Exceptions;
 namespace IndustrialCommSdk.Internal
 {
     /// <summary>工业客户端公共基类，统一处理操作串行化、超时、健康状态和轮询订阅。</summary>
-    public abstract class IndustrialClientBase : IIndustrialClient
+    public abstract class IndustrialClientBase : IIndustrialClient, IProtocolCapabilityProvider
     {
         private readonly SemaphoreSlim _operationLock = new SemaphoreSlim(1, 1);
         private readonly IPollingScheduler _pollingScheduler;
@@ -35,6 +35,16 @@ namespace IndustrialCommSdk.Internal
         public string DeviceId { get; private set; }
         public ProtocolKind Kind { get; private set; }
         public abstract bool IsConnected { get; }
+
+        /// <summary>
+        /// Gets protocol capabilities for this client. Protocol clients can override this when their runtime options
+        /// change limits or supported features; the default is the built-in capability matrix for <see cref="Kind" />.
+        /// </summary>
+        public virtual ProtocolCapabilities Capabilities
+        {
+            get { return ProtocolCapabilities.ForProtocol(Kind); }
+        }
+
         protected IIndustrialLogger Logger { get { return _logger; } }
 
         public async Task ConnectAsync(CancellationToken cancellationToken)
@@ -259,7 +269,7 @@ namespace IndustrialCommSdk.Internal
             }
             catch (Exception ex)
             {
-                RecordFailure(ex, IsConnectionFailure(ex));
+                RecordFailure(ex);
                 throw;
             }
             finally
