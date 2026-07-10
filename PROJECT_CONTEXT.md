@@ -80,8 +80,8 @@
    - Worker 内保存协议能力，为后续按 `MaxReadItems / MaxAddressSpan / MaxPduBytes` 拆批做准备。
 
 7. 测试更新
-   - `PlatformModelTests` 覆盖能力模型、统一地址、批量计划和能力 provider fallback。
-   - `PollingSchedulerTests` 已覆盖协议不支持订阅、低于推荐轮询周期、DeviceId 不匹配、不同客户端实例、重复点位合并。
+   - `PlatformModelTests` 覆盖能力模型、统一地址、S7/MC parser 的平台地址形状、批量计划和能力 provider fallback。
+   - `PollingSchedulerTests` 已覆盖协议不支持订阅、低于推荐轮询周期、DeviceId 不匹配、同设备不同客户端拒绝、重复点位合并读取。
 
 ## P0/P1 可靠性优化现状
 
