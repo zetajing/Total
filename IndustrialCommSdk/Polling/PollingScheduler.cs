@@ -54,17 +54,30 @@ namespace IndustrialCommSdk.Polling
 
             try
             {
-                var worker = _workers.GetOrAdd(
-                    client.DeviceId,
-                    _ => new DeviceWorker(client, _logger, RemoveStoppedWorker));
-                worker.Add(registration);
-                _logger.Info(string.Format(
-                    "SUBSCRIPTION started | Key={0} | Device={1} | Items={2} | Interval={3}ms",
-                    request.SubscriptionKey,
-                    client.DeviceId,
-                    request.Items.Count,
-                    request.Interval.TotalMilliseconds));
-                return Task.FromResult(request.SubscriptionKey);
+                while (true)
+                {
+                    ThrowIfDisposed();
+                    cancellationToken.ThrowIfCancellationRequested();
+
+                    var worker = _workers.GetOrAdd(
+                        client.DeviceId,
+                        _ => new DeviceWorker(client, _logger, RemoveStoppedWorker));
+
+                    if (worker.TryAdd(client, registration))
+                    {
+                        _logger.Info(string.Format(
+                            "SUBSCRIPTION started | Key={0} | Device={1} | Items={2} | Interval={3}ms",
+                            request.SubscriptionKey,
+                            client.DeviceId,
+                            request.Items.Count,
+                            request.Interval.TotalMilliseconds));
+                        return Task.FromResult(request.SubscriptionKey);
+                    }
+
+                    // The worker was already stopping between GetOrAdd and TryAdd. Remove that exact
+                    // instance and retry so the subscription is not attached to a dead loop.
+                    RemoveStoppedWorker(client.DeviceId, worker);
+                }
             }
             catch
             {
@@ -201,12 +214,29 @@ namespace IndustrialCommSdk.Polling
                 _loopTask = Task.Run(LoopAsync);
             }
 
-            public void Add(SubscriptionRegistration registration)
+            public bool TryAdd(IIndustrialClient client, SubscriptionRegistration registration)
             {
-                ThrowIfDisposed();
+                if (Volatile.Read(ref _disposed) != 0)
+                    return false;
+
+                if (!ReferenceEquals(_client, client))
+                    throw new InvalidOperationException(
+                        string.Format(
+                            "Device '{0}' already has an active polling worker for a different client instance.",
+                            client.DeviceId));
+
                 if (!_registrations.TryAdd(registration.Request.SubscriptionKey, registration))
                     throw new InvalidOperationException("Subscription is already registered on this device worker.");
+
+                if (Volatile.Read(ref _disposed) != 0)
+                {
+                    SubscriptionRegistration ignored;
+                    _registrations.TryRemove(registration.Request.SubscriptionKey, out ignored);
+                    return false;
+                }
+
                 Wake();
+                return true;
             }
 
             public void Remove(string subscriptionId)
@@ -246,6 +276,9 @@ namespace IndustrialCommSdk.Polling
                     }
                 }
                 catch (OperationCanceledException)
+                {
+                }
+                catch (ObjectDisposedException) when (_cts.IsCancellationRequested)
                 {
                 }
                 catch (Exception ex)
@@ -340,9 +373,10 @@ namespace IndustrialCommSdk.Polling
                 if (delay <= TimeSpan.Zero)
                     return;
 
-                await Task.WhenAny(
-                    Task.Delay(delay, _cts.Token),
-                    _wakeSignal.WaitAsync(_cts.Token)).ConfigureAwait(false);
+                var delayTask = Task.Delay(delay, _cts.Token);
+                var wakeTask = _wakeSignal.WaitAsync(_cts.Token);
+                await Task.WhenAny(delayTask, wakeTask).ConfigureAwait(false);
+                _cts.Token.ThrowIfCancellationRequested();
             }
 
             private void Wake()
@@ -358,12 +392,6 @@ namespace IndustrialCommSdk.Polling
                 catch (SemaphoreFullException)
                 {
                 }
-            }
-
-            private void ThrowIfDisposed()
-            {
-                if (Volatile.Read(ref _disposed) != 0)
-                    throw new ObjectDisposedException(GetType().FullName);
             }
 
             public void Dispose()
