@@ -37,6 +37,7 @@ Demo 配置模板位于：
 - `IndustrialCommDemo/Config/devices.json`
 - `IndustrialCommDemo/Config/points/plc1.json`
 - `IndustrialCommDemo/Config/points/s7plc.json`
+- `IndustrialCommDemo/Config/modbus-profiles.json`
 
 构建时，`IndustrialCommDemo.csproj` 会将整个 `Config/**/*.json` 复制到 Demo 输出目录。运行时应修改输出目录下的 `Config` 文件，不把设备信息内置到 DLL。
 
@@ -58,6 +59,19 @@ Demo 配置模板位于：
 ```
 
 新增设备时：复制一段设备配置，创建对应的点位 JSON，然后在 Demo 的“JSON 配置”页点击“重新加载”和“校验配置”。
+
+### Modbus 品牌 JSON 配置
+
+`IndustrialCommDemo/Config/modbus-profiles.json` 通过 `ModbusProfileDefinition` 数据模型驱动 `JsonModbusProfile : IModbusDeviceProfile`。汇川 EasyPLC 和三菱 Modbus TCP 的品牌映射已用 JSON 等价描述，`TryLoadDefaultConfig()` 自动从该文件加载。
+
+新增品牌只需在 `modbus-profiles.json` 的 `profiles` 数组加一条记录：
+
+- `key`：唯一标识，例如 `"my-brand"`
+- `addressPattern`：地址正则，组 1 为前缀、组 2 为索引
+- `mappings`：前缀映射表（prefix → area / base / max / radix）
+- `lowWordFirst`：多字类型是否需要低字在前交换
+
+`GenericModbusProfile` 保留为硬编码（双格式地址逻辑）。
 
 ## 简化 SDK 用法
 
@@ -119,4 +133,4 @@ SDK 与 `IndustrialCommDemo` 单独构建正常。解决整个解决方案构建
 
 下一优先级：增加 `readGroup`、`writable`、单位等少量点位运行元数据；再根据真实现场需求扩展协议模块。
 
-协议扩展采用插件式：只有真实现场需要时才增加 Omron、Allen-Bradley、OPC UA 等模块，并保持 `IIndustrialClient` 抽象不变。
+Modbus 品牌差异通过 `IModbusDeviceProfile` 隔离，JSON 数据驱动，新增品牌不改 C# 代码、不重新编译。非 Modbus 协议扩展采用插件式：只有真实现场需要时才增加 Omron、Allen-Bradley、OPC UA 等模块，并保持 `IIndustrialClient` 抽象不变。
