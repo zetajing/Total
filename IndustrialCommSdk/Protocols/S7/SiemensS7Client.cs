@@ -22,29 +22,42 @@ namespace IndustrialCommSdk.Protocols.S7
         Output,
     }
 
-    public sealed class S7Address
+    public sealed class S7Address : IIndustrialAddress
     {
-        public S7Address(S7Area area, int dbNumber, int byteOffset, int bitOffset, string normalized)
+        public S7Address(S7Area area, int dbNumber, int byteOffset, int bitOffset, string normalized, string original = null)
         {
+            if (string.IsNullOrWhiteSpace(normalized)) throw new ArgumentException("Normalized S7 address is required.", nameof(normalized));
             Area = area;
             DbNumber = dbNumber;
             ByteOffset = byteOffset;
             BitOffset = bitOffset;
             Normalized = normalized;
+            Original = string.IsNullOrWhiteSpace(original) ? normalized : original;
         }
 
         public S7Area Area { get; private set; }
         public int DbNumber { get; private set; }
         public int ByteOffset { get; private set; }
         public int BitOffset { get; private set; }
+        public string Original { get; private set; }
         public string Normalized { get; private set; }
+        public bool IsBitAddress { get { return BitOffset >= 0; } }
+
+        string IIndustrialAddress.Area { get { return Area.ToString(); } }
+        int IIndustrialAddress.Offset { get { return ByteOffset; } }
+        int? IIndustrialAddress.Bit { get { return IsBitAddress ? (int?)BitOffset : null; } }
+
+        public override string ToString()
+        {
+            return Normalized;
+        }
     }
 
     /// <summary>
     /// S7 address parser aligned with S7.NetPlus address conventions.
     /// Supports DB1.DBX0.0 / DB1.DBB0 / DB1.DBW0 / DB1.DBD0 and M/I/Q areas.
     /// </summary>
-    public sealed class S7AddressParser : IAddressParser
+    public sealed class S7AddressParser : IAddressParser, IAddressParser<S7Address>
     {
         private static readonly Regex DbRegex = new Regex(
             @"^DB(?<db>\d+)\.DB(?<type>[XBWDL])(?<offset>\d+)(?:\.(?<bit>\d+))?$",
@@ -55,6 +68,16 @@ namespace IndustrialCommSdk.Protocols.S7
             RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
         public object Parse(string address)
+        {
+            return ParseTyped(address);
+        }
+
+        S7Address IAddressParser<S7Address>.Parse(string address)
+        {
+            return ParseTyped(address);
+        }
+
+        public S7Address ParseTyped(string address)
         {
             if (string.IsNullOrWhiteSpace(address))
                 throw new IndustrialAddressParseException("S7 address is required.");
@@ -76,7 +99,8 @@ namespace IndustrialCommSdk.Protocols.S7
                     dbNumber,
                     ParseNonNegative(dbMatch.Groups["offset"].Value, "byte offset"),
                     bit,
-                    input);
+                    input,
+                    address);
             }
 
             var areaMatch = AreaRegex.Match(input);
@@ -91,7 +115,8 @@ namespace IndustrialCommSdk.Protocols.S7
                     0,
                     ParseNonNegative(areaMatch.Groups["offset"].Value, "byte offset"),
                     bit,
-                    input);
+                    input,
+                    address);
             }
 
             throw new IndustrialAddressParseException("Unsupported S7 address: " + address);
@@ -228,7 +253,7 @@ namespace IndustrialCommSdk.Protocols.S7
 
         protected override Task<DataValue> ReadCoreAsync(ReadRequest request, CancellationToken cancellationToken)
         {
-            var address = (S7Address)_parser.Parse(request.Address);
+            var address = _parser.ParseTyped(request.Address);
             return ExecuteWithReconnectAsync(async token =>
             {
                 var value = await ReadValueAsync(address, request, token).ConfigureAwait(false);
@@ -239,7 +264,7 @@ namespace IndustrialCommSdk.Protocols.S7
 
         protected override Task WriteCoreAsync(WriteRequest request, CancellationToken cancellationToken)
         {
-            var address = (S7Address)_parser.Parse(request.Address);
+            var address = _parser.ParseTyped(request.Address);
             return ExecuteWithReconnectAsync(async token =>
             {
                 await WriteValueAsync(address, request, token).ConfigureAwait(false);
