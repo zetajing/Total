@@ -88,7 +88,7 @@ IndustrialCommDemo（上位机应用、交互、展示）
 - Siemens S7
 - Mitsubishi MC 3E
 - Socket TCP 调试
-- FA MES TCP
+- FA MES TCP（长连接 + HTTP API 双模式）
 
 统一抽象位于 `IndustrialCommSdk/Abstractions/IIndustrialClient`。协议客户端应继续遵循该接口，不在业务层直接依赖某个 PLC 驱动库。
 

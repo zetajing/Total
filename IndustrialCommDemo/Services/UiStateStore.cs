@@ -160,6 +160,10 @@ namespace IndustrialCommDemo.Services
         [DataMember(Order = 8)] public string SerialNo { get; set; }
         [DataMember(Order = 9)] public string Number { get; set; }
         [DataMember(Order = 10)] public string Parameters { get; set; }
+        /// <summary>通讯模式："tcp" 或 "http"。</summary>
+        [DataMember(Order = 11)] public string Mode { get; set; }
+        /// <summary>HTTP 模式下的 API 基地址。</summary>
+        [DataMember(Order = 12)] public string BaseUrl { get; set; }
     }
 
     /// <summary>

@@ -5,17 +5,19 @@ using System.Text;
 
 namespace IndustrialCommSdk.Mes
 {
-    internal static class MesProtocolCodec
+    public static class MesProtocolCodec
     {
-        private static readonly DataContractJsonSerializerSettings JsonSettings =
+        internal static readonly DataContractJsonSerializerSettings JsonSettings =
             new DataContractJsonSerializerSettings { UseSimpleDictionaryFormat = true };
 
+        /// <summary>生成 TCP 上线报文（START...STOP 格式，TCP 专用）。</summary>
         public static string CreateOnline(MesClientOptions options, DateTimeOffset now)
         {
             return string.Format("START {0},{1},{2},{3},{4}STOP", options.DeviceNo, options.DeviceName,
                 options.DeviceIp, options.DeviceMac, now.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss"));
         }
 
+        /// <summary>将对象序列化为 JSON 字符串（使用 DataContractJsonSerializer）。</summary>
         public static string Serialize<T>(T message)
         {
             using (var stream = new MemoryStream())
@@ -25,12 +27,14 @@ namespace IndustrialCommSdk.Mes
             }
         }
 
+        /// <summary>将 JSON 字符串反序列化为指定类型。</summary>
         public static T Deserialize<T>(string json)
         {
             using (var stream = new MemoryStream(Encoding.UTF8.GetBytes(json)))
                 return (T)new DataContractJsonSerializer(typeof(T), JsonSettings).ReadObject(stream);
         }
 
+        /// <summary>从 JSON 中读取 type 字段。</summary>
         public static string ReadType(string json)
         {
             var header = Deserialize<MesTypeHeader>(json);

@@ -10,19 +10,29 @@
                     <Grid.ColumnDefinitions><ColumnDefinition Width="105"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
-                        <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
                     </Grid.RowDefinitions>
-                    <TextBlock Grid.Row="0" Margin="0,8" Text="MES 主机"/><TextBox x:Name="MesHostTextBox" Grid.Row="0" Grid.Column="1" Margin="0,5" Text="127.0.0.1"/>
-                    <TextBlock Grid.Row="1" Margin="0,8" Text="端口"/><TextBox x:Name="MesPortTextBox" Grid.Row="1" Grid.Column="1" Margin="0,5" Text="9312"/>
-                    <TextBlock Grid.Row="2" Margin="0,8" Text="设备编号"/><TextBox x:Name="MesDeviceNoTextBox" Grid.Row="2" Grid.Column="1" Margin="0,5" Text="001"/>
-                    <TextBlock Grid.Row="3" Margin="0,8" Text="设备名称"/><TextBox x:Name="MesDeviceNameTextBox" Grid.Row="3" Grid.Column="1" Margin="0,5" Text="001"/>
-                    <TextBlock Grid.Row="4" Margin="0,8" Text="设备 IP"/><TextBox x:Name="MesDeviceIpTextBox" Grid.Row="4" Grid.Column="1" Margin="0,5" Text="127.0.0.1"/>
-                    <TextBlock Grid.Row="5" Margin="0,8" Text="设备 MAC"/><TextBox x:Name="MesDeviceMacTextBox" Grid.Row="5" Grid.Column="1" Margin="0,5" Text="00-00-00-00-00-00"/>
-                    <TextBlock Grid.Row="6" Margin="0,8" Text="状态"/><TextBlock x:Name="MesStatusTextBlock" Grid.Row="6" Grid.Column="1" Margin="0,8" Foreground="IndianRed" Text="未连接"/>
-                    <UniformGrid Grid.Row="7" Grid.ColumnSpan="2" Columns="3" Margin="0,12,0,0">
+                    <!-- 模式选择 -->
+                    <TextBlock Grid.Row="0" Margin="0,8" Text="通讯模式"/>
+                    <ComboBox x:Name="MesModeComboBox" Grid.Row="0" Grid.Column="1" Margin="0,5" SelectedIndex="0" SelectionChanged="ModeComboBox_SelectionChanged">
+                        <ComboBoxItem Content="TCP 长连接" Tag="tcp"/>
+                        <ComboBoxItem Content="HTTP API" Tag="http"/>
+                    </ComboBox>
+                    <!-- TCP 参数 -->
+                    <TextBlock x:Name="MesHostLabel" Grid.Row="1" Margin="0,8" Text="MES 主机"/><TextBox x:Name="MesHostTextBox" Grid.Row="1" Grid.Column="1" Margin="0,5" Text="127.0.0.1"/>
+                    <TextBlock x:Name="MesPortLabel" Grid.Row="2" Margin="0,8" Text="端口"/><TextBox x:Name="MesPortTextBox" Grid.Row="2" Grid.Column="1" Margin="0,5" Text="9312"/>
+                    <!-- HTTP 参数（初始隐藏） -->
+                    <TextBlock x:Name="MesBaseUrlLabel" Grid.Row="3" Margin="0,8" Text="API 地址" Visibility="Collapsed"/>
+                    <TextBox x:Name="MesBaseUrlTextBox" Grid.Row="3" Grid.Column="1" Margin="0,5" Visibility="Collapsed" Text="http://127.0.0.1:8080/api"/>
+                    <TextBlock Grid.Row="4" Margin="0,8" Text="设备编号"/><TextBox x:Name="MesDeviceNoTextBox" Grid.Row="4" Grid.Column="1" Margin="0,5" Text="001"/>
+                    <TextBlock Grid.Row="5" Margin="0,8" Text="设备名称"/><TextBox x:Name="MesDeviceNameTextBox" Grid.Row="5" Grid.Column="1" Margin="0,5" Text="001"/>
+                    <TextBlock Grid.Row="6" Margin="0,8" Text="设备 IP"/><TextBox x:Name="MesDeviceIpTextBox" Grid.Row="6" Grid.Column="1" Margin="0,5" Text="127.0.0.1"/>
+                    <TextBlock Grid.Row="7" Margin="0,8" Text="设备 MAC"/><TextBox x:Name="MesDeviceMacTextBox" Grid.Row="7" Grid.Column="1" Margin="0,5" Text="00-00-00-00-00-00"/>
+                    <TextBlock Grid.Row="8" Margin="0,8" Text="状态"/><TextBlock x:Name="MesStatusTextBlock" Grid.Row="8" Grid.Column="1" Margin="0,8" Foreground="IndianRed" Text="未连接"/>
+                    <UniformGrid Grid.Row="9" Grid.ColumnSpan="2" Columns="3" Margin="0,12,0,0">
                         <Button Margin="0,0,6,0" Padding="8" Background="#0891B2" Foreground="White" BorderThickness="0" Click="ConnectButton_Click" Content="连接"/>
                         <Button Margin="3,0" Padding="8" Background="#334155" Foreground="White" BorderThickness="0" Click="DisconnectButton_Click" Content="断开"/>
-                        <Button Margin="6,0,0,0" Padding="8" Background="#2563EB" Foreground="White" BorderThickness="0" Click="OnlineButton_Click" Content="发送上线"/>
+                        <Button x:Name="MesOnlineButton" Margin="6,0,0,0" Padding="8" Background="#2563EB" Foreground="White" BorderThickness="0" Click="OnlineButton_Click" Content="发送上线"/>
                     </UniformGrid>
                 </Grid>
             </GroupBox>
