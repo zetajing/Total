@@ -87,6 +87,38 @@ namespace IndustrialCommSdk.Tests
         }
 
         [Test]
+        public void PollingScheduler_Should_Reject_Subscription_When_Protocol_Does_Not_Support_Subscriptions()
+        {
+            using (var scheduler = new PollingScheduler())
+            {
+                var client = new RawSocketClient("socket-1");
+                var request = new SubscriptionRequest("raw", "socket-1", new[]
+                {
+                    new ReadRequest("socket-1", "payload", DataType.ByteArray)
+                }, TimeSpan.FromSeconds(1), false);
+
+                Assert.ThrowsAsync<NotSupportedException>(async () =>
+                    await scheduler.SubscribeAsync(client, request, null, CancellationToken.None));
+            }
+        }
+
+        [Test]
+        public void PollingScheduler_Should_Reject_Subscription_Below_Recommended_Interval()
+        {
+            using (var scheduler = new PollingScheduler())
+            {
+                var client = new FakeIndustrialClient("dev-1", recommendedMinPollingInterval: TimeSpan.FromMilliseconds(100));
+                var request = new SubscriptionRequest("too-fast", "dev-1", new[]
+                {
+                    new ReadRequest("dev-1", "D100", DataType.Int16)
+                }, TimeSpan.FromMilliseconds(10), false);
+
+                Assert.ThrowsAsync<ArgumentOutOfRangeException>(async () =>
+                    await scheduler.SubscribeAsync(client, request, null, CancellationToken.None));
+            }
+        }
+
+        [Test]
         public async Task PollingScheduler_Should_Reject_Different_Client_Instance_For_Same_Device()
         {
             using (var scheduler = new PollingScheduler())
@@ -139,21 +171,38 @@ namespace IndustrialCommSdk.Tests
             }
         }
 
-        private sealed class FakeIndustrialClient : IIndustrialClient
+        private sealed class FakeIndustrialClient : IIndustrialClient, IProtocolCapabilityProvider
         {
             private readonly Func<object> _valueFactory;
+            private readonly TimeSpan _recommendedMinPollingInterval;
             private int _smallestBatchSizeSeen = int.MaxValue;
 
-            public FakeIndustrialClient(string deviceId, Func<object> valueFactory = null)
+            public FakeIndustrialClient(string deviceId, Func<object> valueFactory = null, TimeSpan? recommendedMinPollingInterval = null)
             {
                 DeviceId = deviceId;
                 _valueFactory = valueFactory ?? (() => 42);
+                _recommendedMinPollingInterval = recommendedMinPollingInterval ?? TimeSpan.FromMilliseconds(1);
             }
 
             public string DeviceId { get; private set; }
-            public ProtocolKind Kind { get { return ProtocolKind.TcpSocket; } }
+            public ProtocolKind Kind { get { return ProtocolKind.ModbusTcp; } }
             public bool IsConnected { get { return true; } }
             public int SmallestBatchSizeSeen { get { return _smallestBatchSizeSeen == int.MaxValue ? 0 : _smallestBatchSizeSeen; } }
+            public ProtocolCapabilities Capabilities
+            {
+                get
+                {
+                    return new ProtocolCapabilities(
+                        ProtocolKind.ModbusTcp,
+                        "Fake Polling Protocol",
+                        supportsSubscriptions: true,
+                        supportsBitAddress: true,
+                        supportsByteArray: true,
+                        maxReadItems: 256,
+                        maxWriteItems: 256,
+                        recommendedMinPollingInterval: _recommendedMinPollingInterval);
+                }
+            }
 
             public Task ConnectAsync(CancellationToken cancellationToken) { return Task.CompletedTask; }
             public Task DisconnectAsync(CancellationToken cancellationToken) { return Task.CompletedTask; }
@@ -188,6 +237,35 @@ namespace IndustrialCommSdk.Tests
 
             public Task WriteAsync(WriteRequest request, CancellationToken cancellationToken) { return Task.CompletedTask; }
             public Task WriteManyAsync(IReadOnlyCollection<WriteRequest> requests, CancellationToken cancellationToken) { return Task.CompletedTask; }
+        }
+
+        private sealed class RawSocketClient : IIndustrialClient
+        {
+            public RawSocketClient(string deviceId)
+            {
+                DeviceId = deviceId;
+            }
+
+            public string DeviceId { get; private set; }
+            public ProtocolKind Kind { get { return ProtocolKind.TcpSocket; } }
+            public bool IsConnected { get { return true; } }
+
+            public Task ConnectAsync(CancellationToken cancellationToken) { return Task.CompletedTask; }
+            public Task DisconnectAsync(CancellationToken cancellationToken) { return Task.CompletedTask; }
+            public void Dispose() { }
+            public HealthSnapshot GetHealth() { return new HealthSnapshot(ConnectionStatus.Connected, DateTimeOffset.UtcNow, 0, null); }
+            public Task<DataValue> ReadAsync(ReadRequest request, CancellationToken cancellationToken)
+            {
+                return Task.FromResult(new DataValue(request.Address, request.DataType, null, null, QualityStatus.Bad, DateTimeOffset.UtcNow, null));
+            }
+            public Task<BatchReadResult> ReadManyAsync(IReadOnlyCollection<ReadRequest> requests, CancellationToken cancellationToken)
+            {
+                return Task.FromResult(new BatchReadResult(new DataValue[0]));
+            }
+            public Task WriteAsync(WriteRequest request, CancellationToken cancellationToken) { return Task.CompletedTask; }
+            public Task WriteManyAsync(IReadOnlyCollection<WriteRequest> requests, CancellationToken cancellationToken) { return Task.CompletedTask; }
+            public Task<string> SubscribeAsync(SubscriptionRequest request, EventHandler<SubscriptionEvent> handler, CancellationToken cancellationToken) { throw new NotSupportedException(); }
+            public Task UnsubscribeAsync(string subscriptionId, CancellationToken cancellationToken) { throw new NotSupportedException(); }
         }
     }
 }
