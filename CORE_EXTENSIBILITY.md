@@ -65,14 +65,12 @@ public interface IIndustrialAddress
 
 当前已接入：
 
+- `ModbusAddress : IIndustrialAddress`
 - `S7Address : IIndustrialAddress`
 - `McAddress : IIndustrialAddress`
+- `ModbusAddressParser : IAddressParser<ModbusAddress>`
 - `S7AddressParser : IAddressParser<S7Address>`
 - `McAddressParser : IAddressParser<McAddress>`
-
-仍待接入：
-
-- `ModbusAddress : IIndustrialAddress`
 
 ### 3. 批量选项和拆分计划
 
@@ -100,6 +98,12 @@ IBatchOperationPlanner
 - PollingScheduler 可以根据 capabilities / options 自动拆分大批量点位。
 - 日志可以统一输出 `OriginalRequestCount / PlannedRequestCount / SavedRequestCount`。
 
+当前已接入：
+
+- `ModbusClientBase : IBatchOperationPlanner`
+- `PlanRead(...)` 使用现有 Modbus 区域分组和连续地址合并规则生成 `BatchSplitPlan`
+- `PlanWrite(...)` 当前保守地按单个写入生成物理写入组，暂不自动合并写操作
+
 ## 已经直接重构接入的部分
 
 ### 1. `IndustrialClientBase` 接入能力模型
@@ -122,9 +126,9 @@ ProtocolCapabilities.ForProtocol(client.Kind)
 public override ProtocolCapabilities Capabilities { get { ... } }
 ```
 
-### 2. S7 / MC 地址接入统一地址模型
+### 2. Modbus / S7 / MC 地址接入统一地址模型
 
-`S7Address` 和 `McAddress` 已开始提供统一的：
+`ModbusAddress`、`S7Address` 和 `McAddress` 已开始提供统一的：
 
 - `Original`
 - `Normalized`
@@ -146,13 +150,34 @@ IAddressParser.Parse(string) -> object
 新增强类型接口：
 
 ```csharp
+IAddressParser<ModbusAddress>.Parse(string)
 IAddressParser<S7Address>.Parse(string)
 IAddressParser<McAddress>.Parse(string)
 ```
 
 协议内部已开始使用 `ParseTyped`，减少强制转换和 object 返回值扩散。
 
-### 4. PollingScheduler 接入协议能力
+### 4. Modbus 批量合并接入 `BatchSplitPlan`
+
+现有 Modbus 批量读取仍保留成熟执行逻辑：按 Area 分组、按地址排序、连续地址或小间隔地址合并读取，再按原始请求顺序还原结果。
+
+本轮新增映射：
+
+```csharp
+var planner = (IBatchOperationPlanner)client;
+var plan = planner.PlanRead(requests, BatchReadOptions.Default, client.GetCapabilities());
+```
+
+计划中会记录：
+
+- `OriginalRequestCount`
+- `PlannedRequestCount`
+- `SavedRequestCount`
+- 每个 `BatchRequestGroup` 的 Area、StartOffset、EndOffset、DataType 和原始请求列表
+
+`ReadManyCoreAsync` 现在也会先构建并记录计划摘要，再复用原有读取执行逻辑。
+
+### 5. PollingScheduler 接入协议能力
 
 `PollingScheduler.SubscribeAsync` 现在会：
 
@@ -162,13 +187,15 @@ IAddressParser<McAddress>.Parse(string)
 4. Worker 内保存协议能力，用于后续批量拆分和日志增强。
 5. 当合并后的轮询请求数量超过 `MaxReadItems` 时记录能力越界警告。
 
-### 5. 测试覆盖
+### 6. 测试覆盖
 
 `PlatformModelTests` 已覆盖：
 
 - 协议能力默认值
 - 通用 `IndustrialAddress`
-- S7 / MC parser 输出的 `IIndustrialAddress` 形状
+- Modbus / S7 / MC parser 输出的 `IIndustrialAddress` 形状
+- Modbus `PlanRead` 连续地址合并计划
+- Modbus 分离地址范围保持独立计划组
 - 批量计划统计
 - 能力 provider override 与 fallback
 
@@ -186,20 +213,21 @@ IAddressParser<McAddress>.Parse(string)
 
 - `IIndustrialClient` 签名保持不变。
 - 现有 `ReadManyAsync / WriteManyAsync` 仍可继续使用。
-- Modbus 现有连续地址合并暂时保留在协议实现内部，下一步再映射到 `BatchSplitPlan`。
+- Modbus `BatchSplitPlan` 已建立，但轮询调度器暂时还未按计划自动拆分超大批次。
 - S7 / MC 已接入统一地址接口，但还未接入通用 `BatchSplitPlan`。
 - Demo 暂时还未根据 `ProtocolCapabilities` 动态调整 UI。
 - NuGet 拆包暂缓，先稳定 Abstractions/Core 边界。
 
 ## 建议下一步 PR
 
-### PR 1：Modbus 地址和批量计划接入
+### PR 1：PollingScheduler 接入批量拆分计划
 
 目标：
 
-- 让 `ModbusAddress` 实现 `IIndustrialAddress`。
-- 把现有 Modbus 连续地址合并结果映射到 `BatchSplitPlan`。
-- 日志统一输出 `OriginalRequests / PlannedRequests / SavedRequests`。
+- 根据 `MaxReadItems / MaxAddressSpan / MaxPduBytes` 拆分轮询批次。
+- 优先使用 `IBatchOperationPlanner` 生成每轮轮询计划。
+- 对每轮轮询输出计划摘要。
+- 对大点表场景避免一次性合并过多请求。
 
 ### PR 2：Demo 接入协议能力
 
@@ -209,21 +237,21 @@ IAddressParser<McAddress>.Parse(string)
 - 根据 `SupportsBitAddress / SupportsString / SupportsByteArray` 调整输入提示。
 - 对过高频轮询显示警告。
 
-### PR 3：PollingScheduler 接入批量拆分计划
-
-目标：
-
-- 根据 `MaxReadItems / MaxAddressSpan / MaxPduBytes` 拆分轮询批次。
-- 为每轮轮询输出计划摘要。
-- 对大点表场景避免一次性合并过多请求。
-
-### PR 4：S7 / MC 批量计划化
+### PR 3：S7 / MC 批量计划化
 
 目标：
 
 - 基于统一地址模型实现 S7 / MC 的批量规划。
 - 明确位地址、字地址、DB 区、设备区的合并边界。
 - 保留顺序映射，避免批量优化影响调用方结果顺序。
+
+### PR 4：统一日志和诊断输出
+
+目标：
+
+- 将 `BatchSplitPlan` 摘要输出成统一日志事件。
+- Demo 后续可以展示 Original / Planned / Saved 请求数。
+- 为诊断包输出批量计划、能力矩阵和慢请求数据打基础。
 
 ## 不建议现在做的事
 
