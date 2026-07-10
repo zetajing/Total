@@ -1,6 +1,6 @@
 # SDK 核心可扩展平台设计
 
-本文档记录 `IndustrialCommSdk` 从“多个协议客户端集合”演进为“可扩展工业通讯平台”的第一步。当前改造仍保持非破坏式：不修改现有 `IIndustrialClient` 方法签名，不影响现有 Demo 和业务调用；但已经不只是新增模型，而是开始把模型接入现有核心实现和 Demo 界面。
+本文档记录 `IndustrialCommSdk` 从“多个协议客户端集合”演进为“可扩展工业通讯平台”的第一步。当前改造保持非破坏式：不修改现有 `IIndustrialClient` 方法签名，不影响现有 Demo 和业务调用；但已经把平台模型接入核心实现、轮询调度和 Demo 界面。
 
 ## 本轮新增能力
 
@@ -94,16 +94,16 @@ IBatchOperationPlanner
 
 用途：
 
-- 把当前 Modbus 的连续地址合并思想抽象成协议无关模型。
-- 后续 S7、MC 可以复用相同的批量规划概念。
-- PollingScheduler 可以根据 capabilities / options 自动拆分大批量点位。
-- 日志可以统一输出 `OriginalRequestCount / PlannedRequestCount / SavedRequestCount`。
+- 把协议私有的地址合并和拆批规则抽象成协议无关模型。
+- 轮询调度可以根据 capabilities / options 自动拆分大批量点位。
+- 日志和 Demo 可以统一展示 `OriginalRequestCount / PlannedRequestCount / SavedRequestCount`。
+- 第三方协议只要实现 `IBatchOperationPlanner`，就可以被 `PollingScheduler` 自动消费。
 
 当前已接入：
 
 - `ModbusClientBase : IBatchOperationPlanner`
-- `PlanRead(...)` 使用现有 Modbus 区域分组和连续地址合并规则生成 `BatchSplitPlan`
-- `PlanWrite(...)` 当前保守地按单个写入生成物理写入组，暂不自动合并写操作
+- `SiemensS7Client : IBatchOperationPlanner`
+- `MitsubishiMcClient : IBatchOperationPlanner`
 - `PollingScheduler` 已优先使用 `IBatchOperationPlanner` 生成轮询读取批次
 - 没有 planner 的协议会按 `ProtocolCapabilities.MaxReadItems` 做保守拆分
 
@@ -160,16 +160,37 @@ IAddressParser<McAddress>.Parse(string)
 
 协议内部已开始使用 `ParseTyped`，减少强制转换和 object 返回值扩散。
 
-### 4. Modbus 批量合并接入 `BatchSplitPlan`
+### 4. 三大 PLC 协议接入 `BatchSplitPlan`
 
-现有 Modbus 批量读取仍保留成熟执行逻辑：按 Area 分组、按地址排序、连续地址或小间隔地址合并读取，再按原始请求顺序还原结果。
+#### Modbus
 
-本轮新增映射：
+`ModbusClientBase.PlanRead(...)` 使用现有 Modbus 区域分组和连续地址合并规则生成 `BatchSplitPlan`。`ReadManyCoreAsync` 也会先构建并记录计划摘要，再复用原有读取执行逻辑。
 
-```csharp
-var planner = (IBatchOperationPlanner)client;
-var plan = planner.PlanRead(requests, BatchReadOptions.Default, client.GetCapabilities());
-```
+#### Siemens S7
+
+`SiemensS7Client.PlanRead(...)` 会按：
+
+- Area：DB / Memory / Input / Output
+- DB number
+- DataType
+- ByteOffset / BitOffset
+- `MaxReadItems`
+- `MaxAddressSpan`
+
+生成读取批次。连续或同跨度内的同区点位会进入同一计划组。写入规划当前保守为“单逻辑写入 = 单物理写入组”。
+
+#### Mitsubishi MC
+
+`MitsubishiMcClient.PlanRead(...)` 会按：
+
+- DeviceType：D / W / R / ZR / M / X / Y 等
+- 位设备 / 字设备属性
+- DataType
+- Device index
+- `MaxReadItems`
+- `MaxAddressSpan`
+
+生成读取批次。写入规划同样保守为单点组，避免误合并写操作。
 
 计划中会记录：
 
@@ -177,8 +198,6 @@ var plan = planner.PlanRead(requests, BatchReadOptions.Default, client.GetCapabi
 - `PlannedRequestCount`
 - `SavedRequestCount`
 - 每个 `BatchRequestGroup` 的 Area、StartOffset、EndOffset、DataType 和原始请求列表
-
-`ReadManyCoreAsync` 现在也会先构建并记录计划摘要，再复用原有读取执行逻辑。
 
 ### 5. PollingScheduler 接入协议能力和批量计划
 
@@ -218,6 +237,8 @@ Demo 现在已经在协议页面展示能力信息：
 - Modbus / S7 / MC parser 输出的 `IIndustrialAddress` 形状
 - Modbus `PlanRead` 连续地址合并计划
 - Modbus 分离地址范围保持独立计划组
+- S7 同 DB 连续地址计划
+- MC 同设备区连续地址计划
 - 批量计划统计
 - 能力 provider override 与 fallback
 
@@ -237,20 +258,20 @@ Demo 现在已经在协议页面展示能力信息：
 
 - `IIndustrialClient` 签名保持不变。
 - 现有 `ReadManyAsync / WriteManyAsync` 仍可继续使用。
-- Modbus `BatchSplitPlan` 已建立，轮询调度器已可使用 planner 拆分读取批次。
-- S7 / MC 已接入统一地址接口，但还未接入通用 `BatchSplitPlan`。
+- Modbus / S7 / MC 都已建立 `BatchSplitPlan`，轮询调度器已可使用 planner 拆分读取批次。
+- S7 / MC 的 planner 当前只负责拆批计划，底层读取执行仍复用现有逐项 `ReadManyAsync` 路径；真正的协议级多点合并读取可以后续单独做。
 - Demo 已展示 `ProtocolCapabilities`，但还未按能力自动禁用控件或调整输入项。
 - NuGet 拆包暂缓，先稳定 Abstractions/Core 边界。
 
 ## 建议下一步 PR
 
-### PR 1：S7 / MC 批量计划化
+### PR 1：统一日志和诊断输出
 
 目标：
 
-- 基于统一地址模型实现 S7 / MC 的批量规划。
-- 明确位地址、字地址、DB 区、设备区的合并边界。
-- 保留顺序映射，避免批量优化影响调用方结果顺序。
+- 将 `BatchSplitPlan` 摘要输出成统一结构化日志事件。
+- Demo 后续可以展示 Original / Planned / Saved 请求数。
+- 为诊断包输出批量计划、能力矩阵和慢请求数据打基础。
 
 ### PR 2：Demo 根据协议能力动态调整 UI
 
@@ -260,13 +281,13 @@ Demo 现在已经在协议页面展示能力信息：
 - 对低于推荐轮询周期的输入即时显示警告。
 - 在批量读取前预览 `MaxReadItems / MaxAddressSpan / MaxPduBytes` 风险。
 
-### PR 3：统一日志和诊断输出
+### PR 3：S7 / MC 协议级优化读取
 
 目标：
 
-- 将 `BatchSplitPlan` 摘要输出成统一日志事件。
-- Demo 后续可以展示 Original / Planned / Saved 请求数。
-- 为诊断包输出批量计划、能力矩阵和慢请求数据打基础。
+- 在 planner 已有边界上，为 S7 / MC 逐步实现真正的协议级合并读取。
+- 保留结果顺序映射，避免优化影响调用方结果顺序。
+- 明确位地址、字地址、DB 区、设备区的合并边界。
 
 ## 不建议现在做的事
 
