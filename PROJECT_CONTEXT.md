@@ -34,7 +34,7 @@
 
 ## 核心可扩展平台现状
 
-`core-extensible-platform` 最初采用非破坏式建模，现在已经推进到“直接接入现有核心实现”：不修改 `IIndustrialClient` 现有方法签名，但核心基类、Modbus/S7/MC 地址模型、Modbus 批量规划、轮询调度和 Demo 能力展示已经开始使用平台模型。
+`core-extensible-platform` 最初采用非破坏式建模，现在已经推进到“直接接入现有核心实现”：不修改 `IIndustrialClient` 现有方法签名，但核心基类、Modbus/S7/MC 地址模型、三大 PLC 协议批量规划、轮询调度和 Demo 能力展示已经开始使用平台模型。
 
 新增文件：
 
@@ -73,9 +73,12 @@
 5. `BatchReadOptions` / `BatchWriteOptions` / `BatchSplitPlan`
    - 为批量读写的超时、拆分、合并、顺序保持、错误继续策略提供协议无关模型。
    - `ModbusClientBase` 已实现 `IBatchOperationPlanner`。
+   - `SiemensS7Client` 已实现 `IBatchOperationPlanner`。
+   - `MitsubishiMcClient` 已实现 `IBatchOperationPlanner`。
    - Modbus 现有连续地址合并已映射为 `BatchSplitPlan`。
-   - `PlanRead` 使用现有按 Area 分组、地址排序、小间隔合并的规则生成计划。
-   - `PlanWrite` 当前保守地按单个写入生成物理写入组，暂不自动合并写操作。
+   - S7 planner 按 Area / DB / DataType / ByteOffset / BitOffset / MaxReadItems / MaxAddressSpan 生成读计划。
+   - MC planner 按 DeviceType / 位字属性 / DataType / DeviceIndex / MaxReadItems / MaxAddressSpan 生成读计划。
+   - 三个协议的 `PlanWrite` 当前都保持保守单点组，暂不自动合并写操作。
 
 6. `PollingScheduler` 接入能力模型和批量计划
    - `SubscribeAsync` 会读取 `client.GetCapabilities()`。
@@ -92,7 +95,7 @@
    - 当前只是展示能力，还未根据能力自动隐藏或禁用 UI 控件。
 
 8. 测试更新
-   - `PlatformModelTests` 覆盖能力模型、统一地址、Modbus/S7/MC parser 的平台地址形状、Modbus 读计划、批量计划和能力 provider fallback。
+   - `PlatformModelTests` 覆盖能力模型、统一地址、Modbus/S7/MC parser 的平台地址形状、Modbus/S7/MC 读计划、批量计划和能力 provider fallback。
    - `PollingSchedulerTests` 已覆盖协议不支持订阅、低于推荐轮询周期、DeviceId 不匹配、同设备不同客户端拒绝、重复点位合并读取、无 planner 拆批和 planner 拆批。
 
 ## P0/P1 可靠性优化现状
@@ -139,7 +142,7 @@
 - 轮询订阅仍是“SDK 主动周期读取”，不是 PLC 主动推送。
 - `IIndustrialClient` 的操作仍按客户端串行化执行，避免同一 TCP/串口连接上的请求响应错位。
 - 轮询调度已按设备合并、协议能力校验，并可用 `IBatchOperationPlanner` / `MaxReadItems` 拆分轮询批次。
-- Modbus 连续地址合并已映射到 `BatchSplitPlan`，但 S7 / MC 还未实现批量计划器。
+- Modbus / S7 / MC 都已映射到 `BatchSplitPlan`；S7 / MC 当前只是计划化拆批，底层仍复用现有逐项读取路径，真正协议级合并读取后续单独做。
 - Demo 已显示 `ProtocolCapabilities`，但还未根据能力动态禁用控件或预警输入。
 - `ReadAsync` 通信失败默认返回 `DataValue.Bad`；写入失败仍抛异常。调用方需要按 `Quality` 判断读取结果。
 - 环境里无法保证所有变更都经过本地 `dotnet test`，后续每次功能修改必须优先补齐本地或 CI 验证。
@@ -250,6 +253,6 @@ SDK 与 `IndustrialCommDemo` 单独构建正常。解决整个解决方案构建
 3. 按设备的点位表执行周期批量读取并上报事件。
 4. 提供按“设备名 + 点位名”的读写入口和状态事件。
 
-下一优先级：实现 S7 / MC 批量计划器，或让 Demo 根据 `ProtocolCapabilities` 动态禁用不支持的输入项。
+下一优先级：统一 `BatchSplitPlan` 结构化诊断日志，或让 Demo 根据 `ProtocolCapabilities` 动态禁用不支持的输入项。
 
 Modbus 品牌差异通过 `IModbusDeviceProfile` 隔离，JSON 数据驱动，新增品牌不改 C# 代码、不重新编译。非 Modbus 协议扩展采用插件式：只有真实现场需要时才增加 Omron、Allen-Bradley、OPC UA 等模块，并保持 `IIndustrialClient` 抽象不变。
