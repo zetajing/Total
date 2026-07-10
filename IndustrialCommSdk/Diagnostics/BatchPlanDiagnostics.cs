@@ -58,5 +58,40 @@ namespace IndustrialCommSdk.Diagnostics
                 requestCount,
                 string.Join(", ", addresses));
         }
+
+        public static string FormatExecutedGroup(
+            string source,
+            string deviceId,
+            ProtocolKind protocolKind,
+            BatchOperationKind operationKind,
+            int requestCount,
+            string area,
+            int? startOffset,
+            int? length,
+            long elapsedMilliseconds,
+            string[] addresses)
+        {
+            if (requestCount < 0) throw new ArgumentOutOfRangeException(nameof(requestCount));
+            if (elapsedMilliseconds < 0) throw new ArgumentOutOfRangeException(nameof(elapsedMilliseconds));
+
+            var endOffset = startOffset.HasValue && length.HasValue && length.Value > 0
+                ? (startOffset.Value + length.Value - 1).ToString(CultureInfo.InvariantCulture)
+                : string.Empty;
+
+            return string.Format(
+                CultureInfo.InvariantCulture,
+                "BATCH_PLAN executed_group | Source={0} | Device={1} | Protocol={2} | Operation={3} | Area={4} | Start={5} | End={6} | Length={7} | Requests={8} | Elapsed={9}ms | Addresses=[{10}]",
+                source ?? string.Empty,
+                deviceId ?? string.Empty,
+                protocolKind,
+                operationKind,
+                area ?? string.Empty,
+                startOffset.HasValue ? startOffset.Value.ToString(CultureInfo.InvariantCulture) : string.Empty,
+                endOffset,
+                length.HasValue ? length.Value.ToString(CultureInfo.InvariantCulture) : string.Empty,
+                requestCount,
+                elapsedMilliseconds,
+                string.Join(", ", addresses ?? new string[0]));
+        }
     }
 }
