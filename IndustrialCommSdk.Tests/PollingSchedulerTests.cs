@@ -129,9 +129,12 @@ namespace IndustrialCommSdk.Tests
                 await scheduler.SubscribeAsync(client, firstRequest, (sender, args) => first.TrySetResult(args), CancellationToken.None);
                 await scheduler.SubscribeAsync(client, secondRequest, (sender, args) => second.TrySetResult(args), CancellationToken.None);
 
-                var completed = await Task.WhenAny(Task.WhenAll(first.Task, second.Task), Task.Delay(1000));
+                var both = Task.WhenAll(first.Task, second.Task);
+                var completed = await Task.WhenAny(both, Task.Delay(1000));
+                await scheduler.UnsubscribeAsync("sub-a", CancellationToken.None);
+                await scheduler.UnsubscribeAsync("sub-b", CancellationToken.None);
 
-                Assert.That(completed, Is.EqualTo(Task.WhenAll(first.Task, second.Task)));
+                Assert.That(completed, Is.EqualTo(both));
                 Assert.That(client.SmallestBatchSizeSeen, Is.EqualTo(1));
             }
         }
