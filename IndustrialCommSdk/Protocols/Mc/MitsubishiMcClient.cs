@@ -65,27 +65,51 @@ namespace IndustrialCommSdk.Protocols.Mc
         }
     }
 
-    public sealed class McAddress
+    public sealed class McAddress : IIndustrialAddress
     {
-        public McAddress(McDeviceType deviceType, int index, bool isBitDevice)
+        public McAddress(McDeviceType deviceType, int index, bool isBitDevice, string normalized = null, string original = null)
         {
             DeviceType = deviceType;
             Index = index;
             IsBitDevice = isBitDevice;
+            Normalized = string.IsNullOrWhiteSpace(normalized) ? deviceType + index.ToString(CultureInfo.InvariantCulture) : normalized;
+            Original = string.IsNullOrWhiteSpace(original) ? Normalized : original;
         }
 
         public McDeviceType DeviceType { get; private set; }
         public int Index { get; private set; }
         public bool IsBitDevice { get; private set; }
+        public string Original { get; private set; }
+        public string Normalized { get; private set; }
+
+        string IIndustrialAddress.Area { get { return DeviceType.ToString(); } }
+        int IIndustrialAddress.Offset { get { return Index; } }
+        int? IIndustrialAddress.Bit { get { return null; } }
+        bool IIndustrialAddress.IsBitAddress { get { return IsBitDevice; } }
+
+        public override string ToString()
+        {
+            return Normalized;
+        }
     }
 
-    public sealed class McAddressParser : IAddressParser
+    public sealed class McAddressParser : IAddressParser, IAddressParser<McAddress>
     {
         private static readonly Regex Pattern = new Regex(
             @"^(ZR|SD|TN|SS|SN|CN|[A-Z])([0-9A-F]+)$",
             RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
         public object Parse(string address)
+        {
+            return ParseTyped(address);
+        }
+
+        McAddress IAddressParser<McAddress>.Parse(string address)
+        {
+            return ParseTyped(address);
+        }
+
+        public McAddress ParseTyped(string address)
         {
             var input = (address ?? string.Empty).Trim().ToUpperInvariant();
             var match = Pattern.Match(input);
@@ -117,7 +141,7 @@ namespace IndustrialCommSdk.Protocols.Mc
                 throw new Exceptions.IndustrialAddressParseException("MC device address must fit in 24 bits.");
             }
 
-            return new McAddress(type, index, metadata.IsBitDevice);
+            return new McAddress(type, index, metadata.IsBitDevice, input, address);
         }
     }
 
@@ -191,7 +215,7 @@ namespace IndustrialCommSdk.Protocols.Mc
         protected override async Task<DataValue> ReadCoreAsync(ReadRequest request, CancellationToken cancellationToken)
         {
             EnsureConnected();
-            var address = (McAddress)_parser.Parse(request.Address);
+            var address = _parser.ParseTyped(request.Address);
             var frame = address.IsBitDevice
                 ? McFrame3E.BuildReadBitsRequest(address, request.Length)
                 : McFrame3E.BuildReadWordsRequest(address, request.Length);
@@ -210,7 +234,7 @@ namespace IndustrialCommSdk.Protocols.Mc
         protected override async Task WriteCoreAsync(WriteRequest request, CancellationToken cancellationToken)
         {
             EnsureConnected();
-            var address = (McAddress)_parser.Parse(request.Address);
+            var address = _parser.ParseTyped(request.Address);
             var frame = address.IsBitDevice
                 ? McFrame3E.BuildWriteBitsRequest(address, RegisterValueCodec.EncodeBits(request))
                 : McFrame3E.BuildWriteWordsRequest(address, RegisterValueCodec.EncodeRegisters(request));
