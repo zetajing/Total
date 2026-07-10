@@ -103,6 +103,8 @@ IBatchOperationPlanner
 - `ModbusClientBase : IBatchOperationPlanner`
 - `PlanRead(...)` 使用现有 Modbus 区域分组和连续地址合并规则生成 `BatchSplitPlan`
 - `PlanWrite(...)` 当前保守地按单个写入生成物理写入组，暂不自动合并写操作
+- `PollingScheduler` 已优先使用 `IBatchOperationPlanner` 生成轮询读取批次
+- 没有 planner 的协议会按 `ProtocolCapabilities.MaxReadItems` 做保守拆分
 
 ## 已经直接重构接入的部分
 
@@ -177,15 +179,23 @@ var plan = planner.PlanRead(requests, BatchReadOptions.Default, client.GetCapabi
 
 `ReadManyCoreAsync` 现在也会先构建并记录计划摘要，再复用原有读取执行逻辑。
 
-### 5. PollingScheduler 接入协议能力
+### 5. PollingScheduler 接入协议能力和批量计划
 
 `PollingScheduler.SubscribeAsync` 现在会：
 
 1. 读取 `client.GetCapabilities()`。
 2. 拒绝 `SupportsSubscriptions == false` 的协议，例如原始 TCP Socket。
 3. 拒绝低于 `RecommendedMinPollingInterval` 的订阅周期。
-4. Worker 内保存协议能力，用于后续批量拆分和日志增强。
-5. 当合并后的轮询请求数量超过 `MaxReadItems` 时记录能力越界警告。
+4. Worker 内保存协议能力，用于轮询拆批和日志增强。
+
+每轮轮询执行现在会：
+
+1. 先按设备合并到期订阅的重复点位。
+2. 如果客户端实现 `IBatchOperationPlanner`，优先调用 `PlanRead(...)` 生成 `BatchSplitPlan`。
+3. 按 `BatchSplitPlan.Groups` 分批调用 `ReadManyAsync`。
+4. 如果客户端没有 planner，则按 `ProtocolCapabilities.MaxReadItems` 做保守拆分。
+5. 每个批次独立容错；某个批次失败时，该批次的点位返回 `QualityStatus.Bad`，不会阻断其他批次。
+6. 批次结果按请求 key 合并，再按每个订阅的原始点位顺序上报。
 
 ### 6. 测试覆盖
 
@@ -206,6 +216,8 @@ var plan = planner.PlanRead(requests, BatchReadOptions.Default, client.GetCapabi
 - DeviceId 不匹配
 - 同设备不同客户端实例拒绝
 - 重复点位合并读取
+- 无 planner 时按 `MaxReadItems` 拆分轮询批次
+- 有 planner 时优先使用 `BatchSplitPlan` 拆分轮询批次
 
 ## 当前边界
 
@@ -213,31 +225,23 @@ var plan = planner.PlanRead(requests, BatchReadOptions.Default, client.GetCapabi
 
 - `IIndustrialClient` 签名保持不变。
 - 现有 `ReadManyAsync / WriteManyAsync` 仍可继续使用。
-- Modbus `BatchSplitPlan` 已建立，但轮询调度器暂时还未按计划自动拆分超大批次。
+- Modbus `BatchSplitPlan` 已建立，轮询调度器已可使用 planner 拆分读取批次。
 - S7 / MC 已接入统一地址接口，但还未接入通用 `BatchSplitPlan`。
 - Demo 暂时还未根据 `ProtocolCapabilities` 动态调整 UI。
 - NuGet 拆包暂缓，先稳定 Abstractions/Core 边界。
 
 ## 建议下一步 PR
 
-### PR 1：PollingScheduler 接入批量拆分计划
-
-目标：
-
-- 根据 `MaxReadItems / MaxAddressSpan / MaxPduBytes` 拆分轮询批次。
-- 优先使用 `IBatchOperationPlanner` 生成每轮轮询计划。
-- 对每轮轮询输出计划摘要。
-- 对大点表场景避免一次性合并过多请求。
-
-### PR 2：Demo 接入协议能力
+### PR 1：Demo 接入协议能力
 
 目标：
 
 - 在 Modbus / S7 / MC 页面显示当前协议能力。
 - 根据 `SupportsBitAddress / SupportsString / SupportsByteArray` 调整输入提示。
 - 对过高频轮询显示警告。
+- 显示批量能力：`MaxReadItems / MaxAddressSpan / MaxPduBytes`。
 
-### PR 3：S7 / MC 批量计划化
+### PR 2：S7 / MC 批量计划化
 
 目标：
 
@@ -245,7 +249,7 @@ var plan = planner.PlanRead(requests, BatchReadOptions.Default, client.GetCapabi
 - 明确位地址、字地址、DB 区、设备区的合并边界。
 - 保留顺序映射，避免批量优化影响调用方结果顺序。
 
-### PR 4：统一日志和诊断输出
+### PR 3：统一日志和诊断输出
 
 目标：
 
