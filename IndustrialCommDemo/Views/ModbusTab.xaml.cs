@@ -49,6 +49,7 @@ namespace IndustrialCommDemo.Views
             RefreshDataTypeState();
             RefreshInputHints();
             RefreshSerialPorts();
+            RefreshCapabilityText();
         }
 
         public async Task ResetClientAsync()
@@ -56,7 +57,7 @@ namespace IndustrialCommDemo.Views
             var client = _client;
             _client = null;
 
-            if (client == null) { UpdateStatus(); return; }
+            if (client == null) { UpdateStatus(); RefreshCapabilityText(); return; }
 
             try
             {
@@ -72,6 +73,7 @@ namespace IndustrialCommDemo.Views
             try { await client.DisconnectAsync(CancellationToken.None); } catch { }
             client.Dispose();
             UpdateStatus();
+            RefreshCapabilityText();
         }
 
         private void UpdateStatus()
@@ -81,6 +83,22 @@ namespace IndustrialCommDemo.Views
             var health = _client.GetHealth();
             StatusTextBlock.Text = health?.Status.ToString() ?? "未连接";
             StatusTextBlock.Foreground = Brushes.DarkGoldenrod;
+        }
+
+        private void RefreshCapabilityText()
+        {
+            if (CapabilityTextBlock == null) return;
+            var capabilities = _client == null
+                ? ProtocolCapabilities.ForProtocol(GetSelectedProtocolKind())
+                : IndustrialClientPlatformExtensions.GetCapabilities(_client);
+            CapabilityTextBlock.Text = CapabilityDisplayHelper.Format(capabilities);
+        }
+
+        private ProtocolKind GetSelectedProtocolKind()
+        {
+            return ConnectionTypeComboBox != null && ConnectionTypeComboBox.SelectedIndex == 1
+                ? ProtocolKind.ModbusRtu
+                : ProtocolKind.ModbusTcp;
         }
 
         private bool EnsureConnected()
@@ -120,6 +138,7 @@ namespace IndustrialCommDemo.Views
                     ((ModbusRtuClient)_client).FrameTraced += RtuClient_FrameTraced;
                     await _client.ConnectAsync(CancellationToken.None);
                     UpdateStatus();
+                    RefreshCapabilityText();
                     _ctx.SetHeaderStatus("Modbus RTU 已连接", Brushes.LightGreen);
                     _ctx.DemoLogger.Info(string.Format("Modbus RTU 已连接到 {0}。", options.PortName));
                 }
@@ -136,6 +155,7 @@ namespace IndustrialCommDemo.Views
                     _client = new ModbusTcpClient(options, _ctx.SdkLogger);
                     await _client.ConnectAsync(CancellationToken.None);
                     UpdateStatus();
+                    RefreshCapabilityText();
                     _ctx.SetHeaderStatus("Modbus 已连接", Brushes.LightGreen);
                     _ctx.DemoLogger.Info(string.Format("Modbus 已连接到 {0}:{1}。", options.Host, options.Port));
                 }
@@ -143,6 +163,7 @@ namespace IndustrialCommDemo.Views
             catch (Exception ex)
             {
                 UpdateStatus();
+                RefreshCapabilityText();
                 _ctx.HandleError("Modbus 连接失败。", ex, true);
             }
         }
@@ -155,6 +176,7 @@ namespace IndustrialCommDemo.Views
                 ResultTextBlock.Text = "已断开。";
                 _subRows.Clear();
                 UpdateStatus();
+                RefreshCapabilityText();
                 _ctx.SetHeaderStatus("Modbus 已断开", Brushes.Khaki);
                 _ctx.DemoLogger.Info("Modbus 已断开。");
             }
@@ -184,6 +206,7 @@ namespace IndustrialCommDemo.Views
             RefreshProfileOptions();
             ApplyProfile();
             RefreshDataTypeState();
+            RefreshCapabilityText();
             if (isRtu) RefreshSerialPorts();
         }
 
@@ -286,6 +309,7 @@ namespace IndustrialCommDemo.Views
                 AddressHistoryHelper.RememberRecentAddresses(_ctx.UiState.Modbus.RecentAddresses, requests.Select(r => r.Address));
                 ComboHelper.RefreshAddressHistory(AddressHistoryComboBox, _ctx.UiState.Modbus.RecentAddresses);
                 UpdateStatus();
+                RefreshCapabilityText();
                 _ctx.SetHeaderStatus("Modbus 读取完成", Brushes.LightGreen);
                 _ctx.DemoLogger.Info("Modbus 读取完成。");
             }
@@ -320,6 +344,7 @@ namespace IndustrialCommDemo.Views
                 AddressHistoryHelper.RememberRecentAddresses(_ctx.UiState.Modbus.RecentAddresses, requests.Select(r => r.Address));
                 ComboHelper.RefreshAddressHistory(AddressHistoryComboBox, _ctx.UiState.Modbus.RecentAddresses);
                 UpdateStatus();
+                RefreshCapabilityText();
                 _ctx.SetHeaderStatus("Modbus 写入完成", Brushes.LightGreen);
             }
             catch (Exception ex)
@@ -353,6 +378,7 @@ namespace IndustrialCommDemo.Views
                 AddressHistoryHelper.RememberRecentAddresses(_ctx.UiState.Modbus.RecentAddresses, addresses);
                 ComboHelper.RefreshAddressHistory(AddressHistoryComboBox, _ctx.UiState.Modbus.RecentAddresses);
                 ResultTextBlock.Text = "订阅已启动：" + _subscriptionId;
+                RefreshCapabilityText();
                 _ctx.SetHeaderStatus("Modbus 订阅已启动", Brushes.LightGreen);
                 _ctx.DemoLogger.Info("Modbus 订阅已启动。");
             }
@@ -379,6 +405,7 @@ namespace IndustrialCommDemo.Views
                 _subscriptionId = null;
                 ResultTextBlock.Text = "订阅已停止。";
                 _subRows.Clear();
+                RefreshCapabilityText();
                 _ctx.SetHeaderStatus("Modbus 订阅已停止", Brushes.Khaki);
             }
         }
@@ -391,6 +418,7 @@ namespace IndustrialCommDemo.Views
                 ResultTextBlock.Text = string.Join(Environment.NewLine, e.Values.Select(FormatHelper.FormatDataValue).ToArray());
                 UpdateSubRows(e.Values);
                 UpdateStatus();
+                RefreshCapabilityText();
             });
         }
 
