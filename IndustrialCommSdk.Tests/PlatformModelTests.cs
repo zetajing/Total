@@ -3,8 +3,12 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using IndustrialCommSdk.Abstractions;
+using IndustrialCommSdk.Diagnostics;
+using IndustrialCommSdk.Polling;
 using IndustrialCommSdk.Protocols.Mc;
+using IndustrialCommSdk.Protocols.Modbus;
 using IndustrialCommSdk.Protocols.S7;
+using Modbus.Device;
 using NUnit.Framework;
 
 namespace IndustrialCommSdk.Tests
@@ -46,6 +50,20 @@ namespace IndustrialCommSdk.Tests
             Assert.That(address.Bit, Is.EqualTo(1));
             Assert.That(address.IsBitAddress, Is.True);
             Assert.That(address.ToString(), Is.EqualTo("DB1.DBX0.1"));
+        }
+
+        [Test]
+        public void ModbusAddressParser_ShouldExposeIndustrialAddressShape()
+        {
+            var parser = new ModbusAddressParser();
+            var address = (IIndustrialAddress)parser.ParseTyped("D100");
+
+            Assert.That(address.Original, Is.EqualTo("D100"));
+            Assert.That(address.Normalized, Is.EqualTo("D100"));
+            Assert.That(address.Area, Is.EqualTo("HoldingRegister"));
+            Assert.That(address.Offset, Is.EqualTo(100));
+            Assert.That(address.Bit, Is.Null);
+            Assert.That(address.IsBitAddress, Is.False);
         }
 
         [Test]
@@ -103,6 +121,46 @@ namespace IndustrialCommSdk.Tests
         }
 
         [Test]
+        public void ModbusPlanner_ShouldMapContiguousReadsToSplitPlan()
+        {
+            var client = new PlanningModbusClient();
+            var requests = new[]
+            {
+                new ReadRequest("modbus", "D100", DataType.Int16),
+                new ReadRequest("modbus", "D101", DataType.Int16),
+                new ReadRequest("modbus", "D102", DataType.Int16),
+            };
+
+            var plan = client.PlanRead(requests, BatchReadOptions.Default, client.Capabilities);
+
+            Assert.That(plan.ProtocolKind, Is.EqualTo(ProtocolKind.ModbusTcp));
+            Assert.That(plan.OperationKind, Is.EqualTo(BatchOperationKind.Read));
+            Assert.That(plan.OriginalRequestCount, Is.EqualTo(3));
+            Assert.That(plan.PlannedRequestCount, Is.EqualTo(1));
+            Assert.That(plan.SavedRequestCount, Is.EqualTo(2));
+            Assert.That(plan.Groups[0].Area, Is.EqualTo("HoldingRegister"));
+            Assert.That(plan.Groups[0].StartOffset, Is.EqualTo(100));
+            Assert.That(plan.Groups[0].EndOffset, Is.EqualTo(102));
+        }
+
+        [Test]
+        public void ModbusPlanner_ShouldKeepSeparatedRangesInDifferentGroups()
+        {
+            var client = new PlanningModbusClient();
+            var requests = new[]
+            {
+                new ReadRequest("modbus", "D100", DataType.Int16),
+                new ReadRequest("modbus", "D200", DataType.Int16),
+            };
+
+            var plan = client.PlanRead(requests, BatchReadOptions.Default, client.Capabilities);
+
+            Assert.That(plan.OriginalRequestCount, Is.EqualTo(2));
+            Assert.That(plan.PlannedRequestCount, Is.EqualTo(2));
+            Assert.That(plan.SavedRequestCount, Is.EqualTo(0));
+        }
+
+        [Test]
         public void GetCapabilities_ShouldUseProviderOverride()
         {
             var client = new CapabilityClient();
@@ -120,6 +178,26 @@ namespace IndustrialCommSdk.Tests
 
             Assert.That(capabilities.Kind, Is.EqualTo(ProtocolKind.SiemensS7));
             Assert.That(capabilities.SupportsBitAddress, Is.True);
+        }
+
+        private sealed class PlanningModbusClient : ModbusClientBase
+        {
+            public PlanningModbusClient()
+                : base(
+                    "modbus",
+                    ProtocolKind.ModbusTcp,
+                    1,
+                    ModbusDeviceProfiles.InovanceEasyPlc,
+                    null,
+                    new PollingScheduler(),
+                    NullIndustrialLogger.Instance)
+            {
+            }
+
+            public override bool IsConnected { get { return true; } }
+            protected override ModbusMaster Master { get { return null; } }
+            protected override Task ConnectCoreAsync(CancellationToken cancellationToken) { return Task.CompletedTask; }
+            protected override Task DisconnectCoreAsync(CancellationToken cancellationToken) { return Task.CompletedTask; }
         }
 
         private sealed class CapabilityClient : PlainClient, IProtocolCapabilityProvider
