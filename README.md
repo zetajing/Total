@@ -18,6 +18,18 @@
 - 连接诊断测试
 - 统一读写请求/返回模型
 - 可选 SQL Server 历史数据存储（后台有界队列、批量写入、失败重试）
+- P0/P1 可靠性优化：S7 生命周期、MC 地址元数据、批量超时、健康状态分类、按设备合并轮询
+
+## P0/P1 可靠性更新
+
+PR #1 已合并到 `master`，对应合并提交为 `1afa2eb44394361548f8fd3d313b7c939bed89ca`。这轮优化重点不是继续堆协议，而是先把 SDK 的稳定性边界打牢：
+
+- `IndustrialClientBase`：统一单点/批量超时处理，校验请求 `DeviceId`，区分地址/数据错误与连接/传输故障，避免全 Bad 批量读取被误记为健康成功。
+- `SiemensS7Client`：参考成熟 S7.NetPlus 使用方式，连接前释放旧实例，连接失败后清理临时连接，读写失败后保护底层连接状态，并加强 DB/bit 地址校验。
+- `MitsubishiMcClient`：将设备代码、地址进制、位/字属性集中到元数据表，修正 `ZR` 地址进制规则，并补充 Host、Port、连接状态和地址范围校验。
+- `PollingScheduler`：同一设备只保留一个后台 Worker，到期订阅合并去重读取，采用固定节拍减少漂移，并隔离订阅回调异常。
+
+详细记录见 [docs/p0-p1-reliability-update.md](docs/p0-p1-reliability-update.md)。后续增加 Omron、OPC UA、EtherNet/IP 等协议前，应优先保持这些稳定性边界不被破坏。
 
 ## 解决方案结构
 
@@ -305,6 +317,9 @@ await client.DisconnectAsync(CancellationToken.None);
 
 - 不是 PLC 主动推送
 - 而是 SDK 按固定时间间隔持续读取
+- 同一设备共用一个后台 Worker，到期订阅会合并重复点位后统一读取
+- 轮询采用固定节拍调度，避免“读取耗时 + Interval”导致周期持续漂移
+- 订阅回调异常会被日志记录，不会终止设备轮询循环
 
 单地址订阅示例：
 
@@ -655,6 +670,7 @@ Modbus RTU RX (partial) | 01 03 02
 - `ModbusTcpClient` 已改用 nmodbus 原生 async API，如 `ReadHoldingRegistersAsync / WriteMultipleRegistersAsync` 等，不再依赖 `Task.Run` 伪异步。
 - `ModbusTcpClient` 的连接超时通过 `Task.WhenAny` 配合 `CancellationToken` 控制。
 - `SiemensS7Client` 也已切换到 `S7netplus 0.20.0` 提供的异步 API：`OpenAsync / ReadAsync / WriteAsync`。
+- PR #1 进一步完善了 S7 连接生命周期、MC 3E 地址元数据、批量超时、健康状态分类与按设备合并轮询。完整说明见 [docs/p0-p1-reliability-update.md](docs/p0-p1-reliability-update.md)。
 
 ### S7 DB 块增强
 
@@ -696,6 +712,9 @@ await s7Client.WriteDbClassAsync(db200, 200);
 - 连续 Modbus 地址的网络往返次数显著下降
 - UI 线程和高频订阅场景下阻塞更少
 - 后续其他协议可以沿用同一套批量扩展模式
+- S7 重复连接、连接失败、通信失败后的资源释放更可靠
+- MC 3E 地址解析规则更集中，后续扩展设备类型时不需要散落修改多个判断
+- 健康状态不再被普通地址错误、数据转换错误误判成连接故障
 
 ### 批量读日志
 
@@ -779,6 +798,9 @@ await s7Client.WriteDbClassAsync(db200, 200);
 - [ModbusAddressing.cs]
 - [InovanceEasyPlcModbusProfile.cs]
 - [SiemensS7Client.cs]
+- [MitsubishiMcClient.cs]
+- [PollingScheduler.cs]
+- [PollingSchedulerTests.cs]
 - [MainWindow.xaml.cs]
 
 ## 验证
@@ -789,3 +811,4 @@ await s7Client.WriteDbClassAsync(db200, 200);
 - `dotnet test .\IndustrialCommSdk.Tests\IndustrialCommSdk.Tests.csproj`
 - `dotnet build .\IndustrialCommDemo\IndustrialCommDemo.csproj -p:BuildProjectReferences=false`
 
+PR #1 合并时，本环境无法克隆仓库执行本地 `dotnet test`，因此已通过 GitHub diff 和测试代码复查完成文档更新。建议在本机或 CI 再跑一次 SDK 测试与 Demo 构建。
