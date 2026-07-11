@@ -177,6 +177,8 @@ namespace IndustrialCommSdk.Protocols.S7
         public short Slot { get; set; } = 1;
         public CpuType CpuType { get; set; } = CpuType.S71200;
         public bool AutoReconnect { get; set; } = true;
+        public int ConnectTimeoutMilliseconds { get; set; } = 5000;
+        public int OperationTimeoutMilliseconds { get; set; } = 5000;
     }
 
     /// <summary>
@@ -196,13 +198,16 @@ namespace IndustrialCommSdk.Protocols.S7
             S7AddressParser parser = null)
             : base(GetDeviceId(options), ProtocolKind.SiemensS7,
                 pollingScheduler ?? new PollingScheduler(logger),
-                logger ?? NullIndustrialLogger.Instance)
+                logger ?? NullIndustrialLogger.Instance,
+                options.OperationTimeoutMilliseconds)
         {
             _options = options ?? throw new ArgumentNullException(nameof(options));
             if (string.IsNullOrWhiteSpace(_options.Host))
                 throw new ArgumentException("S7 host is required.", nameof(options));
             if (_options.Rack < 0) throw new ArgumentOutOfRangeException(nameof(options), "Rack cannot be negative.");
             if (_options.Slot < 0) throw new ArgumentOutOfRangeException(nameof(options), "Slot cannot be negative.");
+            if (_options.ConnectTimeoutMilliseconds <= 0) throw new ArgumentOutOfRangeException(nameof(options), "Connect timeout must be positive.");
+            if (_options.OperationTimeoutMilliseconds <= 0) throw new ArgumentOutOfRangeException(nameof(options), "Operation timeout must be positive.");
             _parser = parser ?? new S7AddressParser();
         }
 
@@ -267,10 +272,21 @@ namespace IndustrialCommSdk.Protocols.S7
             var plc = new Plc(_options.CpuType, _options.Host, _options.Rack, _options.Slot);
             try
             {
-                await plc.OpenAsync(cancellationToken).ConfigureAwait(false);
+                using (var timeoutCts = new CancellationTokenSource(_options.ConnectTimeoutMilliseconds))
+                using (var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutCts.Token))
+                {
+                    try { await plc.OpenAsync(linkedCts.Token).ConfigureAwait(false); }
+                    catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+                    { throw new IndustrialTimeoutException("Siemens S7 connect timeout."); }
+                }
                 if (!plc.IsConnected)
                     throw new IndustrialConnectionException("S7.NetPlus completed OpenAsync but the PLC is not connected.");
                 _plc = plc;
+            }
+            catch (IndustrialTimeoutException)
+            {
+                SafeClose(plc);
+                throw;
             }
             catch (OperationCanceledException)
             {
@@ -290,6 +306,8 @@ namespace IndustrialCommSdk.Protocols.S7
             ClosePlc();
             return Task.CompletedTask;
         }
+
+        protected override void OnOperationTimeout() { ClosePlc(); }
 
         protected override Task<DataValue> ReadCoreAsync(ReadRequest request, CancellationToken cancellationToken)
         {

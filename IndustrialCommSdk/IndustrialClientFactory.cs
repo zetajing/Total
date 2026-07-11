@@ -22,11 +22,13 @@ namespace IndustrialCommSdk
             string deviceId = null,
             IIndustrialLogger logger = null,
             IModbusDeviceProfile deviceProfile = null,
-            int connectTimeoutMilliseconds = 3000)
+            int connectTimeoutMilliseconds = 3000,
+            int operationTimeoutMilliseconds = 5000)
         {
             ValidateHost(host);
             ValidatePort(port, nameof(port));
             ValidatePositive(connectTimeoutMilliseconds, nameof(connectTimeoutMilliseconds));
+            ValidatePositive(operationTimeoutMilliseconds, nameof(operationTimeoutMilliseconds));
 
             return new ModbusTcpClient(new ModbusTcpClientOptions
             {
@@ -36,6 +38,7 @@ namespace IndustrialCommSdk
                 SlaveId = slaveId,
                 DeviceProfile = deviceProfile ?? ModbusDeviceProfiles.InovanceEasyPlc,
                 ConnectTimeoutMilliseconds = connectTimeoutMilliseconds,
+                OperationTimeoutMilliseconds = operationTimeoutMilliseconds,
             }, logger);
         }
 
@@ -53,7 +56,8 @@ namespace IndustrialCommSdk
             int readTimeout = 3000,
             int writeTimeout = 3000,
             int retries = 2,
-            int waitToRetryMilliseconds = 100)
+            int waitToRetryMilliseconds = 100,
+            int operationTimeoutMilliseconds = 5000)
         {
             ValidateText(portName, nameof(portName));
             ValidatePositive(baudRate, nameof(baudRate));
@@ -62,6 +66,7 @@ namespace IndustrialCommSdk
             ValidatePositive(writeTimeout, nameof(writeTimeout));
             ValidateNonNegative(retries, nameof(retries));
             ValidateNonNegative(waitToRetryMilliseconds, nameof(waitToRetryMilliseconds));
+            ValidatePositive(operationTimeoutMilliseconds, nameof(operationTimeoutMilliseconds));
 
             return new ModbusRtuClient(new ModbusRtuClientOptions
             {
@@ -77,6 +82,7 @@ namespace IndustrialCommSdk
                 WriteTimeout = writeTimeout,
                 Retries = retries,
                 WaitToRetryMilliseconds = waitToRetryMilliseconds,
+                OperationTimeoutMilliseconds = operationTimeoutMilliseconds,
             }, logger);
         }
 
@@ -87,9 +93,13 @@ namespace IndustrialCommSdk
             short rack = 0,
             short slot = 1,
             string deviceId = null,
-            IIndustrialLogger logger = null)
+            IIndustrialLogger logger = null,
+            int connectTimeoutMilliseconds = 5000,
+            int operationTimeoutMilliseconds = 5000)
         {
             ValidateHost(host);
+            ValidatePositive(connectTimeoutMilliseconds, nameof(connectTimeoutMilliseconds));
+            ValidatePositive(operationTimeoutMilliseconds, nameof(operationTimeoutMilliseconds));
 
             return new SiemensS7Client(new SiemensS7ClientOptions
             {
@@ -98,6 +108,8 @@ namespace IndustrialCommSdk
                 CpuType = cpuType,
                 Rack = rack,
                 Slot = slot,
+                ConnectTimeoutMilliseconds = connectTimeoutMilliseconds,
+                OperationTimeoutMilliseconds = operationTimeoutMilliseconds,
             }, logger);
         }
 
@@ -108,12 +120,14 @@ namespace IndustrialCommSdk
             string deviceId = null,
             IIndustrialLogger logger = null,
             int sendTimeoutMilliseconds = 3000,
-            int receiveTimeoutMilliseconds = 5000)
+            int receiveTimeoutMilliseconds = 5000,
+            int operationTimeoutMilliseconds = 5000)
         {
             ValidateHost(host);
             ValidatePort(port, nameof(port));
             ValidatePositive(sendTimeoutMilliseconds, nameof(sendTimeoutMilliseconds));
             ValidatePositive(receiveTimeoutMilliseconds, nameof(receiveTimeoutMilliseconds));
+            ValidatePositive(operationTimeoutMilliseconds, nameof(operationTimeoutMilliseconds));
 
             return new MitsubishiMcClient(new MitsubishiMcClientOptions
             {
@@ -122,6 +136,7 @@ namespace IndustrialCommSdk
                 Port = port,
                 SendTimeoutMilliseconds = sendTimeoutMilliseconds,
                 ReceiveTimeoutMilliseconds = receiveTimeoutMilliseconds,
+                OperationTimeoutMilliseconds = operationTimeoutMilliseconds,
             }, logger);
         }
 
@@ -273,7 +288,8 @@ namespace IndustrialCommSdk
                         CoalesceConfigDeviceId(device.DeviceId, device.Name, "modbus-tcp", device.Host, device.Port.GetValueOrDefault(502), device.SlaveId.GetValueOrDefault(1)),
                         logger,
                         ResolveModbusProfile(device.DeviceProfile, ModbusDeviceProfiles.InovanceEasyPlc),
-                        device.ConnectTimeoutMilliseconds.GetValueOrDefault(3000));
+                        device.ConnectTimeoutMilliseconds.GetValueOrDefault(3000),
+                        device.OperationTimeoutMilliseconds.GetValueOrDefault(5000));
                 case "modbusrtu":
                     return ModbusRtu(
                         device.PortName,
@@ -288,7 +304,8 @@ namespace IndustrialCommSdk
                         device.ReadTimeout.GetValueOrDefault(3000),
                         device.WriteTimeout.GetValueOrDefault(3000),
                         device.Retries.GetValueOrDefault(2),
-                        device.WaitToRetryMilliseconds.GetValueOrDefault(100));
+                        device.WaitToRetryMilliseconds.GetValueOrDefault(100),
+                        device.OperationTimeoutMilliseconds.GetValueOrDefault(5000));
                 case "siemenss7":
                 case "s7":
                     return SiemensS7(
@@ -297,7 +314,9 @@ namespace IndustrialCommSdk
                         device.Rack.GetValueOrDefault(0),
                         device.Slot.GetValueOrDefault(1),
                         CoalesceConfigDeviceId(device.DeviceId, device.Name, "siemens-s7", device.Host, device.Rack.GetValueOrDefault(0), device.Slot.GetValueOrDefault(1)),
-                        logger);
+                        logger,
+                        device.ConnectTimeoutMilliseconds.GetValueOrDefault(5000),
+                        device.OperationTimeoutMilliseconds.GetValueOrDefault(5000));
                 case "mitsubishimc":
                 case "mc":
                     return MitsubishiMc(
@@ -306,7 +325,8 @@ namespace IndustrialCommSdk
                         CoalesceConfigDeviceId(device.DeviceId, device.Name, "mitsubishi-mc", device.Host, device.Port.GetValueOrDefault(5000)),
                         logger,
                         device.SendTimeoutMilliseconds.GetValueOrDefault(3000),
-                        device.ReceiveTimeoutMilliseconds.GetValueOrDefault(5000));
+                        device.ReceiveTimeoutMilliseconds.GetValueOrDefault(5000),
+                        device.OperationTimeoutMilliseconds.GetValueOrDefault(5000));
                 default:
                     throw new ArgumentException(string.Format("Unsupported protocol: {0}", device.Protocol), nameof(device));
             }

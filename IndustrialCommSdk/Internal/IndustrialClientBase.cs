@@ -11,7 +11,7 @@ using IndustrialCommSdk.Exceptions;
 namespace IndustrialCommSdk.Internal
 {
     /// <summary>工业客户端公共基类，统一处理操作串行化、超时、健康状态和轮询订阅。</summary>
-    public abstract class IndustrialClientBase : IIndustrialClient, IProtocolCapabilityProvider
+    public abstract class IndustrialClientBase : IIndustrialClient, IProtocolCapabilityProvider, IIndustrialDiagnosticsProvider
     {
         private readonly SemaphoreSlim _operationLock = new SemaphoreSlim(1, 1);
         private readonly IPollingScheduler _pollingScheduler;
@@ -21,8 +21,20 @@ namespace IndustrialCommSdk.Internal
         private string _lastError;
         private ConnectionStatus _status;
         private int _disposed;
+        private readonly TimeSpan _defaultOperationTimeout;
+        private readonly object _diagnosticSync = new object();
+        private long _totalOperations;
+        private long _successfulOperations;
+        private long _failedOperations;
+        private long _timeoutCount;
+        private long _lastOperationElapsedMilliseconds;
+        private IndustrialFailureCategory _lastFailureCategory;
+        private DateTimeOffset? _lastOperationUtc;
+        private long _serialPortOpenFailureCount;
+        private long _responseTimeoutCount;
+        private long _frameErrorCount;
 
-        protected IndustrialClientBase(string deviceId, ProtocolKind kind, IPollingScheduler pollingScheduler, IIndustrialLogger logger)
+        protected IndustrialClientBase(string deviceId, ProtocolKind kind, IPollingScheduler pollingScheduler, IIndustrialLogger logger, int operationTimeoutMilliseconds = 5000)
         {
             if (string.IsNullOrWhiteSpace(deviceId)) throw new ArgumentException("Device ID cannot be null or empty.", nameof(deviceId));
             DeviceId = deviceId;
@@ -30,6 +42,8 @@ namespace IndustrialCommSdk.Internal
             _pollingScheduler = pollingScheduler ?? throw new ArgumentNullException(nameof(pollingScheduler));
             _logger = logger ?? NullIndustrialLogger.Instance;
             _status = ConnectionStatus.Disconnected;
+            if (operationTimeoutMilliseconds <= 0) throw new ArgumentOutOfRangeException(nameof(operationTimeoutMilliseconds));
+            _defaultOperationTimeout = TimeSpan.FromMilliseconds(operationTimeoutMilliseconds);
         }
 
         public string DeviceId { get; private set; }
@@ -57,12 +71,12 @@ namespace IndustrialCommSdk.Internal
                 _status = ConnectionStatus.Connecting;
                 _logger.Info(string.Format("CONNECT begin | Device={0} | Protocol={1}", DeviceId, Kind));
                 await ConnectCoreAsync(cancellationToken).ConfigureAwait(false);
-                RecordSuccess();
+                RecordSuccess(stopwatch.ElapsedMilliseconds);
                 _logger.Info(string.Format("CONNECT completed | Device={0} | Protocol={1} | Elapsed={2}ms", DeviceId, Kind, stopwatch.ElapsedMilliseconds));
             }
             catch (Exception ex)
             {
-                RecordFailure(ex, true);
+                RecordFailure(ex, true, stopwatch.ElapsedMilliseconds);
                 throw;
             }
             finally
@@ -88,24 +102,27 @@ namespace IndustrialCommSdk.Internal
 
         public async Task<DataValue> ReadAsync(ReadRequest request, CancellationToken cancellationToken)
         {
+            var stopwatch = Stopwatch.StartNew();
             if (request == null) throw new ArgumentNullException(nameof(request));
             ValidateDeviceId(request.DeviceId);
             await _operationLock.WaitAsync(cancellationToken).ConfigureAwait(false);
             try
             {
                 ThrowIfDisposed();
-                using (var operationCts = CreateOperationCancellation(request.Timeout, cancellationToken))
+                var effectiveTimeout = request.Timeout ?? _defaultOperationTimeout;
+                using (var operationCts = CreateOperationCancellation(effectiveTimeout, cancellationToken))
                 {
                     try
                     {
-                        var value = await ReadCoreAsync(request, operationCts.Token).ConfigureAwait(false);
-                        RecordReadResult(value);
+                        var value = await AwaitWithCancellation(ReadCoreAsync(request, operationCts.Token), operationCts.Token).ConfigureAwait(false);
+                        RecordReadResult(value, stopwatch.ElapsedMilliseconds);
                         return value;
                     }
-                    catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested && request.Timeout.HasValue)
+                    catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
                     {
                         var ex = new IndustrialTimeoutException("Industrial read operation timed out.");
-                        RecordFailure(ex, true);
+                        HandleOperationTimeoutSafely();
+                        RecordFailure(ex, true, stopwatch.ElapsedMilliseconds);
                         return BadValue(request, ex.Message);
                     }
                     catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -114,7 +131,7 @@ namespace IndustrialCommSdk.Internal
                     }
                     catch (Exception ex)
                     {
-                        RecordFailure(ex, IsConnectionFailure(ex));
+                        RecordFailure(ex, IsConnectionFailure(ex), stopwatch.ElapsedMilliseconds);
                         return BadValue(request, ex.Message);
                     }
                 }
@@ -127,6 +144,7 @@ namespace IndustrialCommSdk.Internal
 
         public async Task<BatchReadResult> ReadManyAsync(IReadOnlyCollection<ReadRequest> requests, CancellationToken cancellationToken)
         {
+            var stopwatch = Stopwatch.StartNew();
             if (requests == null) throw new ArgumentNullException(nameof(requests));
             if (requests.Count == 0) return new BatchReadResult(new List<DataValue>());
             ValidateRequests(requests.Select(x => x.DeviceId));
@@ -135,19 +153,20 @@ namespace IndustrialCommSdk.Internal
             try
             {
                 ThrowIfDisposed();
-                var timeout = GetShortestTimeout(requests.Select(x => x.Timeout));
+                var timeout = GetShortestTimeout(requests.Select(x => x.Timeout)) ?? _defaultOperationTimeout;
                 using (var operationCts = CreateOperationCancellation(timeout, cancellationToken))
                 {
                     try
                     {
-                        var result = await ReadManyCoreAsync(requests, operationCts.Token).ConfigureAwait(false);
-                        RecordBatchResult(result);
+                        var result = await AwaitWithCancellation(ReadManyCoreAsync(requests, operationCts.Token), operationCts.Token).ConfigureAwait(false);
+                        RecordBatchResult(result, stopwatch.ElapsedMilliseconds);
                         return result;
                     }
-                    catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested && timeout.HasValue)
+                    catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
                     {
                         var ex = new IndustrialTimeoutException("Industrial batch read operation timed out.");
-                        RecordFailure(ex, true);
+                        HandleOperationTimeoutSafely();
+                        RecordFailure(ex, true, stopwatch.ElapsedMilliseconds);
                         return CreateBadBatch(requests, ex.Message);
                     }
                     catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -156,7 +175,7 @@ namespace IndustrialCommSdk.Internal
                     }
                     catch (Exception ex)
                     {
-                        RecordFailure(ex, IsConnectionFailure(ex));
+                        RecordFailure(ex, IsConnectionFailure(ex), stopwatch.ElapsedMilliseconds);
                         return CreateBadBatch(requests, ex.Message);
                     }
                 }
@@ -169,28 +188,31 @@ namespace IndustrialCommSdk.Internal
 
         public async Task WriteAsync(WriteRequest request, CancellationToken cancellationToken)
         {
+            var stopwatch = Stopwatch.StartNew();
             if (request == null) throw new ArgumentNullException(nameof(request));
             ValidateDeviceId(request.DeviceId);
             await _operationLock.WaitAsync(cancellationToken).ConfigureAwait(false);
             try
             {
                 ThrowIfDisposed();
-                using (var operationCts = CreateOperationCancellation(request.Timeout, cancellationToken))
+                var effectiveTimeout = request.Timeout ?? _defaultOperationTimeout;
+                using (var operationCts = CreateOperationCancellation(effectiveTimeout, cancellationToken))
                 {
                     try
                     {
-                        await WriteCoreAsync(request, operationCts.Token).ConfigureAwait(false);
-                        RecordSuccess();
+                        await AwaitWithCancellation(WriteCoreAsync(request, operationCts.Token), operationCts.Token).ConfigureAwait(false);
+                        RecordSuccess(stopwatch.ElapsedMilliseconds);
                     }
-                    catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested && request.Timeout.HasValue)
+                    catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
                     {
                         var ex = new IndustrialTimeoutException("Industrial write operation timed out.");
-                        RecordFailure(ex, true);
+                        HandleOperationTimeoutSafely();
+                        RecordFailure(ex, true, stopwatch.ElapsedMilliseconds);
                         throw ex;
                     }
                     catch (Exception ex)
                     {
-                        RecordFailure(ex, IsConnectionFailure(ex));
+                        RecordFailure(ex, IsConnectionFailure(ex), stopwatch.ElapsedMilliseconds);
                         throw;
                     }
                 }
@@ -203,6 +225,7 @@ namespace IndustrialCommSdk.Internal
 
         public async Task WriteManyAsync(IReadOnlyCollection<WriteRequest> requests, CancellationToken cancellationToken)
         {
+            var stopwatch = Stopwatch.StartNew();
             if (requests == null) throw new ArgumentNullException(nameof(requests));
             if (requests.Count == 0) return;
             ValidateRequests(requests.Select(x => x.DeviceId));
@@ -211,23 +234,24 @@ namespace IndustrialCommSdk.Internal
             try
             {
                 ThrowIfDisposed();
-                var timeout = GetShortestTimeout(requests.Select(x => x.Timeout));
+                var timeout = GetShortestTimeout(requests.Select(x => x.Timeout)) ?? _defaultOperationTimeout;
                 using (var operationCts = CreateOperationCancellation(timeout, cancellationToken))
                 {
                     try
                     {
-                        await WriteManyCoreAsync(requests, operationCts.Token).ConfigureAwait(false);
-                        RecordSuccess();
+                        await AwaitWithCancellation(WriteManyCoreAsync(requests, operationCts.Token), operationCts.Token).ConfigureAwait(false);
+                        RecordSuccess(stopwatch.ElapsedMilliseconds);
                     }
-                    catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested && timeout.HasValue)
+                    catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
                     {
                         var ex = new IndustrialTimeoutException("Industrial batch write operation timed out.");
-                        RecordFailure(ex, true);
+                        HandleOperationTimeoutSafely();
+                        RecordFailure(ex, true, stopwatch.ElapsedMilliseconds);
                         throw ex;
                     }
                     catch (Exception ex)
                     {
-                        RecordFailure(ex, IsConnectionFailure(ex));
+                        RecordFailure(ex, IsConnectionFailure(ex), stopwatch.ElapsedMilliseconds);
                         throw;
                     }
                 }
@@ -291,6 +315,13 @@ namespace IndustrialCommSdk.Internal
         protected abstract Task DisconnectCoreAsync(CancellationToken cancellationToken);
         protected abstract Task<DataValue> ReadCoreAsync(ReadRequest request, CancellationToken cancellationToken);
         protected abstract Task WriteCoreAsync(WriteRequest request, CancellationToken cancellationToken);
+        protected virtual void OnOperationTimeout() { }
+
+        private void HandleOperationTimeoutSafely()
+        {
+            try { OnOperationTimeout(); }
+            catch (Exception ex) { _logger.Error(string.Format("Timeout cleanup failed | Device={0} | Protocol={1}", DeviceId, Kind), ex); }
+        }
 
         protected virtual async Task<BatchReadResult> ReadManyCoreAsync(IReadOnlyCollection<ReadRequest> requests, CancellationToken cancellationToken)
         {
@@ -331,8 +362,12 @@ namespace IndustrialCommSdk.Internal
             }
         }
 
-        protected void RecordSuccess()
+        protected void RecordSuccess(long elapsedMilliseconds = 0)
         {
+            Interlocked.Increment(ref _totalOperations);
+            Interlocked.Increment(ref _successfulOperations);
+            Interlocked.Exchange(ref _lastOperationElapsedMilliseconds, elapsedMilliseconds);
+            lock (_diagnosticSync) { _lastFailureCategory = IndustrialFailureCategory.None; _lastOperationUtc = DateTimeOffset.UtcNow; }
             _lastSuccessUtc = DateTimeOffset.UtcNow;
             Interlocked.Exchange(ref _consecutiveFailures, 0);
             _lastError = null;
@@ -344,25 +379,29 @@ namespace IndustrialCommSdk.Internal
             RecordFailure(ex, IsConnectionFailure(ex));
         }
 
-        private void RecordReadResult(DataValue value)
+        private void RecordReadResult(DataValue value, long elapsedMilliseconds)
         {
             if (value != null && value.Quality == QualityStatus.Good)
-                RecordSuccess();
+                RecordSuccess(elapsedMilliseconds);
             else
-                RecordFailure(new IndustrialCommunicationException(value == null ? "Read returned no value." : value.ErrorMessage ?? "Read returned bad quality."), false);
+                RecordFailure(new IndustrialCommunicationException(value == null ? "Read returned no value." : value.ErrorMessage ?? "Read returned bad quality."), false, elapsedMilliseconds);
         }
 
-        private void RecordBatchResult(BatchReadResult result)
+        private void RecordBatchResult(BatchReadResult result, long elapsedMilliseconds)
         {
             if (result == null || result.Values == null || result.Values.Count == 0)
             {
-                RecordFailure(new IndustrialCommunicationException("Batch read returned no values."), false);
+                RecordFailure(new IndustrialCommunicationException("Batch read returned no values."), false, elapsedMilliseconds);
                 return;
             }
 
             var goodCount = result.Values.Count(x => x.Quality == QualityStatus.Good);
             if (goodCount > 0)
             {
+                Interlocked.Increment(ref _totalOperations);
+                Interlocked.Increment(ref _successfulOperations);
+                Interlocked.Exchange(ref _lastOperationElapsedMilliseconds, elapsedMilliseconds);
+                lock (_diagnosticSync) { _lastOperationUtc = DateTimeOffset.UtcNow; _lastFailureCategory = IndustrialFailureCategory.None; }
                 _lastSuccessUtc = DateTimeOffset.UtcNow;
                 _status = IsConnected ? ConnectionStatus.Connected : _status;
                 if (goodCount == result.Values.Count)
@@ -378,16 +417,49 @@ namespace IndustrialCommSdk.Internal
             }
             else
             {
-                RecordFailure(new IndustrialCommunicationException("Batch read returned only bad quality values."), false);
+                RecordFailure(new IndustrialCommunicationException("Batch read returned only bad quality values."), false, elapsedMilliseconds);
             }
         }
 
-        private void RecordFailure(Exception ex, bool connectionFailure)
+        private void RecordFailure(Exception ex, bool connectionFailure, long elapsedMilliseconds = 0)
         {
+            Interlocked.Increment(ref _totalOperations);
+            Interlocked.Increment(ref _failedOperations);
+            if (ex is IndustrialTimeoutException) Interlocked.Increment(ref _timeoutCount);
+            Interlocked.Exchange(ref _lastOperationElapsedMilliseconds, elapsedMilliseconds);
+            lock (_diagnosticSync) { _lastFailureCategory = ClassifyFailure(ex); _lastOperationUtc = DateTimeOffset.UtcNow; }
             Interlocked.Increment(ref _consecutiveFailures);
             _lastError = ex == null ? null : ex.Message;
             if (connectionFailure) _status = ConnectionStatus.Faulted;
             _logger.Error(string.Format("Operation failed | Device={0} | Protocol={1}", DeviceId, Kind), ex);
+        }
+
+        public IndustrialDiagnosticSnapshot GetDiagnosticSnapshot()
+        {
+            lock (_diagnosticSync)
+            {
+                return new IndustrialDiagnosticSnapshot(DeviceId, Kind, Interlocked.Read(ref _totalOperations),
+                    Interlocked.Read(ref _successfulOperations), Interlocked.Read(ref _failedOperations),
+                    Interlocked.Read(ref _timeoutCount), Volatile.Read(ref _consecutiveFailures),
+                    Interlocked.Read(ref _lastOperationElapsedMilliseconds), _lastFailureCategory, _lastError, _lastOperationUtc,
+                    Interlocked.Read(ref _serialPortOpenFailureCount), Interlocked.Read(ref _responseTimeoutCount),
+                    Interlocked.Read(ref _frameErrorCount));
+            }
+        }
+
+        protected void RecordSerialPortOpenFailure() { Interlocked.Increment(ref _serialPortOpenFailureCount); }
+        protected void RecordResponseTimeout() { Interlocked.Increment(ref _responseTimeoutCount); }
+        protected void RecordFrameError() { Interlocked.Increment(ref _frameErrorCount); }
+
+        private static IndustrialFailureCategory ClassifyFailure(Exception ex)
+        {
+            if (ex == null) return IndustrialFailureCategory.Unknown;
+            if (ex is IndustrialTimeoutException || ex is TimeoutException) return IndustrialFailureCategory.Timeout;
+            if (ex is IndustrialAddressParseException) return IndustrialFailureCategory.Address;
+            if (ex is IndustrialDataConversionException) return IndustrialFailureCategory.DataConversion;
+            if (ex is IndustrialProtocolException) return IndustrialFailureCategory.Protocol;
+            if (ex is IndustrialConnectionException || ex is System.IO.IOException || ex is System.Net.Sockets.SocketException) return IndustrialFailureCategory.Connection;
+            return ex.InnerException == null ? IndustrialFailureCategory.Unknown : ClassifyFailure(ex.InnerException);
         }
 
         private static bool IsConnectionFailure(Exception ex)
@@ -426,6 +498,31 @@ namespace IndustrialCommSdk.Internal
             var source = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             if (timeout.HasValue) source.CancelAfter(timeout.Value);
             return source;
+        }
+
+        private static async Task<T> AwaitWithCancellation<T>(Task<T> task, CancellationToken cancellationToken)
+        {
+            if (task == null) throw new ArgumentNullException(nameof(task));
+            if (task.IsCompleted) return await task.ConfigureAwait(false);
+            var cancellation = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            using (cancellationToken.Register(() => cancellation.TrySetCanceled()))
+            {
+                var completed = await Task.WhenAny(task, cancellation.Task).ConfigureAwait(false);
+                if (completed != task) cancellationToken.ThrowIfCancellationRequested();
+                return await task.ConfigureAwait(false);
+            }
+        }
+
+        private static async Task AwaitWithCancellation(Task task, CancellationToken cancellationToken)
+        {
+            await AwaitWithCancellation(WrapTask(task), cancellationToken).ConfigureAwait(false);
+        }
+
+        private static async Task<bool> WrapTask(Task task)
+        {
+            if (task == null) throw new ArgumentNullException(nameof(task));
+            await task.ConfigureAwait(false);
+            return true;
         }
 
         private static DataValue BadValue(ReadRequest request, string message)

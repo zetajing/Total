@@ -153,6 +153,7 @@ namespace IndustrialCommSdk.Protocols.Mc
         public int Port { get; set; } = 5000;
         public int SendTimeoutMilliseconds { get; set; } = 3000;
         public int ReceiveTimeoutMilliseconds { get; set; } = 5000;
+        public int OperationTimeoutMilliseconds { get; set; } = 5000;
     }
 
     public sealed class MitsubishiMcClient : IndustrialClientBase, IBatchOperationPlanner
@@ -166,11 +167,12 @@ namespace IndustrialCommSdk.Protocols.Mc
             IPollingScheduler pollingScheduler = null,
             McAddressParser parser = null)
             : base(GetDeviceId(options), ProtocolKind.MitsubishiMc,
-                pollingScheduler ?? new PollingScheduler(logger), logger ?? NullIndustrialLogger.Instance)
+                pollingScheduler ?? new PollingScheduler(logger), logger ?? NullIndustrialLogger.Instance, options.OperationTimeoutMilliseconds)
         {
             if (options == null) throw new ArgumentNullException(nameof(options));
             if (string.IsNullOrWhiteSpace(options.Host)) throw new ArgumentException("Host is required.", nameof(options));
             if (options.Port < 1 || options.Port > 65535) throw new ArgumentOutOfRangeException(nameof(options.Port));
+            if (options.OperationTimeoutMilliseconds <= 0) throw new ArgumentOutOfRangeException(nameof(options.OperationTimeoutMilliseconds));
 
             _transport = new TcpTransportClient(new TcpTransportOptions
             {
@@ -363,6 +365,12 @@ namespace IndustrialCommSdk.Protocols.Mc
         protected override void DisposeCore()
         {
             _transport.Dispose();
+        }
+
+        protected override void OnOperationTimeout()
+        {
+            try { _transport.DisconnectAsync(CancellationToken.None).GetAwaiter().GetResult(); }
+            catch { }
         }
 
         private sealed class PlannedMcRead

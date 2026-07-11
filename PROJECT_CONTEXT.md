@@ -84,6 +84,8 @@ IndustrialCommDemo（上位机应用、交互、展示）
 
 SDK 内部按职责划分：`Abstractions` 放公共契约，`Protocols` 放协议实现，`Transport` 放传输层，`Polling` 放调度，`Diagnostics` 放诊断与日志，`Storage` 放数据库、导出和数据目录策略，`Mes` 放 MES 通讯。Demo 只引用 `IndustrialCommSdk`，不再维护独立的 `LogHelper` 程序集。
 
+稳定性基线：内置 PLC 默认操作超时 5000 ms，请求级超时优先；TCP 传输提供可选业务分帧；客户端通过可选诊断接口公开结构化累计快照，不修改 `IIndustrialClient`。
+
 ## 支持的协议
 
 - Modbus TCP / RTU

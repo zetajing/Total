@@ -172,6 +172,11 @@ namespace IndustrialCommSdk
                     errors.Add(string.Format("设备 '{0}' 的 reconnectDelayMilliseconds 必须大于 0。", device.Name ?? label));
                 }
 
+                if (device.OperationTimeoutMilliseconds.HasValue && device.OperationTimeoutMilliseconds.Value <= 0)
+                {
+                    errors.Add(string.Format("设备 '{0}' 的 operationTimeoutMilliseconds 必须大于 0。", device.Name ?? label));
+                }
+
                 try
                 {
                     using (IndustrialClientFactory.FromConfig(device))
@@ -268,6 +273,10 @@ namespace IndustrialCommSdk
         /// <summary>获取或设置建立连接的超时时间，单位为毫秒。</summary>
         [DataMember(Name = "connectTimeoutMilliseconds", EmitDefaultValue = false)]
         public int? ConnectTimeoutMilliseconds { get; set; }
+
+        /// <summary>获取或设置单次协议读写的默认总超时，单位为毫秒；省略时为 5000。</summary>
+        [DataMember(Name = "operationTimeoutMilliseconds", EmitDefaultValue = false)]
+        public int? OperationTimeoutMilliseconds { get; set; }
 
         /// <summary>获取或设置发送超时时间，单位为毫秒。</summary>
         [DataMember(Name = "sendTimeoutMilliseconds", EmitDefaultValue = false)]

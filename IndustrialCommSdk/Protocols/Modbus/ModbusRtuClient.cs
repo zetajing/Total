@@ -80,6 +80,7 @@ namespace IndustrialCommSdk.Protocols.Modbus
             }
             catch (TimeoutException ex)
             {
+                RecordResponseTimeout();
                 if (received.Count > 0)
                 {
                     var partial = received.ToArray();
@@ -101,6 +102,7 @@ namespace IndustrialCommSdk.Protocols.Modbus
             Logger.Info("Modbus RTU RX (raw) | " + BitConverter.ToString(response).Replace('-', ' '));
             if (!crcValid)
             {
+                RecordFrameError();
                 Logger.Warn(string.Format("Modbus RTU RAW CRC failed | Bytes={0} | Elapsed={1}ms", response.Length, stopwatch.ElapsedMilliseconds));
                 throw new InvalidDataException("Modbus RTU 响应 CRC 校验失败。");
             }
@@ -134,7 +136,7 @@ namespace IndustrialCommSdk.Protocols.Modbus
         /// <param name="addressParser">可选的 Modbus 地址解析器。如果为 null，则使用配置文件的默认解析器。</param>
         /// <exception cref="ArgumentNullException">当 <paramref name="options"/> 为 null 时引发。</exception>
         public ModbusRtuClient(ModbusRtuClientOptions options, IIndustrialLogger logger = null, IPollingScheduler pollingScheduler = null, ModbusAddressParser addressParser = null)
-            : base(GetDeviceId(options), ProtocolKind.ModbusRtu, options.SlaveId, options.DeviceProfile, addressParser, pollingScheduler, logger)
+            : base(GetDeviceId(options), ProtocolKind.ModbusRtu, options.SlaveId, options.DeviceProfile, addressParser, pollingScheduler, logger, options.OperationTimeoutMilliseconds)
         {
             ValidateOptions(options);
             _options = options;
@@ -165,6 +167,8 @@ namespace IndustrialCommSdk.Protocols.Modbus
                 throw new ArgumentOutOfRangeException(nameof(options), "Modbus RTU read timeout must be greater than zero.");
             if (options.WriteTimeout <= 0)
                 throw new ArgumentOutOfRangeException(nameof(options), "Modbus RTU write timeout must be greater than zero.");
+            if (options.OperationTimeoutMilliseconds <= 0)
+                throw new ArgumentOutOfRangeException(nameof(options), "Modbus RTU operation timeout must be greater than zero.");
             if (options.Retries < 0)
                 throw new ArgumentOutOfRangeException(nameof(options), "Modbus RTU retries cannot be negative.");
             if (options.WaitToRetryMilliseconds <= 0)
@@ -215,6 +219,7 @@ namespace IndustrialCommSdk.Protocols.Modbus
             }
             catch (Exception ex) when (!(ex is IndustrialConnectionException))
             {
+                RecordSerialPortOpenFailure();
                 DisconnectInternal();
                 throw new IndustrialConnectionException(
                     string.Format("Failed to open serial port {0}.", _options.PortName), ex);
@@ -267,5 +272,7 @@ namespace IndustrialCommSdk.Protocols.Modbus
             }
             if (wasOpen) Logger.Info("Modbus RTU serial closed | Port=" + _options.PortName);
         }
+
+        protected override void OnOperationTimeout() { DisconnectInternal(); }
     }
 }

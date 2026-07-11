@@ -48,6 +48,9 @@ namespace IndustrialCommSdk.Protocols.Modbus
         /// </summary>
         public int WriteTimeout { get; set; } = 3000;
 
+        /// <summary>获取或设置 SDK 单次读写操作的默认总超时（毫秒）。</summary>
+        public int OperationTimeoutMilliseconds { get; set; } = 5000;
+
         /// <summary>
         /// 获取或设置通信失败后的重试次数。默认值为 2。
         /// </summary>

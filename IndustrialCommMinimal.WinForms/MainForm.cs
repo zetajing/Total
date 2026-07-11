@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using System.Windows.Forms;
 using IndustrialCommSdk;
 using IndustrialCommSdk.Abstractions;
+using IndustrialCommSdk.Diagnostics;
 using IndustrialCommSdk.Mes;
 using IndustrialCommSdk.Transport;
 
@@ -27,6 +28,7 @@ namespace IndustrialCommMinimal.WinForms
 
         // 原始 TCP 和 MES TCP 有各自专用 API，不属于统一 PLC 读写抽象，单独持有实例。
         private TcpTransportClient _rawTcpClient;
+        private FramedTcpClient _framedTcpClient;
         private MesTcpClient _mesTcpClient;
 
         /// <summary>创建主窗体并加载由 Visual Studio 设计器维护的全部控件。</summary>
@@ -84,6 +86,7 @@ namespace IndustrialCommMinimal.WinForms
                 assign(client);
                 await client.ConnectAsync(CancellationToken.None);
                 Append(output, "已连接 " + client.DeviceId);
+                AppendDiagnostics(output, client);
             });
         }
 
@@ -107,6 +110,7 @@ namespace IndustrialCommMinimal.WinForms
                 var dataType = ParseDataType(type.Text);
                 var result = await client.ReadAsync(new ReadRequest(client.DeviceId, address.Text.Trim(), dataType), CancellationToken.None);
                 Append(output, string.Format(CultureInfo.InvariantCulture, "读取 {0}: {1} [{2}] {3}", result.Address, result.Value ?? "(null)", result.Quality, result.ErrorMessage));
+                AppendDiagnostics(output, client);
             });
         }
 
@@ -128,6 +132,7 @@ namespace IndustrialCommMinimal.WinForms
                 var dataType = ParseDataType(type.Text);
                 await client.WriteAsync(new WriteRequest(client.DeviceId, address.Text.Trim(), dataType, ConvertValue(value.Text, dataType)), CancellationToken.None);
                 Append(output, "写入完成");
+                AppendDiagnostics(output, client);
             });
         }
 
@@ -149,7 +154,23 @@ namespace IndustrialCommMinimal.WinForms
         /// <summary>创建原始 TCP 传输客户端并连接页面指定的远程端点。</summary>
         private async void RawTcpConnectButton_Click(object sender, EventArgs e)
         {
-            await RunAsync(RawTcpOutputTextBox, async () => { if (_rawTcpClient != null) _rawTcpClient.Dispose(); _rawTcpClient = new TcpTransportClient(new TcpTransportOptions { Host = RawTcpHostTextBox.Text.Trim(), Port = ParsePort(RawTcpPortTextBox.Text), AutoReconnect = false }); await _rawTcpClient.ConnectAsync(CancellationToken.None); Append(RawTcpOutputTextBox, "已连接"); });
+            await RunAsync(RawTcpOutputTextBox, async () =>
+            {
+                if (_rawTcpClient != null) { _rawTcpClient.Dispose(); _rawTcpClient = null; }
+                if (_framedTcpClient != null) { _framedTcpClient.Dispose(); _framedTcpClient = null; }
+                var options = new TcpTransportOptions { Host = RawTcpHostTextBox.Text.Trim(), Port = ParsePort(RawTcpPortTextBox.Text), AutoReconnect = false };
+                if (RawTcpFramingComboBox.Text == "原始字节流")
+                {
+                    _rawTcpClient = new TcpTransportClient(options);
+                    await _rawTcpClient.ConnectAsync(CancellationToken.None);
+                }
+                else
+                {
+                    _framedTcpClient = new FramedTcpClient(options, CreateSelectedFramer());
+                    await _framedTcpClient.ConnectAsync(CancellationToken.None);
+                }
+                Append(RawTcpOutputTextBox, "已连接，模式=" + RawTcpFramingComboBox.Text);
+            });
         }
 
         /// <summary>
@@ -158,13 +179,35 @@ namespace IndustrialCommMinimal.WinForms
         /// </summary>
         private async void RawTcpSendButton_Click(object sender, EventArgs e)
         {
-            await RunAsync(RawTcpOutputTextBox, async () => { if (_rawTcpClient == null || !_rawTcpClient.IsConnected) throw new InvalidOperationException("请先连接。"); var bytes = Encoding.UTF8.GetBytes(RawTcpPayloadTextBox.Text); await _rawTcpClient.SendAsync(bytes, CancellationToken.None); Append(RawTcpOutputTextBox, "TX: " + RawTcpPayloadTextBox.Text); var response = await _rawTcpClient.ReceiveAsync(4096, CancellationToken.None); Append(RawTcpOutputTextBox, "RX: " + Encoding.UTF8.GetString(response)); });
+            await RunAsync(RawTcpOutputTextBox, async () =>
+            {
+                var bytes = Encoding.UTF8.GetBytes(RawTcpPayloadTextBox.Text);
+                byte[] response;
+                if (_framedTcpClient != null && _framedTcpClient.IsConnected)
+                {
+                    await _framedTcpClient.SendFrameAsync(bytes, CancellationToken.None);
+                    response = await _framedTcpClient.ReceiveFrameAsync(CancellationToken.None);
+                }
+                else
+                {
+                    if (_rawTcpClient == null || !_rawTcpClient.IsConnected) throw new InvalidOperationException("请先连接。");
+                    await _rawTcpClient.SendAsync(bytes, CancellationToken.None);
+                    response = await _rawTcpClient.ReceiveAsync(4096, CancellationToken.None);
+                }
+                Append(RawTcpOutputTextBox, "TX: " + RawTcpPayloadTextBox.Text);
+                Append(RawTcpOutputTextBox, "RX: " + Encoding.UTF8.GetString(response));
+            });
         }
 
         /// <summary>主动断开原始 TCP 连接并释放套接字相关资源。</summary>
         private async void RawTcpDisconnectButton_Click(object sender, EventArgs e)
         {
-            await RunAsync(RawTcpOutputTextBox, async () => { if (_rawTcpClient == null) return; await _rawTcpClient.DisconnectAsync(CancellationToken.None); _rawTcpClient.Dispose(); _rawTcpClient = null; Append(RawTcpOutputTextBox, "已断开"); });
+            await RunAsync(RawTcpOutputTextBox, async () =>
+            {
+                if (_rawTcpClient != null) { await _rawTcpClient.DisconnectAsync(CancellationToken.None); _rawTcpClient.Dispose(); _rawTcpClient = null; }
+                if (_framedTcpClient != null) { await _framedTcpClient.DisconnectAsync(CancellationToken.None); _framedTcpClient.Dispose(); _framedTcpClient = null; }
+                Append(RawTcpOutputTextBox, "已断开");
+            });
         }
 
         /// <summary>
@@ -195,7 +238,7 @@ namespace IndustrialCommMinimal.WinForms
         protected override void OnFormClosed(FormClosedEventArgs e)
         {
             DisposeClient(_modbusTcpClient); DisposeClient(_modbusRtuClient); DisposeClient(_s7Client); DisposeClient(_mcClient);
-            if (_rawTcpClient != null) _rawTcpClient.Dispose(); if (_mesTcpClient != null) _mesTcpClient.Dispose();
+            if (_rawTcpClient != null) _rawTcpClient.Dispose(); if (_framedTcpClient != null) _framedTcpClient.Dispose(); if (_mesTcpClient != null) _mesTcpClient.Dispose();
             base.OnFormClosed(e);
         }
 
@@ -213,6 +256,35 @@ namespace IndustrialCommMinimal.WinForms
 
         /// <summary>把设计器下拉框中的类型名称转换为 SDK 数据类型枚举。</summary>
         private static DataType ParseDataType(string value) { return (DataType)Enum.Parse(typeof(DataType), value); }
+
+        private ITcpMessageFramer CreateSelectedFramer()
+        {
+            var maximum = ParsePositive(RawTcpMaximumFrameLengthTextBox.Text, "最大帧长");
+            switch (RawTcpFramingComboBox.Text)
+            {
+                case "固定长度": return new FixedLengthMessageFramer(ParsePositive(RawTcpFrameLengthTextBox.Text, "固定帧长"));
+                case "分隔符": return new DelimiterMessageFramer(ParseEscapedBytes(RawTcpDelimiterTextBox.Text), maximum);
+                case "2字节长度头": return new LengthPrefixMessageFramer(2, maximum);
+                case "4字节长度头": return new LengthPrefixMessageFramer(4, maximum);
+                default: throw new InvalidOperationException("请选择有效的分帧模式。");
+            }
+        }
+
+        private static byte[] ParseEscapedBytes(string text)
+        {
+            var value = (text ?? string.Empty).Replace("\\r", "\r").Replace("\\n", "\n").Replace("\\0", "\0");
+            if (value.Length == 0) throw new FormatException("分隔符不能为空。");
+            return Encoding.UTF8.GetBytes(value);
+        }
+
+        private static void AppendDiagnostics(TextBox output, IIndustrialClient client)
+        {
+            var snapshot = client.GetDiagnosticSnapshot();
+            Append(output, string.Format(CultureInfo.InvariantCulture,
+                "诊断: 耗时={0}ms, 总计={1}, 失败={2}, 超时={3}, 最近分类={4}",
+                snapshot.LastOperationElapsedMilliseconds, snapshot.TotalOperations, snapshot.FailedOperations,
+                snapshot.TimeoutCount, snapshot.LastFailureCategory));
+        }
 
         /// <summary>解析 TCP 端口并限制在标准 1~65535 范围内。</summary>
         private static int ParsePort(string value) { var port = ParsePositive(value, "端口"); if (port > 65535) throw new ArgumentOutOfRangeException("端口", "端口必须小于 65536。"); return port; }

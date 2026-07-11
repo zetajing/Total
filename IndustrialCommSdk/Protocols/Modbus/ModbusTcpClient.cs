@@ -40,6 +40,9 @@ namespace IndustrialCommSdk.Protocols.Modbus
         /// </summary>
         public int ConnectTimeoutMilliseconds { get; set; } = 3000;
 
+        /// <summary>获取或设置单次读写事务的默认超时（毫秒）。请求级 Timeout 优先。</summary>
+        public int OperationTimeoutMilliseconds { get; set; } = 5000;
+
         /// <summary>
         /// 获取或设置 Modbus 设备配置文件，用于定义设备的寄存器映射和字节序等特性。默认使用汇川 EasyPLC 配置。
         /// </summary>
@@ -64,7 +67,7 @@ namespace IndustrialCommSdk.Protocols.Modbus
         /// <param name="addressParser">可选的 Modbus 地址解析器。如果为 null，则使用配置文件的默认解析器。</param>
         /// <exception cref="ArgumentNullException">当 <paramref name="options"/> 为 null 时引发。</exception>
         public ModbusTcpClient(ModbusTcpClientOptions options, IIndustrialLogger logger = null, IPollingScheduler pollingScheduler = null, ModbusAddressParser addressParser = null)
-            : base(GetDeviceId(options), ProtocolKind.ModbusTcp, options.SlaveId, options.DeviceProfile, addressParser, pollingScheduler, logger)
+            : base(GetDeviceId(options), ProtocolKind.ModbusTcp, options.SlaveId, options.DeviceProfile, addressParser, pollingScheduler, logger, options.OperationTimeoutMilliseconds)
         {
             ValidateOptions(options);
             _options = options;
@@ -89,6 +92,8 @@ namespace IndustrialCommSdk.Protocols.Modbus
                 throw new ArgumentOutOfRangeException(nameof(options), "Modbus TCP slave ID must be between 1 and 247.");
             if (options.ConnectTimeoutMilliseconds <= 0)
                 throw new ArgumentOutOfRangeException(nameof(options), "Modbus TCP connect timeout must be greater than zero.");
+            if (options.OperationTimeoutMilliseconds <= 0)
+                throw new ArgumentOutOfRangeException(nameof(options), "Modbus TCP operation timeout must be greater than zero.");
             if (options.DeviceProfile == null)
                 throw new ArgumentException("Modbus TCP device profile is required.", nameof(options));
         }
@@ -157,6 +162,8 @@ namespace IndustrialCommSdk.Protocols.Modbus
         {
             DisconnectInternal();
         }
+
+        protected override void OnOperationTimeout() { DisconnectInternal(); }
 
         /// <summary>
         /// 断开底层 TCP 连接并释放 Modbus 主站和 TCP 客户端的资源。

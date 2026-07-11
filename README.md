@@ -3,6 +3,8 @@
 统一工业通讯 SDK，当前目标运行时为 `net472`。  
 当前工程包含 SDK 类库、日志组件，以及一个可直接调试的 WPF 示例程序。
 
+内置 PLC 客户端默认单次操作超时为 5000 ms；单个 `ReadRequest`/`WriteRequest` 指定的 `Timeout` 优先。客户端可通过 `GetDiagnosticSnapshot()` 获取成功、失败、超时、最近耗时和失败分类。原始 TCP 可使用 `FramedTcpClient` 配合固定长度、分隔符或长度头分帧器处理半包与粘包。
+
 ## 当前能力
 
 - "运行中心"按 `Config/devices.json` 统一加载、启动和停止全部启用设备。

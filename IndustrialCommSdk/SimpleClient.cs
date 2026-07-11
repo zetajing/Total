@@ -21,14 +21,16 @@ namespace IndustrialCommSdk
             string host,
             int port = 502,
             byte slaveId = 1,
-            IIndustrialLogger logger = null)
+            IIndustrialLogger logger = null,
+            int operationTimeoutMilliseconds = 5000)
         {
             return IndustrialClientFactory.ModbusTcp(
                 host,
                 port,
                 slaveId,
                 logger: logger,
-                deviceProfile: ModbusDeviceProfiles.Generic);
+                deviceProfile: ModbusDeviceProfiles.Generic,
+                operationTimeoutMilliseconds: operationTimeoutMilliseconds);
         }
 
         /// <summary>
@@ -39,7 +41,8 @@ namespace IndustrialCommSdk
             string portName,
             int baudRate = 9600,
             byte slaveId = 1,
-            IIndustrialLogger logger = null)
+            IIndustrialLogger logger = null,
+            int operationTimeoutMilliseconds = 5000)
         {
             return IndustrialClientFactory.ModbusRtu(
                 portName,
@@ -49,7 +52,8 @@ namespace IndustrialCommSdk
                 deviceProfile: ModbusDeviceProfiles.Generic,
                 dataBits: 8,
                 parity: Parity.Even,
-                stopBits: StopBits.One);
+                stopBits: StopBits.One,
+                operationTimeoutMilliseconds: operationTimeoutMilliseconds);
         }
 
         /// <summary>
@@ -60,12 +64,14 @@ namespace IndustrialCommSdk
             string host,
             short rack = 0,
             short slot = 1,
-            IIndustrialLogger logger = null)
+            IIndustrialLogger logger = null,
+            int operationTimeoutMilliseconds = 5000)
         {
             return IndustrialClientFactory.SiemensS7(
                 host,
                 rack: rack,
                 slot: slot,
+                operationTimeoutMilliseconds: operationTimeoutMilliseconds,
                 logger: logger);
         }
 
@@ -77,12 +83,14 @@ namespace IndustrialCommSdk
             string host,
             int port = 5000,
             int receiveTimeoutMilliseconds = 5000,
-            IIndustrialLogger logger = null)
+            IIndustrialLogger logger = null,
+            int operationTimeoutMilliseconds = 5000)
         {
             return IndustrialClientFactory.MitsubishiMc(
                 host,
                 port,
                 receiveTimeoutMilliseconds: receiveTimeoutMilliseconds,
+                operationTimeoutMilliseconds: operationTimeoutMilliseconds,
                 logger: logger);
         }
     }

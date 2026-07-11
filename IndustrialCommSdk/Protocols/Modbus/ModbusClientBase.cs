@@ -36,8 +36,9 @@ namespace IndustrialCommSdk.Protocols.Modbus
             IModbusDeviceProfile deviceProfile,
             ModbusAddressParser addressParser,
             IPollingScheduler pollingScheduler,
-            IIndustrialLogger logger)
-            : base(deviceId, kind, pollingScheduler ?? new PollingScheduler(logger), logger ?? NullIndustrialLogger.Instance)
+            IIndustrialLogger logger,
+            int operationTimeoutMilliseconds = 5000)
+            : base(deviceId, kind, pollingScheduler ?? new PollingScheduler(logger), logger ?? NullIndustrialLogger.Instance, operationTimeoutMilliseconds)
         {
             SlaveId = slaveId;
             DeviceProfile = deviceProfile ?? ModbusDeviceProfiles.InovanceEasyPlc;
