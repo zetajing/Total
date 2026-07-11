@@ -4,141 +4,76 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:views="clr-namespace:IndustrialCommDemo.Views"
-        mc:Ignorable="d"
-        Title="工业设备运行中心"
-        Icon="Assets/industrial-comm-icon.png"
-        Width="1280"
-        Height="860"
-        MinWidth="1180"
-        MinHeight="760"
-        WindowStartupLocation="CenterScreen"
-        Background="#F3F6FB">
-    <Window.Resources>
-        <Style TargetType="TabItem">
-            <Setter Property="Padding" Value="14,7" />
-            <Setter Property="FontSize" Value="13" />
-        </Style>
-        <Style TargetType="TextBox">
-            <Setter Property="MinHeight" Value="30" />
-            <Setter Property="Padding" Value="7,3" />
-            <Setter Property="VerticalContentAlignment" Value="Center" />
-        </Style>
-        <Style TargetType="ComboBox">
-            <Setter Property="MinHeight" Value="30" />
-            <Setter Property="VerticalContentAlignment" Value="Center" />
-        </Style>
-        <Style TargetType="Button">
-            <Setter Property="MinHeight" Value="34" />
-            <Setter Property="Padding" Value="12,6" />
-            <Setter Property="Cursor" Value="Hand" />
-        </Style>
-        <Style TargetType="GroupBox">
-            <Setter Property="Padding" Value="4" />
-        </Style>
-        <Style TargetType="DataGrid">
-            <Setter Property="RowHeight" Value="30" />
-            <Setter Property="ColumnHeaderHeight" Value="34" />
-            <Setter Property="GridLinesVisibility" Value="Horizontal" />
-            <Setter Property="HorizontalGridLinesBrush" Value="#E2E8F0" />
-        </Style>
-    </Window.Resources>
-    <Grid Margin="16">
+        mc:Ignorable="d" Title="工业设备运行中心" Icon="Assets/industrial-comm-icon.png"
+        Width="1280" Height="860" MinWidth="1180" MinHeight="760"
+        WindowStartupLocation="CenterScreen" UseLayoutRounding="True" SnapsToDevicePixels="True">
+    <Grid Margin="20,16,20,20">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
-            <RowDefinition Height="180" />
+            <RowDefinition Height="184" />
         </Grid.RowDefinitions>
 
-        <!-- Header bar -->
-        <Border Padding="18,14" CornerRadius="18" Background="#183A5C">
-            <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
-                <StackPanel>
-                    <TextBlock FontSize="22" FontWeight="SemiBold" Foreground="White" Text="工业设备运行中心" />
-                    <TextBlock Margin="0,4,0,0" FontSize="12" Foreground="#A8C2DB" Text="配置驱动的设备运行、实时监控与通讯诊断" />
+        <Grid Margin="4,0,4,14">
+            <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+            <StackPanel>
+                <TextBlock FontFamily="Segoe UI Variable Display, Segoe UI" FontSize="28" FontWeight="SemiBold" Text="工业设备运行中心" />
+                <TextBlock Margin="1,3,0,0" Foreground="{StaticResource TextSecondaryBrush}" Text="设备运行、实时监控与通信诊断" />
+            </StackPanel>
+            <Border Grid.Column="1" Padding="12,7" VerticalAlignment="Center" Background="#E6F4EA" BorderBrush="#C3E6CB" BorderThickness="1" CornerRadius="16">
+                <StackPanel Orientation="Horizontal">
+                    <Ellipse Width="8" Height="8" Margin="0,0,8,0" VerticalAlignment="Center" Fill="#0F7B0F" />
+                    <TextBlock x:Name="HeaderStatusTextBlock" VerticalAlignment="Center" FontWeight="SemiBold" Foreground="#0F6B0F" Text="就绪" />
                 </StackPanel>
-                <Border Grid.Column="1" Padding="14,8" VerticalAlignment="Center" CornerRadius="12" Background="#244D73">
-                    <StackPanel Orientation="Horizontal">
-                        <TextBlock Margin="0,0,8,0" VerticalAlignment="Center" FontSize="12" Foreground="#A8C2DB" Text="状态" />
-                        <TextBlock x:Name="HeaderStatusTextBlock" VerticalAlignment="Center" FontSize="14" FontWeight="SemiBold" Foreground="#86EFAC" Text="就绪" />
-                    </StackPanel>
-                </Border>
-            </Grid>
-        </Border>
+            </Border>
+        </Grid>
 
-        <!-- Tab control: all tabs are now UserControls -->
-        <Border Grid.Row="1" Margin="0,12" Padding="12" CornerRadius="18" Background="White">
-            <TabControl x:Name="ProtocolTabControl">
-                <TabItem Header="运行中心">
-                    <views:DeviceRuntimeTab x:Name="RuntimeControlTag" />
-                </TabItem>
-                <TabItem Header="设备配置">
-                    <views:JsonConfigTab x:Name="JsonConfigControlTag" />
-                </TabItem>
-                <TabItem Header="历史数据">
-                    <views:DatabaseTab x:Name="DatabaseControlTag" />
-                </TabItem>
+        <Border Grid.Row="1" Margin="0,0,0,12" Padding="10" Background="{StaticResource CardBrush}" BorderBrush="{StaticResource StrokeBrush}" BorderThickness="1" CornerRadius="8">
+            <Border.Effect><DropShadowEffect BlurRadius="10" ShadowDepth="2" Opacity="0.08" Color="#000000" /></Border.Effect>
+            <TabControl x:Name="ProtocolTabControl" Background="Transparent" BorderThickness="0">
+                <TabItem Header="运行中心"><views:DeviceRuntimeTab x:Name="RuntimeControlTag" /></TabItem>
+                <TabItem Header="设备配置"><views:JsonConfigTab x:Name="JsonConfigControlTag" /></TabItem>
+                <TabItem Header="历史数据"><views:DatabaseTab x:Name="DatabaseControlTag" /></TabItem>
                 <TabItem Header="调试与维护">
-                    <Grid Margin="4">
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto" />
-                            <RowDefinition Height="*" />
-                        </Grid.RowDefinitions>
-                        <Border Padding="12,9" CornerRadius="8" Background="#FFF7ED">
-                            <TextBlock Foreground="#9A3412" Text="以下页面面向调试和维护人员；日常运行请使用运行中心。" />
+                    <Grid Margin="4,8,4,4">
+                        <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /></Grid.RowDefinitions>
+                        <Border Padding="12,9" Background="#FFF4CE" BorderBrush="#F2D675" BorderThickness="1" CornerRadius="6">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Margin="0,0,8,0" FontWeight="Bold" Foreground="#7A4E00" Text="!" />
+                                <TextBlock Foreground="#5C4400" Text="以下页面面向调试和维护人员；日常运行请使用运行中心。" />
+                            </StackPanel>
                         </Border>
-                        <TabControl x:Name="MaintenanceTabControl" Grid.Row="1" Margin="0,8,0,0">
-                            <TabItem Header="Modbus TCP / RTU">
-                                <views:ModbusTab x:Name="ModbusControlTag" />
-                            </TabItem>
-                            <TabItem Header="Siemens S7">
-                                <views:SiemensS7Tab x:Name="S7ControlTag" />
-                            </TabItem>
-                            <TabItem Header="Mitsubishi MC">
-                                <views:MitsubishiMcTab x:Name="McControlTag" />
-                            </TabItem>
-                            <TabItem Header="Socket TCP">
-                                <views:SocketTcpTab x:Name="SocketControlTag" />
-                            </TabItem>
-                            <TabItem Header="MES">
-                                <views:MesTab x:Name="MesControlTag" />
-                            </TabItem>
-                            <TabItem Header="网卡设置">
-                                <views:NetworkSettingsTab x:Name="NetworkControlTag" />
-                            </TabItem>
-                            <TabItem Header="存储设置">
-                                <views:StorageTab x:Name="StorageControlTag" />
-                            </TabItem>
+                        <TabControl x:Name="MaintenanceTabControl" Grid.Row="1" Margin="0,8,0,0" Background="Transparent" BorderThickness="0">
+                            <TabItem Header="Modbus TCP / RTU"><views:ModbusTab x:Name="ModbusControlTag" /></TabItem>
+                            <TabItem Header="Siemens S7"><views:SiemensS7Tab x:Name="S7ControlTag" /></TabItem>
+                            <TabItem Header="Mitsubishi MC"><views:MitsubishiMcTab x:Name="McControlTag" /></TabItem>
+                            <TabItem Header="Socket TCP"><views:SocketTcpTab x:Name="SocketControlTag" /></TabItem>
+                            <TabItem Header="MES"><views:MesTab x:Name="MesControlTag" /></TabItem>
+                            <TabItem Header="网卡设置"><views:NetworkSettingsTab x:Name="NetworkControlTag" /></TabItem>
+                            <TabItem Header="存储设置"><views:StorageTab x:Name="StorageControlTag" /></TabItem>
                         </TabControl>
                     </Grid>
                 </TabItem>
             </TabControl>
         </Border>
 
-        <!-- Log panel (stays in MainWindow) -->
-        <Border Grid.Row="2" Padding="16" CornerRadius="18" Background="White">
+        <Border Grid.Row="2" Padding="14,10,14,12" Background="{StaticResource CardBrush}" BorderBrush="{StaticResource StrokeBrush}" BorderThickness="1" CornerRadius="8">
             <Grid>
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="*" />
-                </Grid.RowDefinitions>
+                <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /></Grid.RowDefinitions>
                 <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="110" />
-                    </Grid.ColumnDefinitions>
-                    <TextBlock FontSize="20" FontWeight="SemiBold" Foreground="#17324D" Text="运行日志" />
-                    <Button Grid.Column="1" Padding="8" Background="#E2E8F0" BorderBrush="#CBD5E1" Click="ClearLogButton_Click" Content="清空日志" />
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <TextBlock FontSize="18" FontWeight="SemiBold" Text="运行日志" />
+                        <TextBlock Margin="10,2,0,0" Foreground="{StaticResource TextSecondaryBrush}" Text="实时显示应用与 SDK 事件" />
+                    </StackPanel>
+                    <Button Grid.Column="1" MinHeight="28" Padding="12,3" Click="ClearLogButton_Click" Content="清空" />
                 </Grid>
-                <TabControl x:Name="LogTabControl" Grid.Row="1" Margin="0,10,0,0">
+                <TabControl x:Name="LogTabControl" Grid.Row="1" Margin="0,5,0,0" Background="Transparent" BorderThickness="0">
                     <TabItem Header="应用日志">
-                        <TextBox x:Name="LogTextBox" IsReadOnly="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" AcceptsReturn="True" FontFamily="Consolas" Background="#0F172A" Foreground="#D4E4FF" BorderThickness="0" />
+                        <TextBox x:Name="LogTextBox" IsReadOnly="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" AcceptsReturn="True" FontFamily="Cascadia Mono, Consolas" FontSize="12" Background="#1E1E1E" Foreground="#F5F5F5" BorderThickness="0" />
                     </TabItem>
                     <TabItem Header="SDK Log">
-                        <TextBox x:Name="SdkLogTextBox" IsReadOnly="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" AcceptsReturn="True" FontFamily="Consolas" Background="#111827" Foreground="#BAE6FD" BorderThickness="0" />
+                        <TextBox x:Name="SdkLogTextBox" IsReadOnly="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" AcceptsReturn="True" FontFamily="Cascadia Mono, Consolas" FontSize="12" Background="#1E1E1E" Foreground="#DDEEFF" BorderThickness="0" />
                     </TabItem>
                 </TabControl>
             </Grid>
