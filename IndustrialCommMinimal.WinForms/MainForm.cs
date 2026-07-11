@@ -23,42 +23,43 @@ namespace IndustrialCommMinimal.WinForms
             StartPosition = FormStartPosition.CenterScreen;
 
             var tabs = new TabControl { Dock = DockStyle.Fill };
-            tabs.TabPages.Add(CreateIndustrialPage("Modbus TCP", "127.0.0.1", "502", "D100", CreateModbusTcp));
-            tabs.TabPages.Add(CreateIndustrialPage("Modbus RTU", "COM3", "9600", "HR0", CreateModbusRtu));
-            tabs.TabPages.Add(CreateIndustrialPage("Siemens S7", "127.0.0.1", "102", "DB1.DBW0", (h, p) => IndustrialClientFactory.SiemensS7(h)));
-            tabs.TabPages.Add(CreateIndustrialPage("Mitsubishi MC", "127.0.0.1", "5000", "D100", (h, p) => IndustrialClientFactory.MitsubishiMc(h, ParsePort(p))));
+            tabs.TabPages.Add(CreateIndustrialPage("Modbus TCP", "127.0.0.1", "502", "站号", "1", "D100", CreateModbusTcp));
+            tabs.TabPages.Add(CreateIndustrialPage("Modbus RTU", "COM3", "9600", "站号", "1", "HR0", CreateModbusRtu));
+            tabs.TabPages.Add(CreateIndustrialPage("Siemens S7", "127.0.0.1", "102", "插槽", "1", "DB1.DBW0", (h, p, slot) => IndustrialClientFactory.SiemensS7(h, rack: 0, slot: (short)ParsePositive(slot, "插槽"))));
+            tabs.TabPages.Add(CreateIndustrialPage("Mitsubishi MC", "127.0.0.1", "5000", "接收超时(ms)", "5000", "D100", (h, p, timeout) => IndustrialClientFactory.MitsubishiMc(h, ParsePort(p), receiveTimeoutMilliseconds: ParsePositive(timeout, "接收超时"))));
             tabs.TabPages.Add(CreateRawTcpPage());
             tabs.TabPages.Add(CreateMesTcpPage());
             tabs.TabPages.Add(CreateMesHttpPage());
             Controls.Add(tabs);
         }
 
-        private static TabPage CreateIndustrialPage(string title, string hostValue, string portValue, string addressValue, Func<string, string, IIndustrialClient> factory)
+        private static TabPage CreateIndustrialPage(string title, string hostValue, string portValue, string optionLabel, string optionValue, string addressValue, Func<string, string, string, IIndustrialClient> factory)
         {
             var page = new TabPage(title);
             var layout = CreateLayout();
             var host = AddField(layout, 0, title == "Modbus RTU" ? "串口" : "主机", hostValue);
             var port = AddField(layout, 1, title == "Modbus RTU" ? "波特率" : "端口", portValue);
-            var address = AddField(layout, 2, "地址", addressValue);
+            var option = AddField(layout, 2, optionLabel, optionValue);
+            var address = AddField(layout, 3, "地址", addressValue);
             var type = new ComboBox { Dock = DockStyle.Fill, DropDownStyle = ComboBoxStyle.DropDownList };
             type.Items.AddRange(Enum.GetNames(typeof(DataType)));
             type.SelectedItem = DataType.Int16.ToString();
-            AddControl(layout, 3, "类型", type);
-            var value = AddField(layout, 4, "写入值", "0");
+            AddControl(layout, 4, "类型", type);
+            var value = AddField(layout, 5, "写入值", "0");
             var buttons = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true };
             var connect = AddButton(buttons, "连接");
             var read = AddButton(buttons, "读取");
             var write = AddButton(buttons, "写入");
             var disconnect = AddButton(buttons, "断开");
-            layout.Controls.Add(buttons, 1, 5);
-            var output = AddOutput(layout, 6);
+            layout.Controls.Add(buttons, 1, 6);
+            var output = AddOutput(layout, 7);
             page.Controls.Add(layout);
 
             IIndustrialClient client = null;
             connect.Click += async (s, e) => await RunAsync(output, async () =>
             {
                 if (client != null) client.Dispose();
-                client = factory(host.Text.Trim(), port.Text.Trim());
+                client = factory(host.Text.Trim(), port.Text.Trim(), option.Text.Trim());
                 await client.ConnectAsync(CancellationToken.None);
                 Append(output, "已连接 " + client.DeviceId);
             });
@@ -88,14 +89,14 @@ namespace IndustrialCommMinimal.WinForms
             return page;
         }
 
-        private static IIndustrialClient CreateModbusTcp(string host, string port)
+        private static IIndustrialClient CreateModbusTcp(string host, string port, string slaveId)
         {
-            return IndustrialClientFactory.ModbusTcp(host, ParsePort(port), 1, deviceProfile: ModbusDeviceProfiles.Generic);
+            return IndustrialClientFactory.ModbusTcp(host, ParsePort(port), ParseSlaveId(slaveId), deviceProfile: ModbusDeviceProfiles.Generic);
         }
 
-        private static IIndustrialClient CreateModbusRtu(string portName, string baudRate)
+        private static IIndustrialClient CreateModbusRtu(string portName, string baudRate, string slaveId)
         {
-            return IndustrialClientFactory.ModbusRtu(portName, ParsePositive(baudRate, "波特率"), 1, parity: Parity.Even);
+            return IndustrialClientFactory.ModbusRtu(portName, ParsePositive(baudRate, "波特率"), ParseSlaveId(slaveId), parity: Parity.Even);
         }
 
         private static TabPage CreateRawTcpPage()
@@ -147,14 +148,17 @@ namespace IndustrialCommMinimal.WinForms
             var host = AddField(layout, 0, "主机", "127.0.0.1");
             var port = AddField(layout, 1, "端口", "9312");
             var device = AddField(layout, 2, "设备编号", "DEVICE-001");
+            var deviceName = AddField(layout, 3, "设备名称", "MinimalClient");
+            var deviceIp = AddField(layout, 4, "设备 IP", "127.0.0.1");
+            var deviceMac = AddField(layout, 5, "设备 MAC", "00-00-00-00-00-00");
             var buttons = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true };
             var connect = AddButton(buttons, "连接"); var online = AddButton(buttons, "发送上线"); var disconnect = AddButton(buttons, "断开");
-            layout.Controls.Add(buttons, 1, 3); var output = AddOutput(layout, 4); page.Controls.Add(layout);
+            layout.Controls.Add(buttons, 1, 6); var output = AddOutput(layout, 7); page.Controls.Add(layout);
             MesTcpClient client = null;
             connect.Click += async (s, e) => await RunAsync(output, async () =>
             {
                 if (client != null) client.Dispose();
-                client = new MesTcpClient(new MesClientOptions { Host = host.Text.Trim(), Port = ParsePort(port.Text), DeviceNo = device.Text.Trim(), DeviceName = device.Text.Trim(), DeviceIp = "127.0.0.1", DeviceMac = "00-00-00-00-00-00", AutoReconnect = false });
+                client = new MesTcpClient(new MesClientOptions { Host = host.Text.Trim(), Port = ParsePort(port.Text), DeviceNo = device.Text.Trim(), DeviceName = deviceName.Text.Trim(), DeviceIp = deviceIp.Text.Trim(), DeviceMac = deviceMac.Text.Trim(), AutoReconnect = false });
                 client.RawMessage += (o, a) => Append(output, (a.Sent ? "TX: " : "RX: ") + a.Message);
                 await client.ConnectAsync(CancellationToken.None); Append(output, "已连接");
             });
@@ -169,11 +173,14 @@ namespace IndustrialCommMinimal.WinForms
             var page = new TabPage("MES HTTP"); var layout = CreateLayout();
             var url = AddField(layout, 0, "API 地址", "http://127.0.0.1:8080/api");
             var device = AddField(layout, 1, "设备编号", "DEVICE-001");
+            var deviceName = AddField(layout, 2, "设备名称", "MinimalClient");
+            var deviceIp = AddField(layout, 3, "设备 IP", "127.0.0.1");
+            var deviceMac = AddField(layout, 4, "设备 MAC", "00-00-00-00-00-00");
             var buttons = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true }; var online = AddButton(buttons, "发送上线");
-            layout.Controls.Add(buttons, 1, 2); var output = AddOutput(layout, 3); page.Controls.Add(layout);
+            layout.Controls.Add(buttons, 1, 5); var output = AddOutput(layout, 6); page.Controls.Add(layout);
             online.Click += async (s, e) => await RunAsync(output, async () =>
             {
-                using (var client = new MesHttpClient(new MesHttpClientOptions { BaseUrl = url.Text.Trim(), DeviceNo = device.Text.Trim(), DeviceName = device.Text.Trim(), DeviceIp = "127.0.0.1", DeviceMac = "00-00-00-00-00-00" }))
+                using (var client = new MesHttpClient(new MesHttpClientOptions { BaseUrl = url.Text.Trim(), DeviceNo = device.Text.Trim(), DeviceName = deviceName.Text.Trim(), DeviceIp = deviceIp.Text.Trim(), DeviceMac = deviceMac.Text.Trim() }))
                 {
                     var response = await client.SendOnlineAsync(CancellationToken.None);
                     Append(output, string.Format("响应: success={0}, code={1}, message={2}", response.IsSuccess, response.Code, response.Message));
@@ -196,6 +203,7 @@ namespace IndustrialCommMinimal.WinForms
         private static void Append(TextBox output, string text) { if (output.IsDisposed) return; if (output.InvokeRequired) { output.BeginInvoke(new Action<TextBox, string>(Append), output, text); return; } output.AppendText(string.Format("[{0:HH:mm:ss}] {1}{2}", DateTime.Now, text, Environment.NewLine)); }
         private static void EnsureConnected(IIndustrialClient client) { if (client == null || !client.IsConnected) throw new InvalidOperationException("请先连接。"); }
         private static int ParsePort(string value) { var port = ParsePositive(value, "端口"); if (port > 65535) throw new ArgumentOutOfRangeException("端口", "端口必须小于 65536。"); return port; }
+        private static byte ParseSlaveId(string value) { var slaveId = ParsePositive(value, "站号"); if (slaveId > 247) throw new ArgumentOutOfRangeException("站号", "站号必须在 1 到 247 之间。"); return (byte)slaveId; }
         private static int ParsePositive(string value, string name) { int result; if (!int.TryParse(value, out result) || result <= 0) throw new FormatException(name + "必须是正整数。"); return result; }
         private static object ConvertValue(string value, DataType type)
         {
