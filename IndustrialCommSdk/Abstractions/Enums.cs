@@ -13,6 +13,8 @@ namespace IndustrialCommSdk.Abstractions
         MitsubishiMc = 4,
         /// <summary>Modbus RTU 串口协议。</summary>
         ModbusRtu = 5,
+        /// <summary>OPC UA 客户端/服务器协议。</summary>
+        OpcUa = 6,
     }
 
     /// <summary>读写请求中使用的数据类型。</summary>

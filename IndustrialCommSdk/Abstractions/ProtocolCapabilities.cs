@@ -160,6 +160,19 @@ namespace IndustrialCommSdk.Abstractions
                         maxAddressSpan: 1,
                         maxPduBytes: 0);
 
+                case ProtocolKind.OpcUa:
+                    return new ProtocolCapabilities(
+                        kind,
+                        "OPC UA",
+                        supportsOptimizedBatchRead: true,
+                        supportsOptimizedBatchWrite: true,
+                        supportsString: true,
+                        supportsByteArray: true,
+                        maxReadItems: 1000,
+                        maxWriteItems: 1000,
+                        maxAddressSpan: int.MaxValue,
+                        recommendedMinPollingInterval: TimeSpan.FromMilliseconds(100));
+
                 default:
                     return new ProtocolCapabilities(kind, kind.ToString());
             }

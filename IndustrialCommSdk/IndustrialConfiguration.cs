@@ -330,6 +330,22 @@ namespace IndustrialCommSdk
         [DataMember(Name = "slot", EmitDefaultValue = false)]
         public short? Slot { get; set; }
 
+        /// <summary>获取或设置 OPC UA 端点 URL，例如 opc.tcp://127.0.0.1:4840。</summary>
+        [DataMember(Name = "endpointUrl", EmitDefaultValue = false)]
+        public string EndpointUrl { get; set; }
+
+        /// <summary>获取或设置 OPC UA 用户名；为空时使用匿名身份。</summary>
+        [DataMember(Name = "username", EmitDefaultValue = false)]
+        public string Username { get; set; }
+
+        /// <summary>获取或设置 OPC UA 密码。</summary>
+        [DataMember(Name = "password", EmitDefaultValue = false)]
+        public string Password { get; set; }
+
+        /// <summary>是否使用 OPC UA 安全端点；省略时为 false。</summary>
+        [DataMember(Name = "useSecurity", EmitDefaultValue = false)]
+        public bool? UseSecurity { get; set; }
+
         /// <summary>将 pointsFile 转换为可直接读取的绝对路径。</summary>
         public string ResolvePointsFile(string configDirectory)
         {

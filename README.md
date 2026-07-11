@@ -1,5 +1,35 @@
 # IndustrialCommSdk
 
+## OPC UA
+
+SDK 支持 OPC UA 客户端读写及批量读写。地址使用标准 NodeId 文本，例如
+`ns=2;s=Machine/Temperature`、`ns=2;i=1001`。
+
+```csharp
+using (var client = IndustrialClientFactory.OpcUa(
+    "opc.tcp://127.0.0.1:4840", deviceId: "ua-plc"))
+{
+    await client.ConnectAsync(CancellationToken.None);
+    var value = await client.ReadAsync(new ReadRequest(
+        "ua-plc", "ns=2;s=Machine/Temperature", DataType.Float),
+        CancellationToken.None);
+}
+```
+
+`devices.json` 也可配置匿名或用户名认证：
+
+```json
+{
+  "name": "ua-plc",
+  "protocol": "opc-ua",
+  "endpointUrl": "opc.tcp://127.0.0.1:4840",
+  "username": "operator",
+  "password": "secret",
+  "useSecurity": false,
+  "pointsFile": "points/opcua.json"
+}
+```
+
 面向 .NET Framework 4.7.2 的统一工业通信 SDK，提供一致的设备连接、异步读写、批量操作、轮询、诊断、配置和历史数据接口。
 
 仓库同时包含 Windows 11 风格的 WPF 运行中心和轻量 WinForms 协议验证工具，可用于开发调试、现场联调和 SDK 回归。

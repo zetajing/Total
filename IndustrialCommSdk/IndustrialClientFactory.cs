@@ -5,6 +5,7 @@ using IndustrialCommSdk.Diagnostics;
 using IndustrialCommSdk.Protocols.Mc;
 using IndustrialCommSdk.Protocols.Modbus;
 using IndustrialCommSdk.Protocols.S7;
+using IndustrialCommSdk.Protocols.OpcUa;
 using S7.Net;
 
 namespace IndustrialCommSdk
@@ -14,6 +15,32 @@ namespace IndustrialCommSdk
     /// </summary>
     public static class IndustrialClientFactory
     {
+        /// <summary>创建 OPC UA 客户端。</summary>
+        public static OpcUaClient OpcUa(string endpointUrl, string deviceId = null,
+            IIndustrialLogger logger = null, string username = null, string password = null,
+            bool useSecurity = false, int connectTimeoutMilliseconds = 10000,
+            int operationTimeoutMilliseconds = 5000)
+        {
+            ValidateText(endpointUrl, nameof(endpointUrl));
+            ValidatePositive(connectTimeoutMilliseconds, nameof(connectTimeoutMilliseconds));
+            ValidatePositive(operationTimeoutMilliseconds, nameof(operationTimeoutMilliseconds));
+            return new OpcUaClient(new OpcUaClientOptions
+            {
+                DeviceId = string.IsNullOrWhiteSpace(deviceId) ? "opc-ua-" + endpointUrl : deviceId,
+                EndpointUrl = endpointUrl,
+                Username = username,
+                Password = password,
+                UseSecurity = useSecurity,
+                ConnectTimeoutMilliseconds = connectTimeoutMilliseconds,
+                OperationTimeoutMilliseconds = operationTimeoutMilliseconds,
+            }, logger);
+        }
+
+        /// <summary>根据完整选项创建 OPC UA 客户端。</summary>
+        public static IIndustrialClient CreateOpcUa(OpcUaClientOptions options, IIndustrialLogger logger = null)
+        {
+            return new OpcUaClient(options, logger);
+        }
         /// <summary>使用常用参数创建 Modbus TCP 客户端。</summary>
         public static ModbusTcpClient ModbusTcp(
             string host,
@@ -326,6 +353,18 @@ namespace IndustrialCommSdk
                         logger,
                         device.SendTimeoutMilliseconds.GetValueOrDefault(3000),
                         device.ReceiveTimeoutMilliseconds.GetValueOrDefault(5000),
+                        device.OperationTimeoutMilliseconds.GetValueOrDefault(5000));
+                case "opcua":
+                    return OpcUa(
+                        string.IsNullOrWhiteSpace(device.EndpointUrl)
+                            ? string.Format("opc.tcp://{0}:{1}", device.Host, device.Port.GetValueOrDefault(4840))
+                            : device.EndpointUrl,
+                        CoalesceConfigDeviceId(device.DeviceId, device.Name, "opc-ua", device.Host, device.Port.GetValueOrDefault(4840)),
+                        logger,
+                        device.Username,
+                        device.Password,
+                        device.UseSecurity.GetValueOrDefault(false),
+                        device.ConnectTimeoutMilliseconds.GetValueOrDefault(10000),
                         device.OperationTimeoutMilliseconds.GetValueOrDefault(5000));
                 default:
                     throw new ArgumentException(string.Format("Unsupported protocol: {0}", device.Protocol), nameof(device));
