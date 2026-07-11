@@ -8,6 +8,7 @@ using IndustrialCommSdk;
 using IndustrialCommSdk.Abstractions;
 using IndustrialCommSdk.Diagnostics;
 using IndustrialCommSdk.Mes;
+using IndustrialCommSdk.Protocols.Modbus;
 using IndustrialCommSdk.Transport;
 
 namespace IndustrialCommMinimal.WinForms
@@ -35,14 +36,47 @@ namespace IndustrialCommMinimal.WinForms
         public MainForm()
         {
             InitializeComponent();
+            LoadModbusProfiles();
         }
 
         /// <summary>读取页面参数，创建并连接通用地址映射的 Modbus TCP 客户端。</summary>
         private async void ModbusTcpConnectButton_Click(object sender, EventArgs e)
         {
             await ConnectIndustrialAsync(ModbusTcpOutputTextBox, () => SimpleClient.ModbusTcp(
-                ModbusTcpHostTextBox.Text.Trim(), ParsePort(ModbusTcpPortTextBox.Text), ParseSlaveId(ModbusTcpSlaveTextBox.Text)),
+                ModbusTcpHostTextBox.Text.Trim(), ParsePort(ModbusTcpPortTextBox.Text), ParseSlaveId(ModbusTcpSlaveTextBox.Text),
+                deviceProfile: GetSelectedModbusProfile()),
                 client => _modbusTcpClient = client, _modbusTcpClient);
+        }
+
+        /// <summary>加载内置和 JSON 注册的 Modbus 设备配置，并默认选择通用映射。</summary>
+        private void LoadModbusProfiles()
+        {
+            ModbusTcpProfileComboBox.DropDownStyle = ComboBoxStyle.DropDownList;
+            ModbusTcpProfileComboBox.DisplayMember = "DisplayName";
+            foreach (var profile in ModbusDeviceProfiles.All) ModbusTcpProfileComboBox.Items.Add(profile);
+            for (var index = 0; index < ModbusTcpProfileComboBox.Items.Count; index++)
+            {
+                var profile = (IModbusDeviceProfile)ModbusTcpProfileComboBox.Items[index];
+                if (string.Equals(profile.Key, ModbusDeviceProfiles.Generic.Key, StringComparison.OrdinalIgnoreCase))
+                {
+                    ModbusTcpProfileComboBox.SelectedIndex = index;
+                    break;
+                }
+            }
+            ModbusTcpProfileComboBox.SelectedIndexChanged += ModbusTcpProfileComboBox_SelectedIndexChanged;
+        }
+
+        private IModbusDeviceProfile GetSelectedModbusProfile()
+        {
+            return ModbusTcpProfileComboBox.SelectedItem as IModbusDeviceProfile ?? ModbusDeviceProfiles.Generic;
+        }
+
+        /// <summary>切换设备映射时同步显示该配置推荐的地址格式，降低地址体系混用风险。</summary>
+        private void ModbusTcpProfileComboBox_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            var profile = GetSelectedModbusProfile();
+            if (!string.IsNullOrWhiteSpace(profile.DefaultAddress)) ModbusTcpAddressTextBox.Text = profile.DefaultAddress;
+            Append(ModbusTcpOutputTextBox, "设备配置=" + profile.DisplayName + "，地址示例=" + profile.ExampleAddresses);
         }
 
         /// <summary>按串口、波特率和站号创建 Modbus RTU 客户端；示例默认使用偶校验。</summary>

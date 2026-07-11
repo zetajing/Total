@@ -63,6 +63,17 @@ var s7 = SimpleClient.S7("192.168.0.10", rack: 0, slot: 1);
 var mc = SimpleClient.Mc("192.168.0.20", 5000);
 ```
 
+Modbus TCP 默认使用通用地址映射；厂商地址或字序不同时显式选择设备配置：
+
+```csharp
+var inovance = SimpleClient.ModbusTcp("192.168.1.10",
+    deviceProfile: ModbusDeviceProfiles.InovanceEasyPlc);
+var mitsubishi = SimpleClient.ModbusTcp("192.168.1.20",
+    deviceProfile: ModbusDeviceProfiles.MitsubishiModbusTcp);
+```
+
+通过 `ModbusDeviceProfiles.All` 可枚举内置及 JSON 注册配置，`GetRequired(key)` 可按配置键获取并在不存在时立即报错。
+
 需要厂商专用 Modbus 映射、CPU 型号、超时或重试等高级参数时，使用 `IndustrialClientFactory` 或完整 Options 类型。
 
 ```powershell

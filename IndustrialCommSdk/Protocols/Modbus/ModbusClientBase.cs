@@ -23,6 +23,9 @@ namespace IndustrialCommSdk.Protocols.Modbus
         /// <summary>设备配置文件，用于处理寄存器规范化和字节序。</summary>
         protected readonly IModbusDeviceProfile DeviceProfile;
 
+        /// <summary>获取当前客户端实际使用的厂商地址映射与寄存器字序配置。</summary>
+        public IModbusDeviceProfile Profile { get { return DeviceProfile; } }
+
         /// <summary>Modbus 地址解析器。</summary>
         protected readonly ModbusAddressParser AddressParser;
 

@@ -27,5 +27,21 @@ namespace IndustrialCommSdk.Tests
                 DeviceProfile = ModbusDeviceProfiles.Generic,
             }));
         }
+
+        [Test]
+        public void SimpleClient_UsesSelectedModbusProfile()
+        {
+            using (var client = SimpleClient.ModbusTcp("127.0.0.1", deviceProfile: ModbusDeviceProfiles.MitsubishiModbusTcp))
+            {
+                Assert.AreEqual("mitsubishi-modbus-tcp", client.Profile.Key);
+                Assert.AreEqual(ModbusArea.HoldingRegister, client.Profile.ParseAddress("D100").Area);
+            }
+        }
+
+        [Test]
+        public void GetRequired_RejectsUnknownProfile()
+        {
+            Assert.Throws<System.Collections.Generic.KeyNotFoundException>(() => ModbusDeviceProfiles.GetRequired("unknown-device"));
+        }
     }
 }

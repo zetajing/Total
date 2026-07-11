@@ -233,6 +233,14 @@ namespace IndustrialCommSdk.Protocols.Modbus
             return null;
         }
 
+        /// <summary>按 key 或显示名称查找配置；不存在时抛出包含可用项提示的异常。</summary>
+        public static IModbusDeviceProfile GetRequired(string key)
+        {
+            var profile = Find(key);
+            if (profile != null) return profile;
+            throw new KeyNotFoundException(string.Format("Unknown Modbus device profile: {0}", key ?? "(null)"));
+        }
+
         /// <summary>
         /// 尝试从默认路径加载 modbus-profiles.json。
         /// 查找顺序：当前工作目录下的 Config/modbus-profiles.json。

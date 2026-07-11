@@ -22,14 +22,15 @@ namespace IndustrialCommSdk
             int port = 502,
             byte slaveId = 1,
             IIndustrialLogger logger = null,
-            int operationTimeoutMilliseconds = 5000)
+            int operationTimeoutMilliseconds = 5000,
+            IModbusDeviceProfile deviceProfile = null)
         {
             return IndustrialClientFactory.ModbusTcp(
                 host,
                 port,
                 slaveId,
                 logger: logger,
-                deviceProfile: ModbusDeviceProfiles.Generic,
+                deviceProfile: deviceProfile ?? ModbusDeviceProfiles.Generic,
                 operationTimeoutMilliseconds: operationTimeoutMilliseconds);
         }
 
