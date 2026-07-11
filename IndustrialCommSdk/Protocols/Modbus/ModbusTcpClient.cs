@@ -66,13 +66,31 @@ namespace IndustrialCommSdk.Protocols.Modbus
         public ModbusTcpClient(ModbusTcpClientOptions options, IIndustrialLogger logger = null, IPollingScheduler pollingScheduler = null, ModbusAddressParser addressParser = null)
             : base(GetDeviceId(options), ProtocolKind.ModbusTcp, options.SlaveId, options.DeviceProfile, addressParser, pollingScheduler, logger)
         {
-            _options = options ?? throw new ArgumentNullException(nameof(options));
+            ValidateOptions(options);
+            _options = options;
         }
 
         private static string GetDeviceId(ModbusTcpClientOptions options)
         {
             if (options == null) throw new ArgumentNullException(nameof(options));
             return options.DeviceId;
+        }
+
+        private static void ValidateOptions(ModbusTcpClientOptions options)
+        {
+            if (options == null) throw new ArgumentNullException(nameof(options));
+            if (string.IsNullOrWhiteSpace(options.DeviceId))
+                throw new ArgumentException("Modbus TCP device ID is required.", nameof(options));
+            if (string.IsNullOrWhiteSpace(options.Host))
+                throw new ArgumentException("Modbus TCP host is required.", nameof(options));
+            if (options.Port < 1 || options.Port > 65535)
+                throw new ArgumentOutOfRangeException(nameof(options), "Modbus TCP port must be between 1 and 65535.");
+            if (options.SlaveId == 0 || options.SlaveId > 247)
+                throw new ArgumentOutOfRangeException(nameof(options), "Modbus TCP slave ID must be between 1 and 247.");
+            if (options.ConnectTimeoutMilliseconds <= 0)
+                throw new ArgumentOutOfRangeException(nameof(options), "Modbus TCP connect timeout must be greater than zero.");
+            if (options.DeviceProfile == null)
+                throw new ArgumentException("Modbus TCP device profile is required.", nameof(options));
         }
 
         /// <summary>

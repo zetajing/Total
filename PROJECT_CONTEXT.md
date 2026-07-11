@@ -80,6 +80,7 @@ IndustrialCommDemo（上位机应用、交互、展示）
 | --- | --- |
 | `IndustrialCommSdk` | 核心 SDK：统一客户端、协议实现、点位表、配置、轮询、诊断、日志、数据目录、存储和 MES。 |
 | `IndustrialCommDemo` | WPF 上位机应用：运行中心负责设备状态和实时点位，其他页面提供协议调试、JSON 配置、MES、数据库、网卡和存储设置。 |
+| `IndustrialCommMinimal.WinForms` | WinForms 协议最小系统：独立验证 Modbus TCP/RTU、S7、MC、原始 TCP 和 MES TCP/HTTP。 |
 
 SDK 内部按职责划分：`Abstractions` 放公共契约，`Protocols` 放协议实现，`Transport` 放传输层，`Polling` 放调度，`Diagnostics` 放诊断与日志，`Storage` 放数据库、导出和数据目录策略，`Mes` 放 MES 通讯。Demo 只引用 `IndustrialCommSdk`，不再维护独立的 `LogHelper` 程序集。
 
