@@ -16,29 +16,52 @@ namespace IndustrialCommSdk.Mes
         private readonly MesHttpClientOptions _options;
         private readonly IIndustrialLogger _logger;
         private readonly HttpClient _httpClient;
+        private readonly bool _disposeHttpClient;
         private int _disposed;
         private volatile bool _lastRequestSuccess;
 
         /// <summary>使用指定选项创建 HTTP 客户端。</summary>
         public MesHttpClient(MesHttpClientOptions options, IIndustrialLogger logger = null)
+            : this(options, CreateDefaultHandler(), true, logger)
+        {
+        }
+
+        /// <summary>
+        /// 使用自定义 HTTP 处理器创建客户端。适用于代理、证书、自定义认证和自动化测试。
+        /// </summary>
+        /// <param name="disposeHandler">释放客户端时是否一并释放处理器。</param>
+        public MesHttpClient(
+            MesHttpClientOptions options,
+            HttpMessageHandler handler,
+            bool disposeHandler,
+            IIndustrialLogger logger = null)
+            : this(options, CreateHttpClient(handler, disposeHandler), true, logger)
+        {
+        }
+
+        /// <summary>
+        /// 使用外部管理的 HttpClient 创建客户端。SDK 不会修改或释放该实例。
+        /// 外部客户端自身的 Timeout 仍然生效，SDK 选项中的超时通过请求级取消实现。
+        /// </summary>
+        public MesHttpClient(
+            MesHttpClientOptions options,
+            HttpClient httpClient,
+            IIndustrialLogger logger)
+            : this(options, httpClient, false, logger)
+        {
+        }
+
+        private MesHttpClient(
+            MesHttpClientOptions options,
+            HttpClient httpClient,
+            bool disposeHttpClient,
+            IIndustrialLogger logger)
         {
             _options = options ?? throw new ArgumentNullException(nameof(options));
             ValidateOptions(options);
             _logger = logger ?? NullIndustrialLogger.Instance;
-
-            var handler = new HttpClientHandler
-            {
-                // MES HTTP API 通常不需要自动重定向
-                AllowAutoRedirect = false,
-            };
-
-            _httpClient = new HttpClient(handler)
-            {
-                Timeout = TimeSpan.FromMilliseconds(options.TimeoutMilliseconds),
-            };
-            _httpClient.DefaultRequestHeaders.ConnectionClose = false;
-            // 某些 MES 服务可能检查 User-Agent
-            _httpClient.DefaultRequestHeaders.UserAgent.ParseAdd("IndustrialCommSdk/1.0");
+            _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
+            _disposeHttpClient = disposeHttpClient;
         }
 
         public bool IsConnected => !IsDisposed() && _lastRequestSuccess;
@@ -99,42 +122,52 @@ namespace IndustrialCommSdk.Mes
                 try
                 {
                     using (var content = new StringContent(json, Encoding.UTF8, "application/json"))
+                    using (var timeoutSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken))
                     {
-                        var response = await _httpClient.PostAsync(url, content, cancellationToken)
-                            .ConfigureAwait(false);
-
-                        responseBody = await response.Content.ReadAsStringAsync()
-                            .ConfigureAwait(false);
-
-                        _logger.Info(string.Format("MES HTTP RX | Endpoint={0} | Status={1} | Body={2} | Elapsed={3}ms",
-                            endpoint, (int)response.StatusCode, TruncateBody(responseBody), stopwatch.ElapsedMilliseconds));
-
-                        if (response.IsSuccessStatusCode)
+                        timeoutSource.CancelAfter(_options.TimeoutMilliseconds);
+                        using (var response = await _httpClient.PostAsync(url, content, timeoutSource.Token)
+                            .ConfigureAwait(false))
                         {
-                            var result = Deserialize<TResponse>(responseBody);
-                            _lastRequestSuccess = true;
-                            return result;
-                        }
 
-                        // 4xx 不重试（客户端错误）
-                        if ((int)response.StatusCode >= 400 && (int)response.StatusCode < 500)
-                        {
-                            _logger.Warn(string.Format("MES HTTP client error | Endpoint={0} | Status={1} | Body={2}",
-                                endpoint, (int)response.StatusCode, TruncateBody(responseBody)));
+                            responseBody = await response.Content.ReadAsStringAsync()
+                                .ConfigureAwait(false);
 
-                            var errorResult = DeserializeOrNull<TResponse>(responseBody);
-                            if (errorResult != null)
+                            _logger.Info(string.Format("MES HTTP RX | Endpoint={0} | Status={1} | Body={2} | Elapsed={3}ms",
+                                endpoint, (int)response.StatusCode, TruncateBody(responseBody), stopwatch.ElapsedMilliseconds));
+
+                            if (response.IsSuccessStatusCode)
                             {
-                                _lastRequestSuccess = false;
-                                return errorResult;
+                                var result = Deserialize<TResponse>(responseBody);
+                                _lastRequestSuccess = true;
+                                return result;
                             }
 
-                            _lastRequestSuccess = false;
-                            return new TResponse
+                            // 4xx 不重试（客户端错误）
+                            if ((int)response.StatusCode >= 400 && (int)response.StatusCode < 500)
                             {
-                                Code = ((int)response.StatusCode).ToString(),
-                                Message = responseBody ?? response.ReasonPhrase,
-                            };
+                                _logger.Warn(string.Format("MES HTTP client error | Endpoint={0} | Status={1} | Body={2}",
+                                    endpoint, (int)response.StatusCode, TruncateBody(responseBody)));
+
+                                var errorResult = DeserializeOrNull<TResponse>(responseBody);
+                                if (errorResult != null)
+                                {
+                                    _lastRequestSuccess = false;
+                                    return errorResult;
+                                }
+
+                                _lastRequestSuccess = false;
+                                return new TResponse
+                                {
+                                    Code = ((int)response.StatusCode).ToString(),
+                                    Message = responseBody ?? response.ReasonPhrase,
+                                };
+                            }
+
+                            // 5xx 和其他非成功状态通过统一异常路径执行有上限的重试。
+                            throw new HttpRequestException(string.Format(
+                                "MES HTTP server error. Status={0}, Body={1}",
+                                (int)response.StatusCode,
+                                TruncateBody(responseBody)));
                         }
                     }
                 }
@@ -188,6 +221,20 @@ namespace IndustrialCommSdk.Mes
             return baseUrl + "/" + endpoint;
         }
 
+        private static HttpMessageHandler CreateDefaultHandler()
+        {
+            return new HttpClientHandler { AllowAutoRedirect = false };
+        }
+
+        private static HttpClient CreateHttpClient(HttpMessageHandler handler, bool disposeHandler)
+        {
+            if (handler == null) throw new ArgumentNullException(nameof(handler));
+            var client = new HttpClient(handler, disposeHandler);
+            client.DefaultRequestHeaders.ConnectionClose = false;
+            client.DefaultRequestHeaders.UserAgent.ParseAdd("IndustrialCommSdk/1.0");
+            return client;
+        }
+
         private static string TruncateBody(string body)
         {
             if (string.IsNullOrEmpty(body)) return "(empty)";
@@ -218,7 +265,7 @@ namespace IndustrialCommSdk.Mes
         public void Dispose()
         {
             if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
-            _httpClient.Dispose();
+            if (_disposeHttpClient) _httpClient.Dispose();
         }
     }
 }
