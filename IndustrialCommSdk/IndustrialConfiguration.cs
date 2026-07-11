@@ -346,6 +346,26 @@ namespace IndustrialCommSdk
         [DataMember(Name = "useSecurity", EmitDefaultValue = false)]
         public bool? UseSecurity { get; set; }
 
+        /// <summary>MQTT 客户端标识；为空时自动生成。</summary>
+        [DataMember(Name = "clientId", EmitDefaultValue = false)]
+        public string ClientId { get; set; }
+
+        /// <summary>MQTT QoS 等级（0、1 或 2）。</summary>
+        [DataMember(Name = "qos", EmitDefaultValue = false)]
+        public int? Qos { get; set; }
+
+        /// <summary>MQTT 发布时是否保留消息。</summary>
+        [DataMember(Name = "retain", EmitDefaultValue = false)]
+        public bool? Retain { get; set; }
+
+        /// <summary>Redis 数据库编号。</summary>
+        [DataMember(Name = "database", EmitDefaultValue = false)]
+        public int? Database { get; set; }
+
+        /// <summary>MQTT 或 Redis 是否启用 TLS。</summary>
+        [DataMember(Name = "ssl", EmitDefaultValue = false)]
+        public bool? Ssl { get; set; }
+
         /// <summary>将 pointsFile 转换为可直接读取的绝对路径。</summary>
         public string ResolvePointsFile(string configDirectory)
         {

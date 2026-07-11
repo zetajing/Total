@@ -173,6 +173,18 @@ namespace IndustrialCommSdk.Abstractions
                         maxAddressSpan: int.MaxValue,
                         recommendedMinPollingInterval: TimeSpan.FromMilliseconds(100));
 
+                case ProtocolKind.Mqtt:
+                    return new ProtocolCapabilities(kind, "MQTT", supportsOptimizedBatchWrite: true,
+                        supportsString: true, supportsByteArray: true, maxReadItems: 1000,
+                        maxWriteItems: 1000, maxAddressSpan: int.MaxValue,
+                        recommendedMinPollingInterval: TimeSpan.FromMilliseconds(100));
+
+                case ProtocolKind.Redis:
+                    return new ProtocolCapabilities(kind, "Redis", supportsOptimizedBatchRead: true,
+                        supportsOptimizedBatchWrite: true, supportsString: true, supportsByteArray: true,
+                        maxReadItems: 1000, maxWriteItems: 1000, maxAddressSpan: int.MaxValue,
+                        recommendedMinPollingInterval: TimeSpan.FromMilliseconds(50));
+
                 default:
                     return new ProtocolCapabilities(kind, kind.ToString());
             }
