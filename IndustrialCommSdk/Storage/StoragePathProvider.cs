@@ -3,7 +3,7 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 
-namespace LogHelper
+namespace IndustrialCommSdk.Storage
 {
     /// <summary>统一管理应用产生的日志、状态和缓存目录，并禁止写入 C 盘。</summary>
     public static class StoragePathProvider

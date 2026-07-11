@@ -5,8 +5,9 @@ using System.IO;
 using System.Reflection;
 using System.Text;
 using System.Threading;
+using IndustrialCommSdk.Storage;
 
-namespace LogHelper
+namespace IndustrialCommSdk.Diagnostics
 {
     /// <summary>
     ///     日志显示辅助静态类。

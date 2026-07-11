@@ -18,7 +18,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\IndustrialCommSdk\IndustrialCommSdk.csproj" />
-    <ProjectReference Include="..\LogHelper\LogHelper.csproj" />
   </ItemGroup>
 
   <ItemGroup>

@@ -40,10 +40,10 @@ PR #1 已合并到 `master`，对应合并提交为 `1afa2eb44394361548f8fd3d313
 ## 解决方案结构
 
 - `IndustrialCommSdk`
-  SDK 主类库。
+  SDK 主类库。公共契约、协议、传输、轮询、诊断、存储和 MES 分别位于同名职责目录；日志写入位于 `Diagnostics`，统一数据目录策略位于 `Storage`。
 
 - `IndustrialCommDemo`
-  WPF 示例程序，已经包含在 [Total.sln]中，可直接作为启动项目调试。
+  WPF 示例程序，只引用 `IndustrialCommSdk`，已经包含在 [Total.sln]中，可直接作为启动项目调试。
 
 ## 快速开始
 

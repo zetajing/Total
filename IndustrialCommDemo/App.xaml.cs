@@ -1,7 +1,7 @@
 using System.Configuration;
 using System.Data;
 using System.Windows;
-using LogHelper;
+using IndustrialCommSdk.Diagnostics;
 
 namespace IndustrialCommDemo;
 

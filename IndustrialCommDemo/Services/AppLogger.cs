@@ -5,7 +5,6 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Threading;
 using IndustrialCommSdk.Diagnostics;
-using LogHelper;
 
 namespace IndustrialCommDemo.Services
 {

@@ -5,7 +5,7 @@ using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
-using LogHelper;
+using IndustrialCommSdk.Diagnostics;
 using IndustrialCommDemo.Services;
 using IndustrialCommDemo.Helpers;
 
