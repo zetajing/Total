@@ -1,5 +1,8 @@
 namespace IndustrialCommMinimal.WinForms
 {
+    // 本文件由 Visual Studio WinForms 设计器维护。
+    // 这里只保存控件声明、布局属性和事件绑定；协议通讯逻辑统一放在 MainForm.cs 中。
+    // 手工修改后应立即用“查看设计器”验证，避免破坏设计器的代码序列化结构。
     partial class MainForm
     {
         private System.ComponentModel.IContainer components = null;
@@ -26,12 +29,17 @@ namespace IndustrialCommMinimal.WinForms
         private System.Windows.Forms.TextBox MesHttpUrlTextBox, MesHttpDeviceNoTextBox, MesHttpDeviceNameTextBox, MesHttpDeviceIpTextBox, MesHttpDeviceMacTextBox, MesHttpOutputTextBox;
         private System.Windows.Forms.Button MesHttpOnlineButton;
 
+        /// <summary>释放设计器创建并登记在 components 容器中的控件资源。</summary>
         protected override void Dispose(bool disposing)
         {
             if (disposing && (components != null)) components.Dispose();
             base.Dispose(disposing);
         }
 
+        /// <summary>
+        /// 创建七个协议页签及其输入、操作和日志控件，并绑定 MainForm.cs 中的事件处理方法。
+        /// 此方法只应由窗体构造函数调用。
+        /// </summary>
         private void InitializeComponent()
         {
             this.ProtocolTabControl = new System.Windows.Forms.TabControl();
