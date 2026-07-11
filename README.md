@@ -52,6 +52,17 @@ PR #1 已合并到 `master`，对应合并提交为 `1afa2eb44394361548f8fd3d313
 
 ## 快速开始
 
+常用协议可通过简单入口直接创建：
+
+```csharp
+var modbusTcp = SimpleClient.ModbusTcp("127.0.0.1", 502, 1);
+var modbusRtu = SimpleClient.ModbusRtu("COM3", 9600, 1);
+var s7 = SimpleClient.S7("192.168.0.10", rack: 0, slot: 1);
+var mc = SimpleClient.Mc("192.168.0.20", 5000);
+```
+
+需要厂商专用 Modbus 映射、CPU 型号、超时或重试等高级参数时，使用 `IndustrialClientFactory` 或完整 Options 类型。
+
 ```powershell
 dotnet restore
 dotnet build .\IndustrialCommSdk\IndustrialCommSdk.csproj
