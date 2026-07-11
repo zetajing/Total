@@ -45,6 +45,11 @@ PR #1 已合并到 `master`，对应合并提交为 `1afa2eb44394361548f8fd3d313
 - `IndustrialCommDemo`
   WPF 示例程序，只引用 `IndustrialCommSdk`，已经包含在 [Total.sln]中，可直接作为启动项目调试。
 
+- `IndustrialCommMinimal.WinForms`
+  WinForms 协议最小系统。每个页签只保留单协议连接与最小读写/收发操作，适合现场快速验证和 SDK 回归。
+
+协议实现审查与后续优化建议见 [docs/protocol-review.md](docs/protocol-review.md)。
+
 ## 快速开始
 
 ```powershell
