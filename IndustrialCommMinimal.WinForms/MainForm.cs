@@ -163,5 +163,6 @@ namespace IndustrialCommMinimal.WinForms
         private static int ParsePositive(string value, string name) { int result; if (!int.TryParse(value, out result) || result <= 0) throw new FormatException(name + "必须是正整数。"); return result; }
         private static int ParseNonNegative(string value, string name) { int result; if (!int.TryParse(value, out result) || result < 0) throw new FormatException(name + "必须是非负整数。"); return result; }
         private static object ConvertValue(string value, DataType type) { switch (type) { case DataType.Bool: return bool.Parse(value); case DataType.Int16: return short.Parse(value, CultureInfo.InvariantCulture); case DataType.UInt16: return ushort.Parse(value, CultureInfo.InvariantCulture); case DataType.Int32: return int.Parse(value, CultureInfo.InvariantCulture); case DataType.UInt32: return uint.Parse(value, CultureInfo.InvariantCulture); case DataType.Float: return float.Parse(value, CultureInfo.InvariantCulture); case DataType.Double: return double.Parse(value, CultureInfo.InvariantCulture); case DataType.Byte: return byte.Parse(value, CultureInfo.InvariantCulture); case DataType.Char: return char.Parse(value); case DataType.ByteArray: return Convert.FromBase64String(value); default: return value; } }
+
     }
 }
