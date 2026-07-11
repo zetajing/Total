@@ -6,6 +6,8 @@ using IndustrialCommSdk.Protocols.Mc;
 using IndustrialCommSdk.Protocols.Modbus;
 using IndustrialCommSdk.Protocols.S7;
 using IndustrialCommSdk.Protocols.OpcUa;
+using IndustrialCommSdk.Protocols.Mqtt;
+using IndustrialCommSdk.Protocols.Redis;
 using S7.Net;
 
 namespace IndustrialCommSdk
@@ -15,6 +17,34 @@ namespace IndustrialCommSdk
     /// </summary>
     public static class IndustrialClientFactory
     {
+        /// <summary>创建 MQTT 客户端。</summary>
+        public static MqttClient Mqtt(string host, int port = 1883, string deviceId = null,
+            IIndustrialLogger logger = null, string clientId = null, string username = null,
+            string password = null, bool useTls = false, int qos = 0, bool retain = false,
+            int connectTimeoutMilliseconds = 5000, int operationTimeoutMilliseconds = 5000)
+        {
+            ValidateHost(host); ValidatePort(port, nameof(port));
+            return new MqttClient(new MqttClientOptions { DeviceId = CoalesceDeviceId(deviceId, "mqtt", host, port),
+                Host = host, Port = port, ClientId = clientId, Username = username, Password = password,
+                UseTls = useTls, QualityOfService = qos, Retain = retain,
+                ConnectTimeoutMilliseconds = connectTimeoutMilliseconds, OperationTimeoutMilliseconds = operationTimeoutMilliseconds }, logger);
+        }
+
+        /// <summary>创建 Redis 客户端。</summary>
+        public static RedisClient Redis(string host, int port = 6379, string deviceId = null,
+            IIndustrialLogger logger = null, string username = null, string password = null,
+            int database = 0, bool ssl = false, int connectTimeoutMilliseconds = 5000,
+            int operationTimeoutMilliseconds = 5000)
+        {
+            ValidateHost(host); ValidatePort(port, nameof(port));
+            return new RedisClient(new RedisClientOptions { DeviceId = CoalesceDeviceId(deviceId, "redis", host, port, database),
+                Host = host, Port = port, Username = username, Password = password, Database = database, Ssl = ssl,
+                ConnectTimeoutMilliseconds = connectTimeoutMilliseconds, OperationTimeoutMilliseconds = operationTimeoutMilliseconds }, logger);
+        }
+
+        public static IIndustrialClient CreateMqtt(MqttClientOptions options, IIndustrialLogger logger = null) { return new MqttClient(options, logger); }
+        public static IIndustrialClient CreateRedis(RedisClientOptions options, IIndustrialLogger logger = null) { return new RedisClient(options, logger); }
+
         /// <summary>创建 OPC UA 客户端。</summary>
         public static OpcUaClient OpcUa(string endpointUrl, string deviceId = null,
             IIndustrialLogger logger = null, string username = null, string password = null,
@@ -366,6 +396,17 @@ namespace IndustrialCommSdk
                         device.UseSecurity.GetValueOrDefault(false),
                         device.ConnectTimeoutMilliseconds.GetValueOrDefault(10000),
                         device.OperationTimeoutMilliseconds.GetValueOrDefault(5000));
+                case "mqtt":
+                    return Mqtt(device.Host, device.Port.GetValueOrDefault(device.Ssl.GetValueOrDefault(false) ? 8883 : 1883),
+                        CoalesceConfigDeviceId(device.DeviceId, device.Name, "mqtt", device.Host, device.Port.GetValueOrDefault(1883)),
+                        logger, device.ClientId, device.Username, device.Password, device.Ssl.GetValueOrDefault(false),
+                        device.Qos.GetValueOrDefault(0), device.Retain.GetValueOrDefault(false),
+                        device.ConnectTimeoutMilliseconds.GetValueOrDefault(5000), device.OperationTimeoutMilliseconds.GetValueOrDefault(5000));
+                case "redis":
+                    return Redis(device.Host, device.Port.GetValueOrDefault(6379),
+                        CoalesceConfigDeviceId(device.DeviceId, device.Name, "redis", device.Host, device.Port.GetValueOrDefault(6379), device.Database.GetValueOrDefault(0)),
+                        logger, device.Username, device.Password, device.Database.GetValueOrDefault(0), device.Ssl.GetValueOrDefault(false),
+                        device.ConnectTimeoutMilliseconds.GetValueOrDefault(5000), device.OperationTimeoutMilliseconds.GetValueOrDefault(5000));
                 default:
                     throw new ArgumentException(string.Format("Unsupported protocol: {0}", device.Protocol), nameof(device));
             }

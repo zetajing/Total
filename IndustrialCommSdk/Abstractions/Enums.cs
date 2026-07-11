@@ -15,6 +15,10 @@ namespace IndustrialCommSdk.Abstractions
         ModbusRtu = 5,
         /// <summary>OPC UA 客户端/服务器协议。</summary>
         OpcUa = 6,
+        /// <summary>MQTT 消息协议。</summary>
+        Mqtt = 7,
+        /// <summary>Redis 键值存储协议。</summary>
+        Redis = 8,
     }
 
     /// <summary>读写请求中使用的数据类型。</summary>

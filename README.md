@@ -1,5 +1,23 @@
 # IndustrialCommSdk
 
+## MQTT 与 Redis
+
+MQTT 地址对应 Topic：写操作发布消息，读操作订阅并返回该 Topic 的最新消息。Redis 地址对应 key，支持字符串及数值的批量 GET/SET。
+
+```csharp
+using (var mqtt = IndustrialClientFactory.Mqtt("127.0.0.1", deviceId: "mqtt-device", qos: 1))
+using (var redis = IndustrialClientFactory.Redis("127.0.0.1", deviceId: "redis-device", database: 0))
+{
+    await mqtt.ConnectAsync(CancellationToken.None);
+    await mqtt.WriteAsync(new WriteRequest("mqtt-device", "factory/line1/speed", DataType.Float, 12.5f), CancellationToken.None);
+
+    await redis.ConnectAsync(CancellationToken.None);
+    await redis.WriteAsync(new WriteRequest("redis-device", "factory:line1:speed", DataType.Float, 12.5f), CancellationToken.None);
+}
+```
+
+JSON 配置的 `protocol` 分别使用 `mqtt`、`redis`。MQTT 支持 `clientId`、`qos`、`retain`、`ssl`；Redis 支持 `database`、`ssl`；两者均支持 `username` 和 `password`。
+
 ## OPC UA
 
 SDK 支持 OPC UA 客户端读写及批量读写。地址使用标准 NodeId 文本，例如
