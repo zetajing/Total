@@ -1,5 +1,37 @@
 # IndustrialCommSdk
 
+面向 .NET Framework 4.7.2 的统一工业通信 SDK，支持 Modbus、Siemens S7、Mitsubishi MC、OPC UA、MQTT、Redis 等通信方式。
+
+## 第一次使用？从这里开始
+
+如果你还不熟悉 PLC、工业协议或异步编程，建议先阅读 **[零基础入门指南](BEGINNER_GUIDE.md)**。它只讲最常用的四件事：
+
+1. 选择协议并创建客户端
+2. 连接设备
+3. 读取和写入一个地址
+4. 正确断开并释放客户端
+
+最短的 Modbus TCP 示例：
+
+```csharp
+using IndustrialCommSdk;
+
+await SimpleClient.ModbusTcp("192.168.1.10").UseAsync(async client =>
+{
+    short value = await client.ReadAsync<short>("HR0");
+    await client.WriteAsync("HR0", (short)(value + 1));
+});
+```
+
+> 不知道 `HR0`、`D100` 或 `DB1.DBW0` 是什么？请先看入门指南中的“地址是什么”。
+
+## 推荐学习顺序
+
+1. [零基础入门指南](BEGINNER_GUIDE.md)
+2. 本页的“快速开始”和“地址与厂商 Profile”
+3. 批量读写与配置驱动运行
+4. 轮询、诊断、历史数据和扩展能力
+
 ## MQTT 与 Redis
 
 MQTT 地址对应 Topic：写操作发布消息，读操作订阅并返回该 Topic 的最新消息。Redis 地址对应 key，支持字符串及数值的批量 GET/SET。
@@ -48,7 +80,7 @@ using (var client = IndustrialClientFactory.OpcUa(
 }
 ```
 
-面向 .NET Framework 4.7.2 的统一工业通信 SDK，提供一致的设备连接、异步读写、批量操作、轮询、诊断、配置和历史数据接口。
+SDK 提供一致的设备连接、异步读写、批量操作、轮询、诊断、配置和历史数据接口。
 
 仓库同时包含 Windows 11 风格的 WPF 运行中心和轻量 WinForms 协议验证工具，可用于开发调试、现场联调和 SDK 回归。
 
