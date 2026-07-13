@@ -181,7 +181,9 @@ namespace IndustrialCommDemo.Views
             {
                 SaveConfigFiles();
                 var config = IndustrialSdkConfig.Load(_deviceConfigPath);
-                var result = config.Validate(Path.GetDirectoryName(_deviceConfigPath));
+                var result = config.Validate(
+                    Path.GetDirectoryName(_deviceConfigPath),
+                    device => IndustrialClientFactory.FromConfig(device));
                 if (result.IsValid)
                 {
                     SetStatus("配置校验通过，共 " + config.Devices.Count + " 台设备。", Brushes.ForestGreen);

@@ -121,7 +121,9 @@ namespace IndustrialCommSdk
         /// 在不连接设备的情况下校验部署配置、协议参数和全部关联点位表。
         /// configDirectory 应为 devices.json 所在目录，用于解析相对 pointsFile 路径。
         /// </summary>
-        public IndustrialConfigValidationResult Validate(string configDirectory)
+        public IndustrialConfigValidationResult Validate(
+            string configDirectory,
+            Func<IndustrialDeviceConfig, IDisposable> protocolClientFactory = null)
         {
             var errors = new List<string>();
             var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -177,16 +179,23 @@ namespace IndustrialCommSdk
                     errors.Add(string.Format("设备 '{0}' 的 operationTimeoutMilliseconds 必须大于 0。", device.Name ?? label));
                 }
 
-                try
+                if (string.IsNullOrWhiteSpace(device.Protocol))
                 {
-                    using (IndustrialClientFactory.FromConfig(device))
-                    {
-                        // 仅创建客户端以复用协议参数校验，不建立网络连接。
-                    }
+                    errors.Add(string.Format("设备 '{0}' 的 protocol 不能为空。", device.Name ?? label));
                 }
-                catch (Exception ex)
+                else if (protocolClientFactory != null)
                 {
-                    errors.Add(string.Format("设备 '{0}' 协议配置错误：{1}", device.Name ?? label, ex.Message));
+                    try
+                    {
+                        using (protocolClientFactory(device))
+                        {
+                            // 由聚合包或应用注入协议工厂，仅创建客户端，不建立网络连接。
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        errors.Add(string.Format("设备 '{0}' 协议配置错误：{1}", device.Name ?? label, ex.Message));
+                    }
                 }
 
                 try

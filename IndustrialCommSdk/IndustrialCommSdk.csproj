@@ -1,12 +1,13 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
-
+<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFramework>net472</TargetFramework>
     <LangVersion>latest</LangVersion>
     <RootNamespace>IndustrialCommSdk</RootNamespace>
     <AssemblyName>IndustrialCommSdk</AssemblyName>
   </PropertyGroup>
-
+  <ItemGroup>
+    <ProjectReference Include="..\IndustrialCommSdk.Core\IndustrialCommSdk.Core.csproj" />
+  </ItemGroup>
   <ItemGroup>
     <PackageReference Include="NModbus4" Version="2.1.0" />
     <PackageReference Include="S7netplus" Version="0.20.0" />
@@ -14,9 +15,4 @@
     <PackageReference Include="MQTTnet" Version="4.3.7.1207" />
     <PackageReference Include="StackExchange.Redis" Version="3.0.11" />
   </ItemGroup>
-
-  <ItemGroup>
-    <Reference Include="System.Net.Http" />
-  </ItemGroup>
-
 </Project>

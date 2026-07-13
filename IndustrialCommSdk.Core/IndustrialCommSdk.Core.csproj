@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net472</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>IndustrialCommSdk</RootNamespace>
+    <AssemblyName>IndustrialCommSdk.Core</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="System.Net.Http" />
+  </ItemGroup>
+</Project>

@@ -145,7 +145,7 @@ namespace IndustrialCommSdk.Protocols.OpcUa
             return Task.CompletedTask;
         }
 
-        internal static NodeId ParseNodeId(string address)
+        public static NodeId ParseNodeId(string address)
         {
             try { return NodeId.Parse(address); }
             catch (Exception ex) { throw new IndustrialAddressParseException("Invalid OPC UA NodeId: " + address, ex); }

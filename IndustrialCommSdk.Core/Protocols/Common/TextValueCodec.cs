@@ -6,7 +6,8 @@ using IndustrialCommSdk.Exceptions;
 
 namespace IndustrialCommSdk.Protocols.Common
 {
-    internal static class TextValueCodec
+    /// <summary>为文本型协议提供统一的 UTF-8 值编解码。</summary>
+    public static class TextValueCodec
     {
         public static byte[] Encode(DataType type, object value)
         {

@@ -78,11 +78,12 @@ IndustrialCommDemo（上位机应用、交互、展示）
 
 | 目录/项目 | 职责 |
 | --- | --- |
-| `IndustrialCommSdk` | 核心 SDK：统一客户端、协议实现、点位表、配置、轮询、诊断、日志、数据目录、存储和 MES。 |
+| `IndustrialCommSdk.Core` | 零协议依赖的公共核心：统一客户端、点位表、配置、轮询、诊断、日志、传输、存储和 MES。 |
+| `IndustrialCommSdk` | 完整 SDK：全部内置协议、第三方驱动、`IndustrialClientFactory`、`SimpleClient`、`IndustrialDeviceHost` 和配置驱动部署入口。 |
 | `IndustrialCommDemo` | WPF 上位机应用：运行中心负责设备状态和实时点位，其他页面提供协议调试、JSON 配置、MES、数据库、网卡和存储设置。 |
 | `IndustrialCommMinimal.WinForms` | WinForms 协议最小系统：独立验证 Modbus TCP/RTU、S7、MC、原始 TCP 和 MES TCP/HTTP。 |
 
-SDK 内部按职责划分：`Abstractions` 放公共契约，`Protocols` 放协议实现，`Transport` 放传输层，`Polling` 放调度，`Diagnostics` 放诊断与日志，`Storage` 放数据库、导出和数据目录策略，`Mes` 放 MES 通讯。Demo 只引用 `IndustrialCommSdk`，不再维护独立的 `LogHelper` 程序集。
+SDK 采用两层程序集结构。`IndustrialCommSdk.Core` 保留公共契约、通用编解码、传输、调度、诊断、存储和 MES，不引用第三方协议驱动；`IndustrialCommSdk` 引用 Core 并承载全部内置协议。Demo、WinForms 和测试继续只引用完整 SDK，原有调用方式不变。
 
 稳定性基线：内置 PLC 默认操作超时 5000 ms，请求级超时优先；TCP 传输提供可选业务分帧；客户端通过可选诊断接口公开结构化累计快照，不修改 `IIndustrialClient`。
 
