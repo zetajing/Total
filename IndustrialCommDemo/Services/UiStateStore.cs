@@ -146,24 +146,14 @@ namespace IndustrialCommDemo.Services
         public MesUiState Mes { get; set; } = new MesUiState();
     }
 
-    /// <summary>MES 联调页保存的非敏感连接和报工输入。</summary>
+    /// <summary>MES HTTP JSON 联调页状态。</summary>
     [DataContract]
     public sealed class MesUiState
     {
-        [DataMember(Order = 1)] public string Host { get; set; }
-        [DataMember(Order = 2)] public string Port { get; set; }
-        [DataMember(Order = 3)] public string DeviceNo { get; set; }
-        [DataMember(Order = 4)] public string DeviceName { get; set; }
-        [DataMember(Order = 5)] public string DeviceIp { get; set; }
-        [DataMember(Order = 6)] public string DeviceMac { get; set; }
-        [DataMember(Order = 7)] public string Process { get; set; }
-        [DataMember(Order = 8)] public string SerialNo { get; set; }
-        [DataMember(Order = 9)] public string Number { get; set; }
-        [DataMember(Order = 10)] public string Parameters { get; set; }
-        /// <summary>通讯模式："tcp" 或 "http"。</summary>
-        [DataMember(Order = 11)] public string Mode { get; set; }
-        /// <summary>HTTP 模式下的 API 基地址。</summary>
-        [DataMember(Order = 12)] public string BaseUrl { get; set; }
+        /// <summary>MES HTTP 传输配置 JSON。</summary>
+        [DataMember(Order = 1)] public string ConfigJson { get; set; }
+        /// <summary>包含 endpoint 和 payload 的完整 HTTP 请求 JSON。</summary>
+        [DataMember(Order = 2)] public string RequestJson { get; set; }
     }
 
     /// <summary>

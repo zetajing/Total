@@ -3,59 +3,75 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
     <ScrollViewer VerticalScrollBarVisibility="Auto">
         <Grid Margin="10">
-            <Grid.ColumnDefinitions><ColumnDefinition Width="1.05*"/><ColumnDefinition Width="1.25*"/></Grid.ColumnDefinitions>
-            <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-            <GroupBox Header="MES 连接" Grid.Row="0" Grid.Column="0" Margin="0,0,12,12">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="0.9*"/>
+                <ColumnDefinition Width="1.1*"/>
+            </Grid.ColumnDefinitions>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <GroupBox Header="MES HTTP 配置 JSON" Grid.Row="0" Grid.Column="0" Margin="0,0,12,12">
                 <Grid Margin="12">
-                    <Grid.ColumnDefinitions><ColumnDefinition Width="105"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
                     <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
-                        <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
                     </Grid.RowDefinitions>
-                    <!-- 模式选择 -->
-                    <TextBlock Grid.Row="0" Margin="0,8" Text="通讯模式"/>
-                    <ComboBox x:Name="MesModeComboBox" Grid.Row="0" Grid.Column="1" Margin="0,5" SelectedIndex="0" SelectionChanged="ModeComboBox_SelectionChanged">
-                        <ComboBoxItem Content="TCP 长连接" Tag="tcp"/>
-                        <ComboBoxItem Content="HTTP API" Tag="http"/>
-                    </ComboBox>
-                    <!-- TCP 参数 -->
-                    <TextBlock x:Name="MesHostLabel" Grid.Row="1" Margin="0,8" Text="MES 主机"/><TextBox x:Name="MesHostTextBox" Grid.Row="1" Grid.Column="1" Margin="0,5" Text="127.0.0.1"/>
-                    <TextBlock x:Name="MesPortLabel" Grid.Row="2" Margin="0,8" Text="端口"/><TextBox x:Name="MesPortTextBox" Grid.Row="2" Grid.Column="1" Margin="0,5" Text="9312"/>
-                    <!-- HTTP 参数（初始隐藏） -->
-                    <TextBlock x:Name="MesBaseUrlLabel" Grid.Row="3" Margin="0,8" Text="API 地址" Visibility="Collapsed"/>
-                    <TextBox x:Name="MesBaseUrlTextBox" Grid.Row="3" Grid.Column="1" Margin="0,5" Visibility="Collapsed" Text="http://127.0.0.1:8080/api"/>
-                    <TextBlock Grid.Row="4" Margin="0,8" Text="设备编号"/><TextBox x:Name="MesDeviceNoTextBox" Grid.Row="4" Grid.Column="1" Margin="0,5" Text="001"/>
-                    <TextBlock Grid.Row="5" Margin="0,8" Text="设备名称"/><TextBox x:Name="MesDeviceNameTextBox" Grid.Row="5" Grid.Column="1" Margin="0,5" Text="001"/>
-                    <TextBlock Grid.Row="6" Margin="0,8" Text="设备 IP"/><TextBox x:Name="MesDeviceIpTextBox" Grid.Row="6" Grid.Column="1" Margin="0,5" Text="127.0.0.1"/>
-                    <TextBlock Grid.Row="7" Margin="0,8" Text="设备 MAC"/><TextBox x:Name="MesDeviceMacTextBox" Grid.Row="7" Grid.Column="1" Margin="0,5" Text="00-00-00-00-00-00"/>
-                    <TextBlock Grid.Row="8" Margin="0,8" Text="状态"/><TextBlock x:Name="MesStatusTextBlock" Grid.Row="8" Grid.Column="1" Margin="0,8" Foreground="IndianRed" Text="未连接"/>
-                    <UniformGrid Grid.Row="9" Grid.ColumnSpan="2" Columns="3" Margin="0,12,0,0">
-                        <Button Margin="0,0,6,0" Padding="8" Background="#0891B2" Foreground="White" BorderThickness="0" Click="ConnectButton_Click" Content="连接"/>
-                        <Button Margin="3,0" Padding="8" Background="#334155" Foreground="White" BorderThickness="0" Click="DisconnectButton_Click" Content="断开"/>
-                        <Button x:Name="MesOnlineButton" Margin="6,0,0,0" Padding="8" Background="#2563EB" Foreground="White" BorderThickness="0" Click="OnlineButton_Click" Content="发送上线"/>
+                    <TextBox x:Name="MesConfigJsonTextBox" MinHeight="280" AcceptsReturn="True"
+                             AcceptsTab="True" TextWrapping="NoWrap" FontFamily="Consolas"
+                             VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto"
+                             TextChanged="ConfigJsonTextBox_TextChanged"/>
+                    <UniformGrid Grid.Row="1" Columns="3" Margin="0,10,0,0">
+                        <Button Margin="0,0,4,0" Padding="8" Click="FormatConfigButton_Click" Content="校验 / 格式化"/>
+                        <Button Margin="4,0" Padding="8" Background="#0891B2" Foreground="White" BorderThickness="0"
+                                Click="ApplyConfigButton_Click" Content="应用配置"/>
+                        <Button Margin="4,0,0,0" Padding="8" Click="ResetConfigButton_Click" Content="恢复默认"/>
+                    </UniformGrid>
+                    <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,10,0,0">
+                        <TextBlock Text="状态：" FontWeight="SemiBold"/>
+                        <TextBlock x:Name="MesStatusTextBlock" Foreground="IndianRed" Text="配置未应用"/>
+                    </StackPanel>
+                </Grid>
+            </GroupBox>
+
+            <GroupBox Header="MES 上传正文 JSON（原样 POST）" Grid.Row="0" Grid.Column="1" Margin="0,0,0,12">
+                <Grid Margin="12">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+                    <TextBox x:Name="MesPayloadJsonTextBox" MinHeight="280" AcceptsReturn="True"
+                             AcceptsTab="True" TextWrapping="NoWrap" FontFamily="Consolas"
+                             VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto"/>
+                    <UniformGrid Grid.Row="1" Columns="2" Margin="0,10,0,0">
+                        <Button Margin="0,0,5,0" Padding="9" Click="FormatPayloadButton_Click" Content="校验 / 格式化"/>
+                        <Button x:Name="MesSendButton" Margin="5,0,0,0" Padding="9" Background="#059669"
+                                Foreground="White" BorderThickness="0" Click="SendJsonButton_Click" Content="发送 JSON"/>
                     </UniformGrid>
                 </Grid>
             </GroupBox>
-            <GroupBox Header="FATRACK 手工报工" Grid.Row="0" Grid.Column="1" Margin="0,0,0,12">
+
+            <GroupBox Header="MES HTTP 原始响应" Grid.Row="1" Grid.ColumnSpan="2">
                 <Grid Margin="12">
-                    <Grid.ColumnDefinitions><ColumnDefinition Width="105"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-                    <TextBlock Grid.Row="0" Margin="0,8" Text="工序编码"/><TextBox x:Name="MesProcessTextBox" Grid.Row="0" Grid.Column="1" Margin="0,5" Text="FAFAL0290M0"/>
-                    <TextBlock Grid.Row="1" Margin="0,8" Text="SN"/><TextBox x:Name="MesSerialNoTextBox" Grid.Row="1" Grid.Column="1" Margin="0,5"/>
-                    <TextBlock Grid.Row="2" Margin="0,8" Text="螺丝数量"/><TextBox x:Name="MesNumberTextBox" Grid.Row="2" Grid.Column="1" Margin="0,5" Text="0"/>
-                    <TextBlock Grid.Row="3" Margin="0,8" Text="参数" VerticalAlignment="Top"/><TextBox x:Name="MesParametersTextBox" Grid.Row="3" Grid.Column="1" Margin="0,5" MinHeight="75" AcceptsReturn="True" TextWrapping="Wrap" Text="test=1" ToolTip="每行一个 key=value"/>
-                    <Button Grid.Row="4" Grid.ColumnSpan="2" Margin="0,12,0,0" Padding="10" Background="#059669" Foreground="White" BorderThickness="0" Click="SendTrackButton_Click" Content="发送 FATRACK"/>
-                </Grid>
-            </GroupBox>
-            <GroupBox Header="MES 消息与结果" Grid.Row="1" Grid.ColumnSpan="2">
-                <Grid Margin="12">
-                    <Grid.ColumnDefinitions><ColumnDefinition Width="120"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-                    <TextBlock Grid.Row="0" Margin="0,5" Text="FACHECK" FontWeight="SemiBold"/><TextBlock x:Name="MesFaCheckTextBlock" Grid.Row="0" Grid.Column="1" Margin="0,5" Text="（未收到）" TextWrapping="Wrap"/>
-                    <TextBlock Grid.Row="1" Margin="0,5" Text="FANUM" FontWeight="SemiBold"/><TextBlock x:Name="MesFaNumTextBlock" Grid.Row="1" Grid.Column="1" Margin="0,5" Text="（未收到）" TextWrapping="Wrap"/>
-                    <TextBlock Grid.Row="2" Margin="0,5" Text="协议错误" FontWeight="SemiBold"/><TextBlock x:Name="MesProtocolErrorTextBlock" Grid.Row="2" Grid.Column="1" Margin="0,5" Foreground="IndianRed" Text="（无）" TextWrapping="Wrap"/>
-                    <TextBlock Grid.Row="3" Margin="0,5" Text="收发记录" FontWeight="SemiBold" VerticalAlignment="Top"/>
-                    <TextBox x:Name="MesTrafficTextBox" Grid.Row="3" Grid.Column="1" Margin="0,5" MinHeight="180" IsReadOnly="True" AcceptsReturn="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto"/>
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="100"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/><RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+                    <TextBlock Grid.Row="0" Margin="0,4" Text="请求端点" FontWeight="SemiBold"/>
+                    <TextBlock x:Name="MesResponseEndpointTextBlock" Grid.Row="0" Grid.Column="1" Margin="0,4" Text="（未发送）"/>
+                    <TextBlock Grid.Row="1" Margin="0,4" Text="HTTP 状态" FontWeight="SemiBold"/>
+                    <TextBlock x:Name="MesHttpStatusTextBlock" Grid.Row="1" Grid.Column="1" Margin="0,4" Text="（未响应）"/>
+                    <TextBlock Grid.Row="2" Margin="0,4" Text="Content-Type" FontWeight="SemiBold"/>
+                    <TextBlock x:Name="MesContentTypeTextBlock" Grid.Row="2" Grid.Column="1" Margin="0,4" Text="（未响应）"/>
+                    <TextBlock Grid.Row="3" Margin="0,4" Text="ReasonPhrase" FontWeight="SemiBold"/>
+                    <TextBlock x:Name="MesReasonPhraseTextBlock" Grid.Row="3" Grid.Column="1" Margin="0,4" Text="（未响应）"/>
+                    <TextBlock Grid.Row="4" Margin="0,7,0,0" Text="响应正文" FontWeight="SemiBold" VerticalAlignment="Top"/>
+                    <TextBox x:Name="MesResponseBodyTextBox" Grid.Row="4" Grid.Column="1" Margin="0,7,0,0"
+                             MinHeight="180" IsReadOnly="True" AcceptsReturn="True" TextWrapping="NoWrap"
+                             FontFamily="Consolas" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto"/>
                 </Grid>
             </GroupBox>
         </Grid>

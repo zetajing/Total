@@ -3,7 +3,7 @@
 ## 本轮已处理
 
 - Modbus TCP：完整选项构造现在会立即校验设备 ID、主机、端口、站号、连接超时和设备配置文件，与 Modbus RTU、S7、MC 的失败时机保持一致。
-- 新增 WinForms 最小系统，分别隔离验证 Modbus TCP、Modbus RTU、Siemens S7、Mitsubishi MC、原始 TCP、MES TCP 和 MES HTTP。
+- 新增 WinForms 最小系统，分别隔离验证 Modbus TCP、Modbus RTU、Siemens S7、Mitsubishi MC、原始 TCP 和开放式 MES HTTP JSON。
 - 四种 PLC 客户端统一使用 5000 ms 默认操作超时，请求级 Timeout 优先；S7 连接增加独立超时。
 - 原始 TCP 增加固定长度、分隔符、2/4 字节大端长度头分帧及半包/粘包缓存。
 - 新增结构化诊断快照；Modbus RTU 额外统计串口打开、响应超时和帧错误。
@@ -14,7 +14,6 @@
 
 | 优先级 | 协议 | 建议 | 原因 |
 | --- | --- | --- | --- |
-| P1 | MES TCP | 为业务请求增加可选请求标识与响应关联 | 并发上线/追踪请求时，目前主要依赖事件和消息类型，定位单次请求较困难。 |
 | P2 | Mitsubishi MC | 将网络号、PLC 号、目标模块 I/O 和监视定时器暴露为选项 | 当前固定 3E 帧路由参数适合简单直连，复杂网络拓扑需要配置能力。 |
 
 涉及帧格式、超时和重试语义的调整应配合模拟器或实机回归，不在本轮仅凭静态审查改变默认行为。

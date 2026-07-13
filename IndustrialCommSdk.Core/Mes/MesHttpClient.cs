@@ -1,18 +1,22 @@
 using System;
 using System.Diagnostics;
-using System.Net;
+using System.IO;
 using System.Net.Http;
+using System.Net.Http.Headers;
+using System.Runtime.Serialization;
 using System.Runtime.Serialization.Json;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Xml;
 using IndustrialCommSdk.Diagnostics;
 
 namespace IndustrialCommSdk.Mes
 {
-    /// <summary>MES HTTP 客户端，通过 REST API 与 MES 服务通信（无状态，无服务端推送）。</summary>
+    /// <summary>开放 MES JSON HTTP 客户端，不内置任何业务消息类型。</summary>
     public sealed class MesHttpClient : IMesHttpClient
     {
+        private static readonly HttpClient SharedHttpClient = CreateHttpClient(CreateDefaultHandler(), true);
         private readonly MesHttpClientOptions _options;
         private readonly IIndustrialLogger _logger;
         private readonly HttpClient _httpClient;
@@ -20,36 +24,18 @@ namespace IndustrialCommSdk.Mes
         private int _disposed;
         private volatile bool _lastRequestSuccess;
 
-        /// <summary>使用指定选项创建 HTTP 客户端。</summary>
         public MesHttpClient(MesHttpClientOptions options, IIndustrialLogger logger = null)
-            : this(options, CreateDefaultHandler(), true, logger)
-        {
-        }
+            : this(options, SharedHttpClient, false, logger) { }
 
-        /// <summary>
-        /// 使用自定义 HTTP 处理器创建客户端。适用于代理、证书、自定义认证和自动化测试。
-        /// </summary>
-        /// <param name="disposeHandler">释放客户端时是否一并释放处理器。</param>
         public MesHttpClient(
             MesHttpClientOptions options,
             HttpMessageHandler handler,
             bool disposeHandler,
             IIndustrialLogger logger = null)
-            : this(options, CreateHttpClient(handler, disposeHandler), true, logger)
-        {
-        }
+            : this(options, CreateHttpClient(handler, disposeHandler), true, logger) { }
 
-        /// <summary>
-        /// 使用外部管理的 HttpClient 创建客户端。SDK 不会修改或释放该实例。
-        /// 外部客户端自身的 Timeout 仍然生效，SDK 选项中的超时通过请求级取消实现。
-        /// </summary>
-        public MesHttpClient(
-            MesHttpClientOptions options,
-            HttpClient httpClient,
-            IIndustrialLogger logger)
-            : this(options, httpClient, false, logger)
-        {
-        }
+        public MesHttpClient(MesHttpClientOptions options, HttpClient httpClient, IIndustrialLogger logger)
+            : this(options, httpClient, false, logger) { }
 
         private MesHttpClient(
             MesHttpClientOptions options,
@@ -59,111 +45,72 @@ namespace IndustrialCommSdk.Mes
         {
             _options = options ?? throw new ArgumentNullException(nameof(options));
             ValidateOptions(options);
-            _logger = logger ?? NullIndustrialLogger.Instance;
             _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
             _disposeHttpClient = disposeHttpClient;
+            _logger = logger ?? NullIndustrialLogger.Instance;
         }
 
         public bool IsConnected => !IsDisposed() && _lastRequestSuccess;
 
-        public async Task<MesOnlineResponse> SendOnlineAsync(CancellationToken cancellationToken)
+        public Task<MesJsonResponse> SendJsonAsync(
+            string endpoint,
+            string json,
+            CancellationToken cancellationToken)
         {
             ThrowIfDisposed();
-
-            var request = new MesOnlineRequest
-            {
-                DeviceNo = _options.DeviceNo,
-                DeviceName = _options.DeviceName,
-                DeviceIp = _options.DeviceIp,
-                DeviceMac = _options.DeviceMac,
-            };
-
-            return await SendAsync<MesOnlineRequest, MesOnlineResponse>(
-                "online", request, cancellationToken).ConfigureAwait(false);
+            ValidateJsonObject(json);
+            return SendCoreAsync(NormalizeEndpoint(endpoint), json, cancellationToken);
         }
 
-        public async Task<MesFaCheckResponse> SendFaCheckAsync(MesFaCheckRequest request, CancellationToken cancellationToken)
-        {
-            ThrowIfDisposed();
-            if (request == null) throw new ArgumentNullException(nameof(request));
-
-            return await SendAsync<MesFaCheckRequest, MesFaCheckResponse>(
-                "facheck", request, cancellationToken).ConfigureAwait(false);
-        }
-
-        public async Task<MesFaTrackResponse> SendFaTrackAsync(MesFaTrackRequest request, CancellationToken cancellationToken)
-        {
-            ThrowIfDisposed();
-            if (request == null) throw new ArgumentNullException(nameof(request));
-
-            return await SendAsync<MesFaTrackRequest, MesFaTrackResponse>(
-                "fatrack", request, cancellationToken).ConfigureAwait(false);
-        }
-
-        private async Task<TResponse> SendAsync<TRequest, TResponse>(
-            string endpoint, TRequest body, CancellationToken cancellationToken)
-            where TResponse : MesApiResponse, new()
+        private async Task<MesJsonResponse> SendCoreAsync(
+            string endpoint,
+            string json,
+            CancellationToken cancellationToken)
         {
             var url = CombineUrl(_options.BaseUrl, endpoint);
-            var json = MesProtocolCodec.Serialize(body);
             var stopwatch = Stopwatch.StartNew();
-
-            _logger.Info(string.Format("MES HTTP TX begin | Endpoint={0} | Url={1} | Body={2}", endpoint, url, json));
+            _logger.Info(string.Format("MES HTTP TX begin | Endpoint={0} | Url={1} | Body={2}",
+                endpoint, url, TruncateBody(json)));
 
             var retries = 0;
-            var maxRetries = Math.Max(0, _options.MaxRetries);
-
             while (true)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-
-                string responseBody = null;
-
                 try
                 {
-                    using (var content = new StringContent(json, Encoding.UTF8, "application/json"))
                     using (var timeoutSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken))
+                    using (var request = CreateJsonRequest(url, json))
                     {
                         timeoutSource.CancelAfter(_options.TimeoutMilliseconds);
-                        using (var response = await _httpClient.PostAsync(url, content, timeoutSource.Token)
-                            .ConfigureAwait(false))
+                        using (var response = await _httpClient.SendAsync(
+                            request,
+                            HttpCompletionOption.ResponseHeadersRead,
+                            timeoutSource.Token).ConfigureAwait(false))
                         {
+                            var responseBody = await ReadResponseBodyAsync(
+                                response.Content,
+                                _options.MaxResponseContentBytes,
+                                timeoutSource.Token).ConfigureAwait(false);
 
-                            responseBody = await response.Content.ReadAsStringAsync()
-                                .ConfigureAwait(false);
-
-                            _logger.Info(string.Format("MES HTTP RX | Endpoint={0} | Status={1} | Body={2} | Elapsed={3}ms",
-                                endpoint, (int)response.StatusCode, TruncateBody(responseBody), stopwatch.ElapsedMilliseconds));
+                            _logger.Info(string.Format(
+                                "MES HTTP RX | Endpoint={0} | Status={1} | Body={2} | Elapsed={3}ms",
+                                endpoint,
+                                (int)response.StatusCode,
+                                TruncateBody(responseBody),
+                                stopwatch.ElapsedMilliseconds));
 
                             if (response.IsSuccessStatusCode)
                             {
-                                var result = Deserialize<TResponse>(responseBody);
                                 _lastRequestSuccess = true;
-                                return result;
+                                return CreateResponse(endpoint, response, responseBody);
                             }
 
-                            // 4xx 不重试（客户端错误）
                             if ((int)response.StatusCode >= 400 && (int)response.StatusCode < 500)
                             {
-                                _logger.Warn(string.Format("MES HTTP client error | Endpoint={0} | Status={1} | Body={2}",
-                                    endpoint, (int)response.StatusCode, TruncateBody(responseBody)));
-
-                                var errorResult = DeserializeOrNull<TResponse>(responseBody);
-                                if (errorResult != null)
-                                {
-                                    _lastRequestSuccess = false;
-                                    return errorResult;
-                                }
-
                                 _lastRequestSuccess = false;
-                                return new TResponse
-                                {
-                                    Code = ((int)response.StatusCode).ToString(),
-                                    Message = responseBody ?? response.ReasonPhrase,
-                                };
+                                return CreateResponse(endpoint, response, responseBody);
                             }
 
-                            // 5xx 和其他非成功状态通过统一异常路径执行有上限的重试。
                             throw new HttpRequestException(string.Format(
                                 "MES HTTP server error. Status={0}, Body={1}",
                                 (int)response.StatusCode,
@@ -173,57 +120,74 @@ namespace IndustrialCommSdk.Mes
                 }
                 catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
                 {
-                    _logger.Info("MES HTTP cancelled | Endpoint=" + endpoint);
                     _lastRequestSuccess = false;
                     throw;
                 }
-                catch (Exception ex) when (retries < maxRetries)
+                catch (Exception ex) when (retries < _options.MaxRetries && IsRetryable(ex, cancellationToken))
                 {
-                    // 仅 5xx / 超时 / 网络异常重试
-                    _logger.Warn(string.Format("MES HTTP retry {0}/{1} | Endpoint={2} | Error={3}",
-                        retries + 1, maxRetries, endpoint, ex.Message));
                     retries++;
-
-                    // 退避：重试等待 500ms * retries
-                    var delay = Math.Min(500 * retries, 5000);
-                    try { await Task.Delay(delay, cancellationToken).ConfigureAwait(false); }
-                    catch (OperationCanceledException) { throw; }
-                    continue;
+                    _logger.Warn(string.Format("MES HTTP retry {0}/{1} | Endpoint={2} | Error={3}",
+                        retries, _options.MaxRetries, endpoint, ex.Message));
+                    await Task.Delay(
+                        CalculateRetryDelay(_options.RetryDelayMilliseconds, retries),
+                        cancellationToken).ConfigureAwait(false);
                 }
                 catch (Exception ex)
                 {
-                    _logger.Error(string.Format("MES HTTP failed | Endpoint={0} | Error={1}", endpoint, ex.Message), ex);
                     _lastRequestSuccess = false;
+                    _logger.Error(string.Format("MES HTTP failed | Endpoint={0} | Error={1}", endpoint, ex.Message), ex);
                     throw;
                 }
             }
         }
 
-        private T Deserialize<T>(string json)
+        private static MesJsonResponse CreateResponse(
+            string endpoint,
+            HttpResponseMessage response,
+            string body)
         {
-            return MesProtocolCodec.Deserialize<T>(json);
+            return new MesJsonResponse
+            {
+                Endpoint = "/" + endpoint,
+                StatusCode = (int)response.StatusCode,
+                ReasonPhrase = response.ReasonPhrase,
+                ContentType = response.Content?.Headers.ContentType?.ToString(),
+                Body = body,
+            };
         }
 
-        private static T DeserializeOrNull<T>(string json) where T : class
+        private static string NormalizeEndpoint(string endpoint)
         {
-            if (string.IsNullOrWhiteSpace(json)) return null;
-            try { return MesProtocolCodec.Deserialize<T>(json); }
-            catch { return null; }
+            if (string.IsNullOrWhiteSpace(endpoint))
+                throw new ArgumentException("MES HTTP endpoint is required.", nameof(endpoint));
+
+            endpoint = endpoint.Trim();
+            if (endpoint.StartsWith("//", StringComparison.Ordinal) ||
+                endpoint.IndexOf('\\') >= 0 || endpoint.IndexOf('#') >= 0 ||
+                Uri.TryCreate(endpoint, UriKind.Absolute, out _))
+                throw new ArgumentException("MES HTTP endpoint must be a relative path.", nameof(endpoint));
+
+            endpoint = endpoint.TrimStart('/');
+            var path = endpoint.Split('?')[0];
+            if (path.Length == 0)
+                throw new ArgumentException("MES HTTP endpoint path is required.", nameof(endpoint));
+            foreach (var segment in path.Split('/'))
+            {
+                var decoded = Uri.UnescapeDataString(segment);
+                if (decoded == "." || decoded == "..")
+                    throw new ArgumentException("MES HTTP endpoint cannot contain relative traversal segments.", nameof(endpoint));
+            }
+            return endpoint;
         }
 
         private static string CombineUrl(string baseUrl, string endpoint)
         {
-            if (string.IsNullOrWhiteSpace(baseUrl))
-                throw new InvalidOperationException("MES HTTP BaseUrl is not configured.");
-
-            baseUrl = baseUrl.TrimEnd('/');
-            endpoint = endpoint.TrimStart('/');
-            return baseUrl + "/" + endpoint;
+            return baseUrl.TrimEnd('/') + "/" + endpoint;
         }
 
         private static HttpMessageHandler CreateDefaultHandler()
         {
-            return new HttpClientHandler { AllowAutoRedirect = false };
+            return new HttpClientHandler { AllowAutoRedirect = false, MaxConnectionsPerServer = 32 };
         }
 
         private static HttpClient CreateHttpClient(HttpMessageHandler handler, bool disposeHandler)
@@ -233,6 +197,73 @@ namespace IndustrialCommSdk.Mes
             client.DefaultRequestHeaders.ConnectionClose = false;
             client.DefaultRequestHeaders.UserAgent.ParseAdd("IndustrialCommSdk/1.0");
             return client;
+        }
+
+        private static HttpRequestMessage CreateJsonRequest(string url, string json)
+        {
+            var request = new HttpRequestMessage(HttpMethod.Post, url)
+            {
+                Content = new StringContent(json, Encoding.UTF8, "application/json"),
+            };
+            request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+            return request;
+        }
+
+        private static async Task<string> ReadResponseBodyAsync(
+            HttpContent content,
+            int maximumBytes,
+            CancellationToken cancellationToken)
+        {
+            if (content == null) return null;
+            if (content.Headers.ContentLength.HasValue && content.Headers.ContentLength.Value > maximumBytes)
+                throw new InvalidDataException("MES HTTP JSON response exceeds the configured maximum size.");
+
+            using (var input = await content.ReadAsStreamAsync().ConfigureAwait(false))
+            using (var output = new MemoryStream())
+            {
+                var buffer = new byte[8192];
+                while (true)
+                {
+                    var read = await input.ReadAsync(buffer, 0, buffer.Length, cancellationToken).ConfigureAwait(false);
+                    if (read == 0) break;
+                    if (output.Length + read > maximumBytes)
+                        throw new InvalidDataException("MES HTTP JSON response exceeds the configured maximum size.");
+                    output.Write(buffer, 0, read);
+                }
+                return Encoding.UTF8.GetString(output.GetBuffer(), 0, checked((int)output.Length));
+            }
+        }
+
+        private static void ValidateJsonObject(string json)
+        {
+            if (string.IsNullOrWhiteSpace(json))
+                throw new ArgumentException("MES HTTP JSON body is required.", nameof(json));
+            if (json.TrimStart()[0] != '{')
+                throw new ArgumentException("MES HTTP JSON body must have an object root.", nameof(json));
+            try
+            {
+                using (var stream = new MemoryStream(Encoding.UTF8.GetBytes(json)))
+                using (var reader = JsonReaderWriterFactory.CreateJsonReader(
+                    stream, Encoding.UTF8, XmlDictionaryReaderQuotas.Max, null))
+                {
+                    while (reader.Read()) { }
+                }
+            }
+            catch (Exception ex) when (ex is XmlException || ex is FormatException || ex is SerializationException)
+            {
+                throw new ArgumentException("MES HTTP body is not valid JSON.", nameof(json), ex);
+            }
+        }
+
+        private static bool IsRetryable(Exception exception, CancellationToken callerToken)
+        {
+            return exception is HttpRequestException ||
+                (exception is OperationCanceledException && !callerToken.IsCancellationRequested);
+        }
+
+        private static int CalculateRetryDelay(int baseDelayMilliseconds, int retryNumber)
+        {
+            return (int)Math.Min((long)baseDelayMilliseconds * Math.Min(retryNumber, 60), 30000L);
         }
 
         private static string TruncateBody(string body)
@@ -245,22 +276,24 @@ namespace IndustrialCommSdk.Mes
         {
             if (string.IsNullOrWhiteSpace(options.BaseUrl))
                 throw new ArgumentException("MES HTTP BaseUrl is required.", nameof(options));
-            if (string.IsNullOrWhiteSpace(options.DeviceNo))
-                throw new ArgumentException("MES HTTP device number is required.", nameof(options));
-            if (string.IsNullOrWhiteSpace(options.DeviceName))
-                throw new ArgumentException("MES HTTP device name is required.", nameof(options));
-            if (string.IsNullOrWhiteSpace(options.DeviceIp))
-                throw new ArgumentException("MES HTTP device IP is required.", nameof(options));
-            if (string.IsNullOrWhiteSpace(options.DeviceMac))
-                throw new ArgumentException("MES HTTP device MAC is required.", nameof(options));
+            if (!Uri.TryCreate(options.BaseUrl, UriKind.Absolute, out var baseUri) ||
+                (baseUri.Scheme != Uri.UriSchemeHttp && baseUri.Scheme != Uri.UriSchemeHttps))
+                throw new ArgumentException("MES HTTP BaseUrl must be an absolute HTTP or HTTPS URL.", nameof(options));
             if (options.TimeoutMilliseconds <= 0)
-                throw new ArgumentOutOfRangeException(nameof(options.TimeoutMilliseconds), "MES HTTP timeout must be positive.");
+                throw new ArgumentOutOfRangeException(nameof(options.TimeoutMilliseconds));
             if (options.MaxRetries < 0)
-                throw new ArgumentOutOfRangeException(nameof(options.MaxRetries), "MES HTTP max retries must be >= 0.");
+                throw new ArgumentOutOfRangeException(nameof(options.MaxRetries));
+            if (options.RetryDelayMilliseconds < 0)
+                throw new ArgumentOutOfRangeException(nameof(options.RetryDelayMilliseconds));
+            if (options.MaxResponseContentBytes <= 0)
+                throw new ArgumentOutOfRangeException(nameof(options.MaxResponseContentBytes));
         }
 
         private bool IsDisposed() => Volatile.Read(ref _disposed) != 0;
-        private void ThrowIfDisposed() { if (IsDisposed()) throw new ObjectDisposedException(nameof(MesHttpClient)); }
+        private void ThrowIfDisposed()
+        {
+            if (IsDisposed()) throw new ObjectDisposedException(nameof(MesHttpClient));
+        }
 
         public void Dispose()
         {

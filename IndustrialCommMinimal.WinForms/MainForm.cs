@@ -27,10 +27,9 @@ namespace IndustrialCommMinimal.WinForms
         private IIndustrialClient _s7Client;
         private IIndustrialClient _mcClient;
 
-        // 原始 TCP 和 MES TCP 有各自专用 API，不属于统一 PLC 读写抽象，单独持有实例。
+        // 原始 TCP 有专用 API，不属于统一 PLC 读写抽象，单独持有实例。
         private TcpTransportClient _rawTcpClient;
         private FramedTcpClient _framedTcpClient;
-        private MesTcpClient _mesTcpClient;
 
         /// <summary>创建主窗体并加载由 Visual Studio 设计器维护的全部控件。</summary>
         public MainForm()
@@ -245,34 +244,19 @@ namespace IndustrialCommMinimal.WinForms
         }
 
         /// <summary>
-        /// 根据 MES 身份和端点参数创建长连接客户端。
-        /// 示例关闭自动重连，使连接按钮的结果更适合人工最小验证；原始收发报文写入页面日志。
-        /// </summary>
-        private async void MesTcpConnectButton_Click(object sender, EventArgs e)
-        {
-            await RunAsync(MesTcpOutputTextBox, async () => { if (_mesTcpClient != null) _mesTcpClient.Dispose(); _mesTcpClient = new MesTcpClient(new MesClientOptions { Host = MesTcpHostTextBox.Text.Trim(), Port = ParsePort(MesTcpPortTextBox.Text), DeviceNo = MesTcpDeviceNoTextBox.Text.Trim(), DeviceName = MesTcpDeviceNameTextBox.Text.Trim(), DeviceIp = MesTcpDeviceIpTextBox.Text.Trim(), DeviceMac = MesTcpDeviceMacTextBox.Text.Trim(), AutoReconnect = false }); _mesTcpClient.RawMessage += (o, a) => Append(MesTcpOutputTextBox, (a.Sent ? "TX: " : "RX: ") + a.Message); await _mesTcpClient.ConnectAsync(CancellationToken.None); Append(MesTcpOutputTextBox, "已连接"); });
-        }
-
-        /// <summary>通过已建立的 MES TCP 长连接发送设备上线报文。</summary>
-        private async void MesTcpOnlineButton_Click(object sender, EventArgs e) { await RunAsync(MesTcpOutputTextBox, async () => { if (_mesTcpClient == null || !_mesTcpClient.IsConnected) throw new InvalidOperationException("请先连接。"); await _mesTcpClient.SendOnlineAsync(CancellationToken.None); }); }
-
-        /// <summary>停止 MES TCP 连接并释放后台接收任务、套接字和同步资源。</summary>
-        private async void MesTcpDisconnectButton_Click(object sender, EventArgs e) { await RunAsync(MesTcpOutputTextBox, async () => { if (_mesTcpClient == null) return; await _mesTcpClient.DisconnectAsync(CancellationToken.None); _mesTcpClient.Dispose(); _mesTcpClient = null; Append(MesTcpOutputTextBox, "已断开"); }); }
-
-        /// <summary>
-        /// 创建一次性 MES HTTP 客户端并发送上线请求。
+        /// 创建一次性 MES HTTP 客户端并发送 JSON 请求。
         /// HTTP 无需预先建立长连接，因此客户端在单次验证完成后立即释放。
         /// </summary>
-        private async void MesHttpOnlineButton_Click(object sender, EventArgs e)
+        private async void MesHttpSendButton_Click(object sender, EventArgs e)
         {
-            await RunAsync(MesHttpOutputTextBox, async () => { using (var client = new MesHttpClient(new MesHttpClientOptions { BaseUrl = MesHttpUrlTextBox.Text.Trim(), DeviceNo = MesHttpDeviceNoTextBox.Text.Trim(), DeviceName = MesHttpDeviceNameTextBox.Text.Trim(), DeviceIp = MesHttpDeviceIpTextBox.Text.Trim(), DeviceMac = MesHttpDeviceMacTextBox.Text.Trim() })) { var response = await client.SendOnlineAsync(CancellationToken.None); Append(MesHttpOutputTextBox, string.Format("响应: success={0}, code={1}, message={2}", response.IsSuccess, response.Code, response.Message)); } });
+            await RunAsync(MesHttpOutputTextBox, async () => { using (var client = new MesHttpClient(new MesHttpClientOptions { BaseUrl = MesHttpUrlTextBox.Text.Trim() })) { var response = await client.SendJsonAsync(MesHttpEndpointTextBox.Text.Trim(), MesHttpJsonTextBox.Text, CancellationToken.None); Append(MesHttpOutputTextBox, string.Format("响应: status={0}, body={1}", response.StatusCode, response.Body)); } });
         }
 
         /// <summary>窗体关闭时统一释放全部协议客户端，避免串口、套接字或后台任务残留。</summary>
         protected override void OnFormClosed(FormClosedEventArgs e)
         {
             DisposeClient(_modbusTcpClient); DisposeClient(_modbusRtuClient); DisposeClient(_s7Client); DisposeClient(_mcClient);
-            if (_rawTcpClient != null) _rawTcpClient.Dispose(); if (_framedTcpClient != null) _framedTcpClient.Dispose(); if (_mesTcpClient != null) _mesTcpClient.Dispose();
+            if (_rawTcpClient != null) _rawTcpClient.Dispose(); if (_framedTcpClient != null) _framedTcpClient.Dispose();
             base.OnFormClosed(e);
         }
 

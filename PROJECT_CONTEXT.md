@@ -81,7 +81,7 @@ IndustrialCommDemo（上位机应用、交互、展示）
 | `IndustrialCommSdk.Core` | 零协议依赖的公共核心：统一客户端、点位表、配置、轮询、诊断、日志、传输、存储和 MES。 |
 | `IndustrialCommSdk` | 完整 SDK：全部内置协议、第三方驱动、`IndustrialClientFactory`、`SimpleClient`、`IndustrialDeviceHost` 和配置驱动部署入口。 |
 | `IndustrialCommDemo` | WPF 上位机应用：运行中心负责设备状态和实时点位，其他页面提供协议调试、JSON 配置、MES、数据库、网卡和存储设置。 |
-| `IndustrialCommMinimal.WinForms` | WinForms 协议最小系统：独立验证 Modbus TCP/RTU、S7、MC、原始 TCP 和 MES TCP/HTTP。 |
+| `IndustrialCommMinimal.WinForms` | WinForms 协议最小系统：独立验证 Modbus TCP/RTU、S7、MC、原始 TCP 和开放式 MES HTTP JSON。 |
 
 SDK 采用两层程序集结构。`IndustrialCommSdk.Core` 保留公共契约、通用编解码、传输、调度、诊断、存储和 MES，不引用第三方协议驱动；`IndustrialCommSdk` 引用 Core 并承载全部内置协议。Demo、WinForms 和测试继续只引用完整 SDK，原有调用方式不变。
 
@@ -93,7 +93,7 @@ SDK 采用两层程序集结构。`IndustrialCommSdk.Core` 保留公共契约、
 - Siemens S7
 - Mitsubishi MC 3E
 - Socket TCP 调试
-- FA MES TCP（长连接 + HTTP API 双模式）
+- 开放式 MES HTTP JSON（相对端点 + JSON 对象正文）
 
 统一抽象位于 `IndustrialCommSdk/Abstractions/IIndustrialClient`。协议客户端应继续遵循该接口，不在业务层直接依赖某个 PLC 驱动库。
 
