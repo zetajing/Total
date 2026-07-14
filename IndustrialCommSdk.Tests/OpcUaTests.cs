@@ -1,6 +1,7 @@
 using System;
 using IndustrialCommSdk;
 using IndustrialCommSdk.Abstractions;
+using IndustrialCommSdk.Configuration;
 using IndustrialCommSdk.Protocols.OpcUa;
 using NUnit.Framework;
 
@@ -12,7 +13,10 @@ namespace IndustrialCommSdk.Tests
         [Test]
         public void Factory_CreatesOpcUaClientWithExpectedCapabilities()
         {
-            using (var client = IndustrialClientFactory.OpcUa("opc.tcp://127.0.0.1:4840", "ua-plc"))
+            using (var client = new OpcUaClient(new OpcUaClientOptions
+            {
+                DeviceId = "ua-plc", EndpointUrl = "opc.tcp://127.0.0.1:4840",
+            }))
             {
                 Assert.AreEqual(ProtocolKind.OpcUa, client.Kind);
                 Assert.AreEqual("ua-plc", client.DeviceId);
@@ -22,10 +26,11 @@ namespace IndustrialCommSdk.Tests
         }
 
         [Test]
-        public void FromConfig_SupportsEndpointAndCredentials()
+        public void Configuration_SupportsEndpointAndCredentials()
         {
-            var config = IndustrialSdkConfig.FromJson("{\"devices\":[{\"name\":\"ua-plc\",\"protocol\":\"opc-ua\",\"endpointUrl\":\"opc.tcp://localhost:4840\",\"username\":\"operator\",\"password\":\"secret\",\"pointsFile\":\"points.json\"}]}");
-            using (var client = IndustrialClientFactory.FromConfig(config, "ua-plc"))
+            var sdk = IndustrialSdk.CreateDefault();
+            var config = sdk.ParseConfiguration("{\"devices\":[{\"name\":\"ua-plc\",\"protocol\":\"opc-ua\",\"pointsFile\":\"points.json\",\"runtime\":{\"pollingIntervalMilliseconds\":1000,\"reconnectDelayMilliseconds\":3000,\"operationTimeoutMilliseconds\":5000},\"settings\":{\"endpointUrl\":\"opc.tcp://localhost:4840\",\"username\":\"operator\",\"password\":\"secret\"}}]}");
+            using (var client = sdk.CreateClient(config.FindDevice("ua-plc")))
                 Assert.AreEqual(ProtocolKind.OpcUa, client.Kind);
         }
 

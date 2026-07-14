@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net472</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>IndustrialCommSdk</RootNamespace>
+    <AssemblyName>IndustrialCommSdk.Protocols.Mqtt</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\IndustrialCommSdk.Abstractions\IndustrialCommSdk.Abstractions.csproj" />
+    <ProjectReference Include="..\IndustrialCommSdk.Runtime\IndustrialCommSdk.Runtime.csproj" />
+    <ProjectReference Include="..\IndustrialCommSdk.Protocols.Common\IndustrialCommSdk.Protocols.Common.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="MQTTnet" Version="4.3.7.1207" />
+  </ItemGroup>
+</Project>

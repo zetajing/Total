@@ -1,201 +1,141 @@
 # IndustrialCommSdk 零基础入门指南
 
-这份指南面向第一次接触本 SDK 的开发者。先不用理解所有工业协议，只要知道设备的协议、IP 地址和要操作的数据地址，就可以开始。
+## 1. 先选择引用方式
 
-## 1. 先理解三个词
+- 只连接一种 PLC：引用对应协议程序集，直接创建客户端。
+- 配置驱动、多设备运行：引用聚合程序集 `IndustrialCommSdk`，使用 `IndustrialSdk`。
+- 只做 MES JSON：引用 `IndustrialCommSdk.Mes.Http`。
+- 只做 TCP/Socket：引用 `IndustrialCommSdk.Transport`。
 
-### 客户端
+所有项目当前目标框架都是 `net472`。
 
-客户端就是你的程序与 PLC 或其他设备之间的“通信工具”。不同协议使用不同客户端，但连接、读取和写入的方式基本一致。
+## 2. 第一个 Modbus TCP 程序
 
-### 协议
-
-协议是程序与设备约定的通信规则。必须选择设备实际启用的协议，不能随意选择。
-
-| 设备或场景 | 常用入口 |
-| --- | --- |
-| 支持 Modbus TCP 的 PLC 或仪表 | `SimpleClient.ModbusTcp(...)` |
-| 通过串口连接的 Modbus 设备 | `SimpleClient.ModbusRtu(...)` |
-| Siemens S7-1200/1500 | `SimpleClient.S7(...)` |
-| Mitsubishi PLC 的 MC 3E 协议 | `SimpleClient.Mc(...)` |
-
-如果不知道设备使用什么协议，请先查看设备说明书或询问 PLC 工程师。
-
-### 地址
-
-地址表示设备中数据存放的位置，例如：
-
-| 协议 | 地址示例 | 大致含义 |
-| --- | --- | --- |
-| 通用 Modbus | `HR0` | 第 0 个保持寄存器 |
-| 汇川等厂商映射 | `D100` | D 数据区第 100 个位置 |
-| Siemens S7 | `DB1.DBW0` | DB1 数据块中从 0 开始的一个字 |
-| Mitsubishi MC | `D100` | D 数据区第 100 个位置 |
-
-地址格式由设备协议和 PLC 程序决定。示例地址不一定能直接用于你的设备。
-
-## 2. 第一个程序：读取一个 Modbus 数据
-
-下面假设：
-
-- PLC 的 IP 是 `192.168.1.10`
-- PLC 已启用 Modbus TCP，端口是默认的 `502`
-- 站号是默认的 `1`
-- 要读取的地址是 `HR0`
-- 该地址保存一个 16 位有符号整数，即 C# 的 `short`
+项目引用 `IndustrialCommSdk.Protocols.Modbus`，然后创建客户端：
 
 ```csharp
-using System;
-using System.Threading.Tasks;
 using IndustrialCommSdk;
+using IndustrialCommSdk.Protocols.Modbus;
 
-class Program
+var options = new ModbusTcpClientOptions
 {
-    static async Task Main()
+    DeviceId = "plc1",
+    Host = "192.168.1.10",
+    Port = 502,
+    SlaveId = 1,
+    DeviceProfile = ModbusDeviceProfiles.InovanceEasyPlc,
+    ConnectTimeoutMilliseconds = 3000,
+    OperationTimeoutMilliseconds = 5000
+};
+
+using (var client = new ModbusTcpClient(options))
+{
+    await client.UseAsync(async connected =>
     {
-        await SimpleClient.ModbusTcp("192.168.1.10").UseAsync(async client =>
-        {
-            short value = await client.ReadAsync<short>("HR0");
-            Console.WriteLine($"HR0 当前值：{value}");
-        });
-    }
+        short speed = await connected.ReadInt16Async("D100");
+        await connected.WriteAsync("D101", speed);
+    });
 }
 ```
 
-`UseAsync` 会自动完成连接、断开和释放。即使读取时发生异常，它也会尝试清理连接，因此新项目优先使用这种写法。
+`UseAsync` 会连接、执行委托并断开。需要长连接时可手动调用 `ConnectAsync` 和 `DisconnectAsync`。
 
-## 3. 写入一个数据
+## 3. 常见强类型读取
 
 ```csharp
-await SimpleClient.ModbusTcp("192.168.1.10").UseAsync(async client =>
+bool running = await client.ReadBoolAsync("M10");
+short int16 = await client.ReadInt16Async("D100");
+int int32 = await client.ReadInt32Async("D200");
+float real = await client.ReadFloatAsync("D300");
+string title = await client.ReadStringAsync("D400", 12);
+byte[] raw = await client.ReadByteArrayAsync("D500", 16);
+```
+
+地址格式由协议和设备 Profile 决定。数值异常时优先检查地址、数据类型、字节序和字序。
+
+## 4. 其他协议
+
+```csharp
+var rtu = new ModbusRtuClient(new ModbusRtuClientOptions
 {
-    await client.WriteAsync("HR0", (short)100);
+    DeviceId = "rtu1",
+    PortName = "COM3",
+    BaudRate = 9600,
+    SlaveId = 1
+});
+
+var s7 = new SiemensS7Client(new SiemensS7ClientOptions
+{
+    DeviceId = "s7-1",
+    Host = "192.168.1.20",
+    CpuType = S7.Net.CpuType.S71200,
+    Rack = 0,
+    Slot = 1
+});
+
+var mc = new MitsubishiMcClient(new MitsubishiMcClientOptions
+{
+    DeviceId = "mc-1",
+    Host = "192.168.1.30",
+    Port = 5000
 });
 ```
 
-写入会真实改变设备数据。第一次测试前，应向设备负责人确认地址可写，并避免操作启动、停止、速度和安全联锁等关键点位。
+OPC UA、MQTT 和 Redis 使用相同模式：创建对应 Options，再构造对应 Client。
 
-## 4. 读取值时该选什么类型
-
-`ReadAsync<T>` 中的 `T` 是希望得到的 C# 类型。它必须与 PLC 中的数据定义一致。
-
-| PLC 数据含义 | C# 类型 | 示例 |
-| --- | --- | --- |
-| 开关量 | `bool` | `ReadAsync<bool>("M10")` |
-| 16 位有符号整数 | `short` | `ReadAsync<short>("HR0")` |
-| 16 位无符号整数 | `ushort` | `ReadAsync<ushort>("HR0")` |
-| 32 位有符号整数 | `int` | `ReadAsync<int>("D100")` |
-| 单精度浮点数 | `float` | `ReadAsync<float>("DB1.DBD0")` |
-| 双精度浮点数 | `double` | `ReadAsync<double>("DB1.DBD0")` |
-
-如果读取成功但数值明显不对，优先检查地址、数据类型、字节序和设备 Profile，而不是直接修改结果。
-
-## 5. 不同协议的最小示例
-
-### Modbus TCP
+## 5. 配置驱动运行
 
 ```csharp
-await SimpleClient.ModbusTcp(
-    "192.168.1.10",
-    port: 502,
-    slaveId: 1).UseAsync(async client =>
+var sdk = IndustrialSdk.CreateDefault();
+var config = sdk.LoadConfiguration("Config/devices.json");
+var validation = config.Validate("Config", sdk.Protocols);
+
+if (!validation.IsValid)
 {
-    short value = await client.ReadAsync<short>("HR0");
-});
-```
+    foreach (var error in validation.Errors)
+        Console.WriteLine(error);
+    return;
+}
 
-### Modbus RTU
-
-```csharp
-await SimpleClient.ModbusRtu(
-    "COM3",
-    baudRate: 9600,
-    slaveId: 1).UseAsync(async client =>
+using (var host = sdk.CreateDeviceHost(config, "Config"))
 {
-    short value = await client.ReadAsync<short>("HR0");
-});
-```
+    host.ValuesReceived += (sender, e) =>
+    {
+        foreach (var value in e.Values)
+            Console.WriteLine(value.Address + " = " + value.Value);
+    };
 
-串口参数除了波特率外，还包括数据位、校验位和停止位。`SimpleClient` 默认使用 8 数据位、偶校验、1 停止位；设备设置不同时，应使用底层工厂配置。
-
-### Siemens S7
-
-```csharp
-await SimpleClient.S7(
-    "192.168.1.20",
-    rack: 0,
-    slot: 1).UseAsync(async client =>
-{
-    short value = await client.ReadAsync<short>("DB1.DBW0");
-});
-```
-
-### Mitsubishi MC
-
-```csharp
-await SimpleClient.Mc(
-    "192.168.1.30",
-    port: 5000).UseAsync(async client =>
-{
-    short value = await client.ReadAsync<short>("D100");
-});
-```
-
-## 6. 手动管理连接
-
-需要连续执行多次操作时，也可以显式管理连接：
-
-```csharp
-using (var client = SimpleClient.ModbusTcp("192.168.1.10"))
-{
-    await client.ConnectAsync();
-
-    short first = await client.ReadAsync<short>("HR0");
-    short second = await client.ReadAsync<short>("HR1");
-
-    await client.DisconnectAsync();
+    await host.StartAsync();
+    Console.ReadLine();
+    await host.StopAsync();
 }
 ```
 
-一般业务代码仍推荐 `UseAsync`，它更不容易遗漏资源清理。
+配置中公共字段放在设备对象顶层，轮询、重连和操作超时放在 `runtime`，Host、端口、串口、CPU 等协议字段放在 `settings`。切换协议时必须换成该协议的 Settings 结构。
 
-## 7. 常见问题排查
+## 6. 排错顺序
 
 ### 连接超时
 
-依次确认：
-
-1. 电脑和设备是否在可互通的网络中
-2. IP 地址和端口是否正确
-3. PLC 是否已启用相应协议服务
-4. Windows 防火墙、交换机或安全软件是否拦截端口
-5. Modbus 站号、S7 rack/slot 是否与设备一致
+1. 确认电脑和设备 IP 在可路由网段。
+2. 确认端口、串口参数、站号、Rack/Slot。
+3. 检查防火墙、交换机和 PLC 服务是否启用。
+4. 先用 WPF 或 WinForms Demo 做最小连接测试。
 
 ### 地址错误
 
-不要凭示例猜测地址。以 PLC 点表、程序或设备手册为准，并确认当前客户端采用的地址格式。
+- Modbus 地址会受设备 Profile 影响。
+- S7 常用 `DB1.DBX0.0`、`DB1.DBW2`、`M0.0`。
+- MC 地址常用 `D100`、`M10`。
+- OPC UA 使用 NodeId；MQTT 使用 Topic；Redis 使用 Key。
 
-### 数值不正确
+### 能读不能写
 
-常见原因包括：
+检查 PLC 运行模式、写保护、用户权限、地址区域以及业务层写入限制。SDK 不会替代现场安全联锁。
 
-- 将 16 位数据当成 32 位数据读取
-- 将整数当成浮点数读取
-- 厂商地址映射不匹配
-- 字节序或字序与设备不同
+## 7. 重要升级说明
 
-### 读取正常但写入失败
+当前版本不包含 `SimpleClient`、`IndustrialClientFactory` 或旧 JSON 自动迁移。旧代码应改为：
 
-确认地址是否允许写入、设备是否处于可写状态，以及 PLC 程序是否立即覆盖了写入值。
-
-## 8. 接下来学什么
-
-完成单点读写后，再按这个顺序学习：
-
-1. README 中的“地址与厂商 Profile”
-2. 批量读写
-3. JSON 点位表和配置驱动运行
-4. 自动轮询与断线重连
-5. 诊断、日志和历史数据
-
-底层的 `ReadRequest`、`WriteRequest`、`CancellationToken` 和协议 Options 适合有定制需求时再学习，第一次使用不必全部掌握。
+- 单协议：Options + 具体 Client 构造函数。
+- 配置驱动：`IndustrialSdk.CreateDefault()` + 新 `runtime/settings` JSON。

@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net472</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>IndustrialCommSdk</RootNamespace>
+    <AssemblyName>IndustrialCommSdk.Protocols.OpcUa</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\IndustrialCommSdk.Abstractions\IndustrialCommSdk.Abstractions.csproj" />
+    <ProjectReference Include="..\IndustrialCommSdk.Runtime\IndustrialCommSdk.Runtime.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="OPCFoundation.NetStandard.Opc.Ua" Version="1.5.378.152" />
+  </ItemGroup>
+</Project>

@@ -1,4 +1,5 @@
 using IndustrialCommSdk;
+using IndustrialCommSdk.Configuration;
 using IndustrialCommSdk.Protocols.Modbus;
 using NUnit.Framework;
 
@@ -10,9 +11,10 @@ namespace IndustrialCommSdk.Tests
         [Test]
         public void OperationTimeout_RoundTripsThroughJson()
         {
-            var config = IndustrialSdkConfig.FromJson("{\"devices\":[{\"name\":\"plc\",\"protocol\":\"modbus-tcp\",\"host\":\"127.0.0.1\",\"pointsFile\":\"points.json\",\"operationTimeoutMilliseconds\":1234}]}");
-            Assert.AreEqual(1234, config.Devices[0].OperationTimeoutMilliseconds);
-            StringAssert.Contains("operationTimeoutMilliseconds", config.ToJson());
+            var sdk = IndustrialSdk.CreateDefault();
+            var config = sdk.ParseConfiguration("{\"devices\":[{\"name\":\"plc\",\"protocol\":\"modbus-tcp\",\"pointsFile\":\"points.json\",\"enabled\":true,\"runtime\":{\"pollingIntervalMilliseconds\":1000,\"reconnectDelayMilliseconds\":3000,\"operationTimeoutMilliseconds\":1234},\"settings\":{\"host\":\"127.0.0.1\"}}]}");
+            Assert.AreEqual(1234, config.Devices[0].Runtime.OperationTimeoutMilliseconds);
+            StringAssert.Contains("operationTimeoutMilliseconds", sdk.SerializeConfiguration(config));
         }
 
         [Test]
@@ -29,9 +31,14 @@ namespace IndustrialCommSdk.Tests
         }
 
         [Test]
-        public void SimpleClient_UsesSelectedModbusProfile()
+        public void DirectClient_UsesSelectedModbusProfile()
         {
-            using (var client = SimpleClient.ModbusTcp("127.0.0.1", deviceProfile: ModbusDeviceProfiles.MitsubishiModbusTcp))
+            using (var client = new ModbusTcpClient(new ModbusTcpClientOptions
+            {
+                DeviceId = "plc",
+                Host = "127.0.0.1",
+                DeviceProfile = ModbusDeviceProfiles.MitsubishiModbusTcp,
+            }))
             {
                 Assert.AreEqual("mitsubishi-modbus-tcp", client.Profile.Key);
                 Assert.AreEqual(ModbusArea.HoldingRegister, client.Profile.ParseAddress("D100").Area);

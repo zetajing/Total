@@ -8,7 +8,9 @@ using IndustrialCommSdk;
 using IndustrialCommSdk.Abstractions;
 using IndustrialCommSdk.Diagnostics;
 using IndustrialCommSdk.Mes;
+using IndustrialCommSdk.Protocols.Mc;
 using IndustrialCommSdk.Protocols.Modbus;
+using IndustrialCommSdk.Protocols.S7;
 using IndustrialCommSdk.Transport;
 
 namespace IndustrialCommMinimal.WinForms
@@ -41,9 +43,14 @@ namespace IndustrialCommMinimal.WinForms
         /// <summary>读取页面参数，创建并连接通用地址映射的 Modbus TCP 客户端。</summary>
         private async void ModbusTcpConnectButton_Click(object sender, EventArgs e)
         {
-            await ConnectIndustrialAsync(ModbusTcpOutputTextBox, () => SimpleClient.ModbusTcp(
-                ModbusTcpHostTextBox.Text.Trim(), ParsePort(ModbusTcpPortTextBox.Text), ParseSlaveId(ModbusTcpSlaveTextBox.Text),
-                deviceProfile: GetSelectedModbusProfile()),
+            await ConnectIndustrialAsync(ModbusTcpOutputTextBox, () => new ModbusTcpClient(new ModbusTcpClientOptions
+            {
+                DeviceId = "winforms-modbus-tcp",
+                Host = ModbusTcpHostTextBox.Text.Trim(),
+                Port = ParsePort(ModbusTcpPortTextBox.Text),
+                SlaveId = ParseSlaveId(ModbusTcpSlaveTextBox.Text),
+                DeviceProfile = GetSelectedModbusProfile(),
+            }),
                 client => _modbusTcpClient = client, _modbusTcpClient);
         }
 
@@ -81,24 +88,39 @@ namespace IndustrialCommMinimal.WinForms
         /// <summary>按串口、波特率和站号创建 Modbus RTU 客户端；示例默认使用偶校验。</summary>
         private async void ModbusRtuConnectButton_Click(object sender, EventArgs e)
         {
-            await ConnectIndustrialAsync(ModbusRtuOutputTextBox, () => SimpleClient.ModbusRtu(
-                ModbusRtuPortTextBox.Text.Trim(), ParsePositive(ModbusRtuBaudTextBox.Text, "波特率"), ParseSlaveId(ModbusRtuSlaveTextBox.Text)),
+            await ConnectIndustrialAsync(ModbusRtuOutputTextBox, () => new ModbusRtuClient(new ModbusRtuClientOptions
+            {
+                DeviceId = "winforms-modbus-rtu",
+                PortName = ModbusRtuPortTextBox.Text.Trim(),
+                BaudRate = ParsePositive(ModbusRtuBaudTextBox.Text, "波特率"),
+                SlaveId = ParseSlaveId(ModbusRtuSlaveTextBox.Text),
+            }),
                 client => _modbusRtuClient = client, _modbusRtuClient);
         }
 
         /// <summary>按主机、机架和插槽创建 Siemens S7 客户端并建立连接。</summary>
         private async void S7ConnectButton_Click(object sender, EventArgs e)
         {
-            await ConnectIndustrialAsync(S7OutputTextBox, () => SimpleClient.S7(
-                S7HostTextBox.Text.Trim(), rack: (short)ParseNonNegative(S7RackTextBox.Text, "机架"), slot: (short)ParseNonNegative(S7SlotTextBox.Text, "插槽")),
+            await ConnectIndustrialAsync(S7OutputTextBox, () => new SiemensS7Client(new SiemensS7ClientOptions
+            {
+                DeviceId = "winforms-s7",
+                Host = S7HostTextBox.Text.Trim(),
+                Rack = (short)ParseNonNegative(S7RackTextBox.Text, "机架"),
+                Slot = (short)ParseNonNegative(S7SlotTextBox.Text, "插槽"),
+            }),
                 client => _s7Client = client, _s7Client);
         }
 
         /// <summary>按主机、端口和接收超时创建 Mitsubishi MC 3E 客户端。</summary>
         private async void McConnectButton_Click(object sender, EventArgs e)
         {
-            await ConnectIndustrialAsync(McOutputTextBox, () => SimpleClient.Mc(
-                McHostTextBox.Text.Trim(), ParsePort(McPortTextBox.Text), ParsePositive(McTimeoutTextBox.Text, "接收超时")),
+            await ConnectIndustrialAsync(McOutputTextBox, () => new MitsubishiMcClient(new MitsubishiMcClientOptions
+            {
+                DeviceId = "winforms-mc",
+                Host = McHostTextBox.Text.Trim(),
+                Port = ParsePort(McPortTextBox.Text),
+                ReceiveTimeoutMilliseconds = ParsePositive(McTimeoutTextBox.Text, "接收超时"),
+            }),
                 client => _mcClient = client, _mcClient);
         }
 

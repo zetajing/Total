@@ -36,40 +36,46 @@
                                     <RowDefinition Height="Auto" />
                                     <RowDefinition Height="Auto" />
                                     <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
                                 </Grid.RowDefinitions>
 
                                 <TextBlock VerticalAlignment="Center" Text="设备名称" />
                                 <TextBox x:Name="DeviceNameTextBox" Grid.Column="1" Margin="4" />
                                 <TextBlock Grid.Column="2" VerticalAlignment="Center" Text="协议" />
-                                <ComboBox x:Name="ProtocolComboBox" Grid.Column="3" Margin="4">
+                                <ComboBox x:Name="ProtocolComboBox" Grid.Column="3" Margin="4" SelectionChanged="ProtocolComboBox_SelectionChanged">
                                     <ComboBoxItem Content="modbus-tcp" />
                                     <ComboBoxItem Content="modbus-rtu" />
                                     <ComboBoxItem Content="siemens-s7" />
                                     <ComboBoxItem Content="mitsubishi-mc" />
+                                    <ComboBoxItem Content="opc-ua" />
+                                    <ComboBoxItem Content="mqtt" />
+                                    <ComboBoxItem Content="redis" />
                                 </ComboBox>
 
-                                <TextBlock Grid.Row="1" VerticalAlignment="Center" Text="主机/IP" />
-                                <TextBox x:Name="HostTextBox" Grid.Row="1" Grid.Column="1" Margin="4" />
-                                <TextBlock Grid.Row="1" Grid.Column="2" VerticalAlignment="Center" Text="TCP 端口" />
-                                <TextBox x:Name="PortTextBox" Grid.Row="1" Grid.Column="3" Margin="4" />
+                                <TextBlock Grid.Row="1" VerticalAlignment="Center" Text="设备 ID" />
+                                <TextBox x:Name="DeviceIdTextBox" Grid.Row="1" Grid.Column="1" Margin="4" />
+                                <TextBlock Grid.Row="1" Grid.Column="2" VerticalAlignment="Center" Text="操作超时(ms)" />
+                                <TextBox x:Name="OperationTimeoutTextBox" Grid.Row="1" Grid.Column="3" Margin="4" />
 
-                                <TextBlock Grid.Row="2" VerticalAlignment="Center" Text="串口" />
-                                <TextBox x:Name="PortNameTextBox" Grid.Row="2" Grid.Column="1" Margin="4" />
-                                <TextBlock Grid.Row="2" Grid.Column="2" VerticalAlignment="Center" Text="从站号" />
-                                <TextBox x:Name="SlaveIdTextBox" Grid.Row="2" Grid.Column="3" Margin="4" />
+                                <TextBlock Grid.Row="2" VerticalAlignment="Center" Text="点位文件" />
+                                <TextBox x:Name="PointsFileTextBox" Grid.Row="2" Grid.Column="1" Grid.ColumnSpan="3" Margin="4" />
 
-                                <TextBlock Grid.Row="3" VerticalAlignment="Center" Text="点位文件" />
-                                <TextBox x:Name="PointsFileTextBox" Grid.Row="3" Grid.Column="1" Grid.ColumnSpan="3" Margin="4" />
+                                <TextBlock Grid.Row="3" VerticalAlignment="Center" Text="轮询(ms)" />
+                                <TextBox x:Name="PollingIntervalTextBox" Grid.Row="3" Grid.Column="1" Margin="4" />
+                                <TextBlock Grid.Row="3" Grid.Column="2" VerticalAlignment="Center" Text="重连(ms)" />
+                                <TextBox x:Name="ReconnectDelayTextBox" Grid.Row="3" Grid.Column="3" Margin="4" />
 
-                                <TextBlock Grid.Row="4" VerticalAlignment="Center" Text="轮询(ms)" />
-                                <TextBox x:Name="PollingIntervalTextBox" Grid.Row="4" Grid.Column="1" Margin="4" />
-                                <TextBlock Grid.Row="4" Grid.Column="2" VerticalAlignment="Center" Text="重连(ms)" />
-                                <TextBox x:Name="ReconnectDelayTextBox" Grid.Row="4" Grid.Column="3" Margin="4" />
+                                <CheckBox x:Name="EnabledCheckBox" Grid.Row="4" Grid.ColumnSpan="4" Margin="4,8" VerticalAlignment="Center" Content="启用并由运行中心管理" />
 
-                                <CheckBox x:Name="EnabledCheckBox" Grid.Row="5" Margin="4,10" VerticalAlignment="Center" Content="启用并由运行中心管理" />
-                                <WrapPanel Grid.Row="5" Grid.Column="1" Grid.ColumnSpan="3" HorizontalAlignment="Right">
+                                <TextBlock Grid.Row="5" VerticalAlignment="Top" Margin="0,8,0,0" Text="协议 settings" />
+                                <TextBox x:Name="SettingsJsonTextBox" Grid.Row="5" Grid.Column="1" Grid.ColumnSpan="3" Height="150" Margin="4"
+                                         AcceptsReturn="True" AcceptsTab="True" FontFamily="Consolas" FontSize="12"
+                                         HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" TextWrapping="NoWrap" />
+
+                                <WrapPanel Grid.Row="6" Grid.ColumnSpan="4" HorizontalAlignment="Right">
                                     <Button Margin="4" Click="AddDeviceButton_Click" Content="新增设备" />
                                     <Button Margin="4" Click="DeleteDeviceButton_Click" Content="删除设备" />
+                                    <Button Margin="4" Click="FormatSettingsButton_Click" Content="格式化 settings" />
                                     <Button Margin="4" Background="#2563EB" Foreground="White" Click="ApplyDeviceFormButton_Click" Content="应用到 JSON" />
                                 </WrapPanel>
                             </Grid>

@@ -6,13 +6,17 @@
     <AssemblyName>IndustrialCommSdk</AssemblyName>
   </PropertyGroup>
   <ItemGroup>
-    <ProjectReference Include="..\IndustrialCommSdk.Core\IndustrialCommSdk.Core.csproj" />
-  </ItemGroup>
-  <ItemGroup>
-    <PackageReference Include="NModbus4" Version="2.1.0" />
-    <PackageReference Include="S7netplus" Version="0.20.0" />
-    <PackageReference Include="OPCFoundation.NetStandard.Opc.Ua" Version="1.5.378.152" />
-    <PackageReference Include="MQTTnet" Version="4.3.7.1207" />
-    <PackageReference Include="StackExchange.Redis" Version="3.0.11" />
+    <ProjectReference Include="..\IndustrialCommSdk.Abstractions\IndustrialCommSdk.Abstractions.csproj" />
+    <ProjectReference Include="..\IndustrialCommSdk.Runtime\IndustrialCommSdk.Runtime.csproj" />
+    <ProjectReference Include="..\IndustrialCommSdk.Transport\IndustrialCommSdk.Transport.csproj" />
+    <ProjectReference Include="..\IndustrialCommSdk.Protocols.Common\IndustrialCommSdk.Protocols.Common.csproj" />
+    <ProjectReference Include="..\IndustrialCommSdk.Protocols.Modbus\IndustrialCommSdk.Protocols.Modbus.csproj" />
+    <ProjectReference Include="..\IndustrialCommSdk.Protocols.S7\IndustrialCommSdk.Protocols.S7.csproj" />
+    <ProjectReference Include="..\IndustrialCommSdk.Protocols.Mc\IndustrialCommSdk.Protocols.Mc.csproj" />
+    <ProjectReference Include="..\IndustrialCommSdk.Protocols.OpcUa\IndustrialCommSdk.Protocols.OpcUa.csproj" />
+    <ProjectReference Include="..\IndustrialCommSdk.Protocols.Mqtt\IndustrialCommSdk.Protocols.Mqtt.csproj" />
+    <ProjectReference Include="..\IndustrialCommSdk.Protocols.Redis\IndustrialCommSdk.Protocols.Redis.csproj" />
+    <ProjectReference Include="..\IndustrialCommSdk.Mes.Http\IndustrialCommSdk.Mes.Http.csproj" />
+    <ProjectReference Include="..\IndustrialCommSdk.Storage\IndustrialCommSdk.Storage.csproj" />
   </ItemGroup>
 </Project>

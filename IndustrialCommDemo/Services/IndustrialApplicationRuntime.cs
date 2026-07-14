@@ -6,7 +6,15 @@ using System.Threading;
 using System.Threading.Tasks;
 using IndustrialCommSdk;
 using IndustrialCommSdk.Abstractions;
+using IndustrialCommSdk.Configuration;
 using IndustrialCommSdk.Diagnostics;
+using IndustrialCommSdk.Protocols.Mc;
+using IndustrialCommSdk.Protocols.Modbus;
+using IndustrialCommSdk.Protocols.Mqtt;
+using IndustrialCommSdk.Protocols.OpcUa;
+using IndustrialCommSdk.Protocols.Redis;
+using IndustrialCommSdk.Protocols.S7;
+using IndustrialCommSdk.Runtime;
 
 namespace IndustrialCommDemo.Services
 {
@@ -28,9 +36,11 @@ namespace IndustrialCommDemo.Services
 
             ConfigFilePath = Path.GetFullPath(configFilePath);
             _logger = logger ?? NullIndustrialLogger.Instance;
+            Sdk = IndustrialSdk.CreateDefault(_logger);
         }
 
         public string ConfigFilePath { get; }
+        public IndustrialSdk Sdk { get; }
         public bool IsLoaded { get { return _host != null; } }
         public bool IsRunning { get; private set; }
 
@@ -142,7 +152,7 @@ namespace IndustrialCommDemo.Services
 
         private void CreateHost()
         {
-            var host = IndustrialDeviceHost.Load(ConfigFilePath, _logger);
+            var host = Sdk.CreateDeviceHost(ConfigFilePath);
             host.DeviceStateChanged += Host_DeviceStateChanged;
             host.ValuesReceived += Host_ValuesReceived;
             _host = host;
@@ -176,9 +186,14 @@ namespace IndustrialCommDemo.Services
 
         private static string FormatEndpoint(IndustrialDeviceConfig config)
         {
-            if (!string.IsNullOrWhiteSpace(config.PortName)) return config.PortName;
-            if (string.IsNullOrWhiteSpace(config.Host)) return "-";
-            return config.Port.HasValue ? config.Host + ":" + config.Port.Value : config.Host;
+            if (config.Settings is ModbusTcpSettings modbusTcp) return modbusTcp.Host + ":" + modbusTcp.Port;
+            if (config.Settings is ModbusRtuSettings modbusRtu) return modbusRtu.PortName;
+            if (config.Settings is SiemensS7Settings s7) return s7.Host;
+            if (config.Settings is MitsubishiMcSettings mc) return mc.Host + ":" + mc.Port;
+            if (config.Settings is OpcUaSettings opcUa) return opcUa.EndpointUrl;
+            if (config.Settings is MqttSettings mqtt) return mqtt.Host + ":" + mqtt.Port;
+            if (config.Settings is RedisSettings redis) return redis.Host + ":" + redis.Port;
+            return "-";
         }
 
         public void Dispose()

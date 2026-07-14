@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net472</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>IndustrialCommSdk</RootNamespace>
+    <AssemblyName>IndustrialCommSdk.Protocols.Modbus</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\IndustrialCommSdk.Abstractions\IndustrialCommSdk.Abstractions.csproj" />
+    <ProjectReference Include="..\IndustrialCommSdk.Runtime\IndustrialCommSdk.Runtime.csproj" />
+    <ProjectReference Include="..\IndustrialCommSdk.Protocols.Common\IndustrialCommSdk.Protocols.Common.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="NModbus4" Version="2.1.0" />
+  </ItemGroup>
+</Project>

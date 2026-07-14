@@ -3,26 +3,42 @@
     {
       "name": "plc1",
       "protocol": "modbus-tcp",
-      "host": "127.0.0.1",
-      "port": 502,
-      "slaveId": 1,
-      "deviceProfile": "inovance-easyplc",
+      "deviceId": "plc1",
       "pointsFile": "points/plc1.json",
       "enabled": true,
-      "pollingIntervalMilliseconds": 1000,
-      "reconnectDelayMilliseconds": 3000
+      "runtime": {
+        "pollingIntervalMilliseconds": 1000,
+        "reconnectDelayMilliseconds": 3000,
+        "operationTimeoutMilliseconds": 5000,
+        "reportOnChangeOnly": false
+      },
+      "settings": {
+        "host": "127.0.0.1",
+        "port": 502,
+        "slaveId": 1,
+        "deviceProfile": "inovance-easyplc",
+        "connectTimeoutMilliseconds": 3000
+      }
     },
     {
       "name": "s7plc",
       "protocol": "siemens-s7",
-      "host": "192.168.1.20",
-      "cpuType": "S71200",
-      "rack": 0,
-      "slot": 1,
+      "deviceId": "s7plc",
       "pointsFile": "points/s7plc.json",
       "enabled": false,
-      "pollingIntervalMilliseconds": 1000,
-      "reconnectDelayMilliseconds": 3000
+      "runtime": {
+        "pollingIntervalMilliseconds": 1000,
+        "reconnectDelayMilliseconds": 3000,
+        "operationTimeoutMilliseconds": 5000,
+        "reportOnChangeOnly": false
+      },
+      "settings": {
+        "host": "192.168.1.20",
+        "cpuType": "S71200",
+        "rack": 0,
+        "slot": 1,
+        "connectTimeoutMilliseconds": 5000
+      }
     }
   ]
 }

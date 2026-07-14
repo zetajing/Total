@@ -163,7 +163,7 @@ build-all.ps1
 
 ```text
 src/IndustrialCommSdk.Abstractions
-src/IndustrialCommSdk.Core
+src/IndustrialCommSdk.Runtime
 src/IndustrialCommSdk.Protocols.Modbus
 src/IndustrialCommSdk.Protocols.SiemensS7
 src/IndustrialCommSdk.Protocols.MitsubishiMc

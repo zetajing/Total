@@ -2,433 +2,132 @@
 
 ## 项目目标
 
-`Total` 是一个面向工业现场的 .NET 通讯 SDK 与 WPF 上位机应用。当前方向是让 `IndustrialCommDemo` 成为可以实际运行的软件，但连接、读写、轮询、重连、配置和存储能力必须继续由 `IndustrialCommSdk` 提供，应用层不复制协议实现。
-
-## 上下文维护规则
-
-- 本文件是项目在仓库内的持续记忆和下一次工作的首要入口。
-- 每轮代码或结构调整后，必须同步更新：当前状态、已完成内容、验证结果、已知限制和未完成任务。
-- 尚未完成、尚未验证或仅有设计结论的事项，也必须写入“未完成任务”，不能只留在聊天记录里。
-- `README.md` 面向使用者；本文件面向后续开发和接手项目的人，允许记录实现边界与技术债务。
-
-## 当前分支与提交
-
-- 默认分支：`master`
-- 当前目标分支：`master`；准确远端 HEAD 以 `git log -1 origin/master` 为准，避免记忆文件因自身提交号产生循环过期。
-- P0/P1 合并提交：`1afa2eb44394361548f8fd3d313b7c939bed89ca`
-- 核心扩展平台已通过 PR #2 合并到 `master`，合并提交为 `efd7b47`。
-- “Demo 产品化与结构收敛”“开放式 MES HTTP JSON”以及 MES 生产安全加固与 HTTP JSON 接收器均已完成，并随本文件提交到 `master`。
-- 每次修改代码或文档后都需要提交并推送到 Git。
-
-## 2026-07-13 MES HTTP JSON 收敛
-
-提交 `668ad7b` 已合并并推送到 `master`。MES 当前边界如下：
-
-1. SDK 只保留开放式 HTTP JSON 客户端
-   - 对外核心方法为 `SendJsonAsync(string endpoint, string json, CancellationToken)`。
-   - 调用方提供 BaseUrl 下的安全相对端点和 JSON 对象正文，SDK 不内置业务操作、业务字段或外部绝对 URL。
-   - 正文验证为 JSON 对象后按输入原样发送，使用 UTF-8、`Content-Type: application/json` 和 `Accept: application/json`。
-   - 2xx、3xx、4xx 原样返回；为避免 POST 重复报工，默认不重试。服务端支持幂等时可显式开启对 5xx、网络异常和超时的有界重试。
-   - 请求和响应正文不写入 SDK 日志，只记录端点、URL、状态、正文 UTF-8 字节数和耗时。
-
-2. 旧 MES 流程已彻底删除
-   - 删除旧 MES TCP 客户端、接口、协议编解码和固定业务模型。
-   - 删除所有固定操作枚举、固定端点映射、旧推送事件和设备身份配置字段。
-   - 这是有意的破坏性 API 调整；旧 MES 调用方必须迁移到 `SendJsonAsync`。
-
-3. Demo 全面使用 JSON
-   - WPF Demo 使用“配置 JSON + 上传正文 JSON”两个编辑器。
-   - 配置 JSON 包含 `baseUrl`、`endpoint`、超时、重试和响应上限；应用配置只创建客户端，不访问 MES。
-   - 上传编辑器只保存实际 POST 正文，校验/格式化由用户主动触发，发送时不重新序列化正文。
-   - WinForms 最小验证程序同步改为 API 地址、相对端点和 JSON 正文，不再包含 MES TCP 页签或旧业务控件。
-
-4. 验证结果
-   - `dotnet test IndustrialCommSdk.Tests/IndustrialCommSdk.Tests.csproj -c Release --no-restore`：当前基线 55/55 通过。
-   - `dotnet build Total.sln -c Release --no-restore`：成功，0 警告，0 错误。
-   - SDK 与 Demo 源码中无旧 MES 固定流程实现残留；WPF 设计器相关的 `System.Object` 缺失问题未在完整构建中复现。
-
-## 2026-07-14 MES HTTP 生产加固与 JSON 接收
-
-1. 发送安全
-   - POST 默认重试次数改为 0，避免服务端已处理但客户端超时造成重复报工；只有 MES 支持幂等时才显式开启重试。
-   - 2xx、3xx、4xx 原样返回，只有 5xx、网络异常和超时进入可选重试。
-   - SDK 日志不再记录请求或响应 JSON，只记录正文 UTF-8 字节数。
-
-2. 开放式主动接收
-   - 新增 `IMesJsonReceiver`、`MesJsonReceiver`、`MesJsonReceiverOptions` 和开放请求/响应模型。
-   - 基于本地 `HttpListener` 接受任意相对路径的 POST JSON 对象，不包含任何固定 MES 业务类型。
-   - 支持正文上限、处理器超时、可选 Authorization 完整值校验、原始 JSON 交付和业务自定义 JSON 响应。
-   - 非 POST、非 JSON、非法对象、超限、未授权和处理超时均返回明确的 JSON HTTP 错误。
-
-3. Demo
-   - WPF MES 页面新增全 JSON 接收配置、启动/停止按钮以及端点、远端、Content-Type、接收时间和原始正文展示。
-   - 接收成功状态码和响应 JSON 也由接收配置 JSON 控制；应用关闭时会停止并释放监听器。
-
-4. 验证
-   - 完整测试 55/55 通过，新增覆盖原样接收/响应、非法 JSON、正文超限、Authorization，以及处理器忽略取消时仍能硬超时返回 504。
-   - Release 全解决方案构建成功、0 错误；现有 OPC UA 依赖产生 6 个过时 API 警告，MES 改动没有新增警告。
-
-## 2026-07-14 Demo 大型页面拆分与记忆清理
-
-1. WPF code-behind 按职责拆分为 partial 类，XAML 类名、事件处理器和页面行为保持不变：
-   - `ModbusTab`：主读写/订阅、连接与 RTU 调试、Profile 与输入解析、UI 状态分别维护。
-   - `JsonConfigTab`：设备操作流程与 JSON/点位文件加载编辑分别维护。
-   - `DatabaseTab`：记录器生命周期、实时历史、查询管理、UI 状态分别维护。
-2. 清理了“仓库没有测试项目”“OPC UA 尚未实现”等过期记忆，并补齐 MQTT、Redis 和 OPC UA 的现有支持状态。
-3. 验证结果：`IndustrialCommSdk.Tests` Release 测试 55/55 通过；`dotnet build Total.sln -c Release --no-restore` 成功，0 警告、0 错误。
-
-## 当前工作区：Demo 产品化与结构收敛
-
-本轮目标不是继续堆协议页面，而是形成清晰的两层结构：
-
-```text
-IndustrialCommDemo（上位机应用、交互、展示）
-    -> IndustrialApplicationRuntime（应用运行边界）
-        -> IndustrialCommSdk（连接、协议、轮询、重连、配置、存储）
-```
-
-本轮已完成并包含在提交 `d6c3f37`：
-
-1. 新增 `IndustrialCommDemo/Services/IndustrialApplicationRuntime.cs`
-   - 统一持有 SDK 的 `IndustrialDeviceHost`。
-   - 提供加载、启动、停止和重新加载配置的应用级生命周期。
-   - 转换设备状态和实时点位事件供 UI 使用。
-   - 隔离多个事件订阅者异常，单个 UI 或数据库处理器失败不会阻断其他处理器。
-
-2. 新增“运行中心”
-   - 文件：`IndustrialCommDemo/Views/DeviceRuntimeTab.xaml(.cs)`。
-   - 从 `Config/devices.json` 加载全部启用设备。
-   - 显示设备名称、协议、端点、连接状态、最近错误和实时点位。
-   - 运行中心采集结果会进入已有数据库记录链路。
-
-3. 重组主导航
-   - 一级页面：运行中心、设备配置、历史数据、调试与维护。
-   - Modbus、S7、MC、Socket、MES、网卡和存储页面归入“调试与维护”。
-   - 应用可见名称改为“工业设备运行中心”，应用日志标识由 `DEMO` 改为 `APP`。
-
-4. 产品化设备配置
-   - 常用参数使用表单编辑：设备名、协议、IP、端口、串口、从站号、点位文件、轮询周期、重连周期和启用状态。
-   - 支持新增、删除设备。
-   - 点位使用可增删的表格编辑名称、地址、类型和长度。
-   - 设备 JSON 和点位 JSON 继续作为高级入口保留。
-   - 新设备点位文件不存在时允许先在界面创建，保存时生成文件。
-
-5. SDK 配置写入能力
-   - `IndustrialSdkConfig.ToJson/Save` 统一保存设备配置。
-   - `TagTable.ToJson/SaveJson` 统一保存点位表。
-   - 序列化会缩进并省略未使用的空字段，Demo 不自行拼 JSON。
-
-6. 无用文件清理（已完成并提交）
-   - 删除空占位文件 `IndustrialCommDemo/MainWindow.Layout.cs` 和 `MainWindow.Network.cs`。
-   - 删除不参与产品构建和运行的 `.reasonix` 工具元数据、历史截图与 `reasonix.toml`。
-   - 删除旧验证输出目录 `artifacts` 和空的 `.agents/.codex` 目录。
-   - `.vs` 属于已忽略的 Visual Studio 缓存；已清理未占用部分，剩余索引数据库正被 IDE 占用，关闭 Visual Studio 后可直接删除。
-   - 保留仓库内暂未被 Demo 调用但属于 SDK 对外 API 的 Quick API、SocketBridge 和诊断入口，不能按内部引用数误删。
-
-本轮验证：
-
-- `dotnet build Total.sln -c Release --no-restore`：成功，0 警告，0 错误。
-- `IndustrialSdkConfig` JSON 往返：2 台设备，0 个 `null` 字段。
-- `TagTable` JSON 往返：5 个点位，0 个 `null` 字段。
-
-## 解决方案结构
-
-| 目录/项目 | 职责 |
-| --- | --- |
-| `IndustrialCommSdk.Core` | 零协议依赖的公共核心：统一客户端、点位表、配置、轮询、诊断、日志、传输、存储和 MES。 |
-| `IndustrialCommSdk` | 完整 SDK：全部内置协议、第三方驱动、`IndustrialClientFactory`、`SimpleClient`、`IndustrialDeviceHost` 和配置驱动部署入口。 |
-| `IndustrialCommDemo` | WPF 上位机应用：运行中心负责设备状态和实时点位，其他页面提供协议调试、JSON 配置、MES、数据库、网卡和存储设置。 |
-| `IndustrialCommMinimal.WinForms` | WinForms 协议最小系统：独立验证 Modbus TCP/RTU、S7、MC、原始 TCP 和开放式 MES HTTP JSON。 |
-| `IndustrialCommSdk.Tests` | NUnit 自动化测试：配置、TCP 分帧、超时诊断、MES HTTP/接收、OPC UA、MQTT 和 Redis。 |
-
-SDK 采用两层程序集结构。`IndustrialCommSdk.Core` 保留公共契约、通用编解码、传输、调度、诊断、存储和 MES，不引用第三方协议驱动；`IndustrialCommSdk` 引用 Core 并承载全部内置协议。Demo、WinForms 和测试继续只引用完整 SDK。除 MES 的有意破坏性收敛外，其他协议原有调用方式不变。
-
-稳定性基线：内置 PLC 默认操作超时 5000 ms，请求级超时优先；TCP 传输提供可选业务分帧；客户端通过可选诊断接口公开结构化累计快照，不修改 `IIndustrialClient`。
-
-## 支持的协议
-
-- Modbus TCP / RTU
-- Siemens S7
-- Mitsubishi MC 3E
-- OPC UA
-- MQTT
-- Redis
-- Socket TCP 调试
-- 开放式 MES HTTP JSON（相对端点 + JSON 对象正文）
-
-统一抽象位于 `IndustrialCommSdk/Abstractions/IIndustrialClient`。协议客户端应继续遵循该接口，不在业务层直接依赖某个 PLC 驱动库。
-
-## 核心可扩展平台现状
-
-`core-extensible-platform` 最初采用非破坏式建模，现在已经推进到“直接接入现有核心实现”：不修改 `IIndustrialClient` 现有方法签名，但核心基类、Modbus/S7/MC 地址模型、三大 PLC 协议批量规划、轮询调度、统一批量诊断和 Demo 能力展示已经开始使用平台模型。
-
-新增文件：
-
-- `IndustrialCommSdk/Abstractions/ProtocolCapabilities.cs`
-- `IndustrialCommSdk/Abstractions/IndustrialAddress.cs`
-- `IndustrialCommSdk/Abstractions/BatchOptions.cs`
-- `IndustrialCommSdk/Abstractions/BatchSplitPlan.cs`
-- `IndustrialCommSdk/Abstractions/PlatformInterfaces.cs`
-- `IndustrialCommSdk/IndustrialClientPlatformExtensions.cs`
-- `IndustrialCommSdk/Diagnostics/BatchPlanDiagnostics.cs`
-- `IndustrialCommDemo/Helpers/CapabilityDisplayHelper.cs`
-- `CORE_EXTENSIBILITY.md`
-
-新增/接入能力：
-
-1. `ProtocolCapabilities`
-   - 描述协议是否支持批量、位地址、字符串、ByteArray、原始传输、原生异步、推荐轮询周期、最大批量数量、最大地址跨度和 PDU 限制。
-   - 通过 `client.GetCapabilities()` 读取。
-   - 第三方协议客户端可实现 `IProtocolCapabilityProvider` 覆盖默认能力。
-
-2. `IndustrialClientBase : IProtocolCapabilityProvider`
-   - 所有继承基类的协议客户端默认具备协议能力。
-   - 默认返回 `ProtocolCapabilities.ForProtocol(Kind)`。
-   - 具体协议可 override `Capabilities` 来描述运行时差异。
-
-3. `IIndustrialAddress` / `IndustrialAddress`
-   - 提供统一地址形状：Original、Normalized、Area、Offset、Bit、IsBitAddress。
-   - `ModbusAddress`、`S7Address` 和 `McAddress` 已实现该接口。
-
-4. 强类型地址 Parser
-   - `ModbusAddressParser` 已实现 `IAddressParser<ModbusAddress>`，并保留旧 `IAddressParser`。
-   - `S7AddressParser` 已实现 `IAddressParser<S7Address>`，并保留旧 `IAddressParser`。
-   - `McAddressParser` 已实现 `IAddressParser<McAddress>`，并保留旧 `IAddressParser`。
-   - 协议内部已开始使用 `ParseTyped`，减少 object cast。
-
-5. `BatchReadOptions` / `BatchWriteOptions` / `BatchSplitPlan`
-   - 为批量读写的超时、拆分、合并、顺序保持、错误继续策略提供协议无关模型。
-   - `ModbusClientBase` 已实现 `IBatchOperationPlanner`。
-   - `SiemensS7Client` 已实现 `IBatchOperationPlanner`。
-   - `MitsubishiMcClient` 已实现 `IBatchOperationPlanner`。
-   - Modbus 现有连续地址合并已映射为 `BatchSplitPlan`。
-   - S7 planner 按 Area / DB / DataType / ByteOffset / BitOffset / MaxReadItems / MaxAddressSpan 生成读计划。
-   - MC planner 按 DeviceType / 位字属性 / DataType / DeviceIndex / MaxReadItems / MaxAddressSpan 生成读计划。
-   - 三个协议的 `PlanWrite` 当前都保持保守单点组，暂不自动合并写操作。
-
-6. `BatchPlanDiagnostics`
-   - 统一格式化 `BATCH_PLAN summary`、`BATCH_PLAN group` 和 `BATCH_PLAN executed_group`。
-   - 后续 Modbus、PollingScheduler、S7/MC 优化读取和 Demo 诊断面板都应复用这套字段。
-   - 关键字段包括 Source、Device、Protocol、Operation、OriginalRequests、PlannedRequests、SavedRequests、Area、Start、End、Length、Requests、Elapsed 和 Addresses。
-
-7. `PollingScheduler` 接入能力模型和批量计划
-   - `SubscribeAsync` 会读取 `client.GetCapabilities()`。
-   - 拒绝不支持订阅的协议，例如原始 TCP Socket。
-   - 拒绝低于 `RecommendedMinPollingInterval` 的订阅周期。
-   - Worker 内保存协议能力。
-   - 每轮会合并重复点位，优先用 `IBatchOperationPlanner.PlanRead(...)` 拆批，没有 planner 时按 `MaxReadItems` 保守拆批。
-   - 批次独立容错，失败批次返回 `QualityStatus.Bad`，不阻断其他批次。
-
-8. Demo 能力展示
-   - 新增 `CapabilityDisplayHelper` 统一格式化协议能力。
-   - `ModbusTab` 会根据 TCP / RTU 连接方式显示默认能力，连接后显示实际 client 能力。
-   - `SiemensS7Tab` 和 `MitsubishiMcTab` 通过 `ProtocolTabViewModel.CapabilityText` 显示协议能力。
-   - 当前只是展示能力，还未根据能力自动隐藏或禁用 UI 控件。
-
-9. 测试更新
-   - `PlatformModelTests` 覆盖能力模型、统一地址、Modbus/S7/MC parser 的平台地址形状、Modbus/S7/MC 读计划、批量计划和能力 provider fallback。
-   - 当前自动化测试基线为 55 项；平台模型和轮询调度的上述历史回归用例已不在当前测试项目中，需要按 P1 测试任务补回。
-
-## P0/P1 可靠性优化现状
-
-本轮 P0/P1 已合并到 `master`，核心目标是先把工业通讯 SDK 的连接生命周期、批量超时、健康状态和轮询调度做稳，再继续扩协议。
-
-### P0 已完成
-
-1. `MitsubishiMcClient`
-   - MC 地址解析改成集中元数据表，统一维护设备代码、地址进制、位/字设备分类。
-   - 修正 `ZR` 地址不应按十六进制解析的问题。
-   - 增加 Host、Port、DeviceId、连接状态和地址范围校验。
-
-2. `SiemensS7Client`
-   - 参考成熟 S7.NetPlus 使用方式优化生命周期。
-   - 重复连接前先关闭旧 `Plc`。
-   - 连接失败时释放临时 `Plc`，避免残留半开连接。
-   - 读写失败遇到传输/连接类异常时关闭失效连接。
-   - 加强 DB、DBX、M/I/Q 位地址校验；Bool 写入必须使用明确 bit 地址。
-   - 保留 `ReadDbClassAsync` / `WriteDbClassAsync` 类映射能力。
-
-3. `IndustrialClientBase`
-   - 单点和批量操作统一超时语义。
-   - 批量操作校验请求 `DeviceId`。
-   - 全 Bad 批量结果不再把健康状态重置为成功。
-   - 地址错误、数据转换错误与连接/传输故障分离，不再把所有异常都记成连接 Faulted。
-   - 连接、超时、Socket、IO 等传输类故障才影响连接健康状态。
-
-### P1 已完成
-
-1. `PollingScheduler`
-   - 同一设备 / 同一客户端只保留一个后台 Worker。
-   - 多个订阅到期时合并重复点位读取。
-   - 轮询改为固定节拍，减少“读取耗时 + Interval”造成的累计漂移。
-   - 订阅回调异常被隔离，不会杀死轮询循环。
-   - 同一 `DeviceId` 不允许绑定不同客户端实例，避免轮询挂到错误连接。
-   - Worker 停止与新订阅并发时会移除旧 Worker 并重新绑定。
-
-2. 轮询调度测试缺口
-   - 当前测试项目尚未直接覆盖基础订阅事件、ByteArray 变化检测、DeviceId 不匹配、同设备不同客户端拒绝和重复点位合并读取。
-
-## 当前设计边界
-
-- 轮询订阅仍是“SDK 主动周期读取”，不是 PLC 主动推送。
-- `IIndustrialClient` 的操作仍按客户端串行化执行，避免同一 TCP/串口连接上的请求响应错位。
-- 轮询调度已按设备合并、协议能力校验，并可用 `IBatchOperationPlanner` / `MaxReadItems` 拆分轮询批次。
-- Modbus / S7 / MC 都已映射到 `BatchSplitPlan`；S7 / MC 当前只是计划化拆批，底层仍复用现有逐项读取路径，真正协议级合并读取后续单独做。
-- `BatchPlanDiagnostics` 已建立统一日志格式，但 Modbus / PollingScheduler 的旧手写 batch 日志仍需逐步替换。
-- Demo 已显示 `ProtocolCapabilities`，但还未根据能力动态禁用控件或预警输入。
-- `ReadAsync` 通信失败默认返回 `DataValue.Bad`；写入失败仍抛异常。调用方需要按 `Quality` 判断读取结果。
-- 当前仓库包含 `IndustrialCommSdk.Tests`，基线为 55 项自动化测试；修改核心协议后应同时运行测试和 Release 全解决方案构建，并按影响范围补充协议模拟器或实机验证。
-
-## JSON 快速部署
-
-Demo 配置模板位于：
-
-- `IndustrialCommDemo/Config/devices.json`
-- `IndustrialCommDemo/Config/points/plc1.json`
-- `IndustrialCommDemo/Config/points/s7plc.json`
-- `IndustrialCommDemo/Config/modbus-profiles.json`
-
-构建时，`IndustrialCommDemo.csproj` 会将整个 `Config/**/*.json` 复制到 Demo 输出目录。运行时应修改输出目录下的 `Config` 文件，不把设备信息内置到 DLL。
-
-`devices.json` 的每台设备通过 `pointsFile` 关联点位表：
-
-```json
+`Total` 是面向工业现场的 .NET Framework 4.7.2 通信 SDK、WPF 上位机 Demo 和 WinForms 最小验证程序。协议、运行时、MES 与存储能力属于 SDK；应用层只负责配置、编排和界面，不复制协议实现。
+
+## 维护规则
+
+- 本文件是仓库内的持续记忆，记录当前事实，不保留已经被代码推翻的设计。
+- 每轮结构或公开 API 调整后，同步更新模块边界、验证结果、已知限制和后续事项。
+- `README.md` 面向 SDK 使用者；本文件面向后续开发和维护。
+- 默认分支为 `master`。提交号和远端状态以 Git 实际输出为准，不在本文件固化易过期的 HEAD。
+
+## 2026-07-14 SDK 程序集模块化重构
+
+这是一次有意的破坏性升级，仍只目标 `net472`。
+
+### 当前程序集
+
+| 程序集 | 责任 |
+|---|---|
+| `IndustrialCommSdk.Abstractions` | 客户端契约、请求/返回模型、枚举、能力、日志、诊断、异常 |
+| `IndustrialCommSdk.Runtime` | 客户端基类、轮询、DeviceHost、配置、协议注册表、TagTable、快捷扩展 |
+| `IndustrialCommSdk.Transport` | TCP、分帧、服务端、会话和 Socket |
+| `IndustrialCommSdk.Protocols.Common` | 寄存器和文本编解码 |
+| `IndustrialCommSdk.Protocols.Modbus` | Modbus TCP/RTU 与 NModbus4 |
+| `IndustrialCommSdk.Protocols.S7` | Siemens S7 与 S7netplus |
+| `IndustrialCommSdk.Protocols.Mc` | Mitsubishi MC 3E |
+| `IndustrialCommSdk.Protocols.OpcUa` | OPC UA 与 OPC Foundation |
+| `IndustrialCommSdk.Protocols.Mqtt` | MQTT 与 MQTTnet |
+| `IndustrialCommSdk.Protocols.Redis` | Redis 与 StackExchange.Redis |
+| `IndustrialCommSdk.Mes.Http` | 开放式 MES HTTP JSON 发送和接收 |
+| `IndustrialCommSdk.Storage` | SQL Server 历史、缓冲记录器、CSV |
+| `IndustrialCommSdk` | 引用全部模块的聚合入口和默认注册表 |
+
+原 `IndustrialCommSdk.Core` 已迁空并从解决方案删除。协议项目不互相引用，也不引用聚合入口；第三方包只属于对应协议项目。
+
+### 公开 API
+
+新增 Runtime 配置扩展点：
+
+- `IProtocolSettings`
+- `IIndustrialProtocolProvider`
+- `IndustrialProtocolProvider<TSettings>`
+- `IndustrialProtocolRegistry`
+- `IndustrialConfigurationSerializer`
+
+聚合入口使用实例 API：
+
+```csharp
+var sdk = IndustrialSdk.CreateDefault(logger);
+var config = sdk.LoadConfiguration("Config/devices.json");
+using (var host = sdk.CreateDeviceHost(config, "Config"))
 {
-  "name": "plc1",
-  "protocol": "modbus-tcp",
-  "host": "192.168.1.10",
-  "port": 502,
-  "slaveId": 1,
-  "deviceProfile": "inovance-easyplc",
-  "pointsFile": "points/plc1.json",
-  "enabled": true,
-  "pollingIntervalMilliseconds": 1000,
-  "reconnectDelayMilliseconds": 3000
+    await host.StartAsync();
 }
 ```
 
-新增设备时：在“设备配置”页点击“新增设备”，填写常用连接参数，在点位表格中添加点位，然后保存并校验。熟悉配置格式的维护人员也可以使用高级 JSON 入口。
+`IndustrialClientFactory`、`SimpleClient` 和 `IndustrialDeployment` 已删除，不提供类型转发、旧 API 包装或旧 JSON 自动迁移。只引用单协议模块时，使用对应 Options 和 Client 构造函数。
 
-### Modbus 品牌 JSON 配置
+### 协议键与配置
 
-`IndustrialCommDemo/Config/modbus-profiles.json` 通过 `ModbusProfileDefinition` 数据模型驱动 `JsonModbusProfile : IModbusDeviceProfile`。汇川 EasyPLC 和三菱 Modbus TCP 的品牌映射已用 JSON 等价描述，`TryLoadDefaultConfig()` 自动从该文件加载。
+canonical 协议键固定为：
 
-新增品牌只需在 `modbus-profiles.json` 的 `profiles` 数组加一条记录：
+- `modbus-tcp`
+- `modbus-rtu`
+- `siemens-s7`
+- `mitsubishi-mc`
+- `opc-ua`
+- `mqtt`
+- `redis`
 
-- `key`：唯一标识，例如 `"my-brand"`
-- `addressPattern`：地址正则，组 1 为前缀、组 2 为索引
-- `mappings`：前缀映射表（prefix → area / base / max / radix）
-- `lowWordFirst`：多字类型是否需要低字在前交换
+注册表拒绝重复键、非 canonical 键和 Settings 类型不匹配。配置由 Newtonsoft.Json 13.0.3 解析，设备公共字段、`runtime` 和强类型 `settings` 分离。未知协议、空 settings、错误类型和 Provider 字段校验错误在解析或离线校验阶段返回。
 
-`GenericModbusProfile` 保留为硬编码（双格式地址逻辑）。
+### Demo
 
-## 简化 SDK 用法
+- WPF 配置页保留公共字段和完整 `devices.json` 高级编辑器。
+- Host、端口、串口、CPU 等协议字段统一改为独立 Settings JSON 编辑器。
+- 切换协议会加载 Provider 默认 Settings；格式化、应用、保存均经过对应 Provider 解析/校验。
+- WPF 运行中心通过 `IndustrialSdk` 创建 `IndustrialDeviceHost`。
+- WinForms 不再依赖聚合程序集，直接引用 Runtime、Transport、Modbus、S7、MC 和 MES 模块。
+- 配置样例已迁移为 `runtime/settings` 新结构。
 
-配置校验不连接 PLC：
+### 内部拆分
 
-```csharp
-var configPath = "Config/devices.json";
-var config = IndustrialSdkConfig.Load(configPath);
-var result = config.Validate(Path.GetDirectoryName(Path.GetFullPath(configPath)));
-```
+所有 SDK 手写 C# 文件控制在 500 行以内。已经完成：
 
-配置化读写：
+- `IndustrialClientQuickExtensions`：连接/读取与写入/转换 partial 文件。
+- `PollingScheduler`：Scheduler、SubscriptionRegistry、DeviceWorker。
+- `IndustrialClientBase`：请求执行与诊断跟踪。
+- `DatabaseStorage`：模型/接口、SQL Schema/写入、历史查询、内部 SQL 帮助器、缓冲记录器。
+- `SiemensS7Client`：地址解析和客户端实现分离。
+- `IndustrialDeviceHost` 当前 500 行以内。
 
-```csharp
-using (var device = IndustrialDeployment.Open("Config/devices.json", "plc1"))
-{
-    await device.ConnectAsync();
-    short speed = await device.ReadAsync<short>("Speed");
-    await device.WriteAsync("Run", true);
-    var values = await device.ReadManyAsync();
-    await device.DisconnectAsync();
-}
-```
+## MES HTTP JSON 边界
 
-`IndustrialDeployment.Open` 一次性加载设备配置、点位表并创建协议客户端。`IndustrialConfiguredClient` 按 JSON 点位名提供单读、单写、批量读和批量写入口。
+MES 保持开放 JSON，不内置 FACHECK、FATRACK、FANUM 或其他业务类型。
 
-多设备后台运行使用 `IndustrialDeviceHost.Load("Config/devices.json")`：仅加载 `enabled` 不为 false 的设备，管理连接、按 `pollingIntervalMilliseconds` 批量轮询、断线重连、状态事件和数据事件。
+- `MesHttpClient.SendJsonAsync(endpoint, json, token)` 只接受 BaseUrl 下安全相对端点。
+- 请求根节点必须是 JSON 对象；正文验证后原样 UTF-8 POST，不重新序列化。
+- `Content-Type` 和 `Accept` 为 `application/json`。
+- 2xx/3xx/4xx 原样返回；默认不重试，只有显式配置时才对 5xx、网络错误和超时有界重试。
+- `MesJsonReceiver` 接收任意相对路径的 POST JSON 对象，支持正文上限、处理超时、Authorization 检查和自定义 JSON 响应。
+- WPF 与 WinForms MES 页面均只使用 JSON 配置和 JSON 正文。
 
-Demo 的“设备配置”页提供设备常用参数表单、点位表格和高级 JSON 三种入口。`IndustrialSdkConfig.ToJson/Save` 与 `TagTable.ToJson/SaveJson` 负责统一序列化，Demo 不自行拼接配置 JSON。
+## 测试状态
 
-## 验证命令
+模块化重构后测试由 55 项增加到 79 项，当前 Release 测试全部通过。新增覆盖：
 
-解决方案构建：
+- 七种协议 Settings 序列化往返与默认注册完整性。
+- 未知协议、旧别名、重复注册、错误 Settings 类型和必填字段。
+- 协议程序集不引用聚合入口或其他协议程序集。
+- PollingScheduler 的 DeviceId/客户端冲突、重复点位合并、回调异常隔离、取消和 Dispose。
+- DeviceHost 禁用设备和无效点位文件。
+- Storage 缓冲写入重试、计数与优雅停止。
 
-```powershell
-dotnet build Total.sln --no-restore
-```
-
-Demo 构建：
-
-```powershell
-dotnet build IndustrialCommDemo\IndustrialCommDemo.csproj --no-restore
-```
-
-SDK 构建：
-
-```powershell
-dotnet build .\IndustrialCommSdk\IndustrialCommSdk.csproj --no-restore
-```
+验收结果：先执行 `dotnet clean` 和 `dotnet restore`，再执行 Release 全解决方案构建，结果为 0 错误；干净编译时仅 OPC UA 现有同步/旧异步 API 产生 6 个 obsolete 警告，后续完整增量构建为 0 警告、0 错误。Release 测试 79/79 通过，`git diff --check` 通过，WPF Release 可执行文件启动冒烟检查通过。干净重建未复现 WPF 设计器的 `System.Object` 缺失问题。
 
 ## 已知限制
 
-当前自动化测试重点覆盖 MES、配置、TCP 分帧、超时诊断、OPC UA、MQTT 和 Redis；`PollingScheduler`、`IndustrialDeviceHost` 以及 Modbus/S7/MC 报文级回归覆盖仍不足。构建和自动化测试都不能替代真实 PLC、串口、数据库及 MES 联调。
+- 只支持 `net472`，尚未多目标到 .NET 8。
+- 尚未制作和发布独立 NuGet 包。
+- 密码仍由应用配置提供，未内置凭据加密。
+- S7/MC 尚未实现真正合并为单报文的批量读取优化。
+- OPC UA 当前依赖仍使用部分已标记 obsolete 的 API；行为未在本次模块化中调整。
+- SDK 不替代 PLC 急停、硬件联锁和现场安全回路。
 
-## 已完成：DeviceHost 基础运行时
+## 后续建议
 
-已完成的能力：
-
-1. 从 `devices.json` 自动加载所有启用设备。
-2. 管理连接、固定周期重连、健康状态和运行日志。
-3. 按设备的点位表执行周期批量读取并上报事件。
-4. 提供按“设备名 + 点位名”的读写入口和状态事件。
-
-Modbus 品牌差异通过 `IModbusDeviceProfile` 隔离，JSON 数据驱动，新增品牌不改 C# 代码、不重新编译。非 Modbus 协议扩展采用插件式：只有真实现场需要时才增加 Omron、Allen-Bradley 等模块，并保持 `IIndustrialClient` 抽象不变。
-
-## 未完成任务
-
-以下任务按当前优先级排序。完成后应移动到对应“已完成”章节，并记录验证结果。
-
-### P0：先完成本轮产品化闭环
-
-- [ ] 对新的主导航、运行中心、设备表单和点位表格执行一次人工界面冒烟验证；当前只完成编译和序列化往返验证。
-- [ ] 保存设备配置后，明确提示运行中心配置已变化，并提供安全的“保存并重新加载运行中心”；运行中不能静默重载导致设备突然断开。
-- [ ] 增加配置未保存状态，切换设备、重新加载或关闭软件前提示，避免表格编辑丢失。
-- [ ] 根据协议动态显示表单字段：TCP 显示 IP/端口，RTU 显示串口参数，S7 显示 CPU/Rack/Slot，避免现场人员看到无关输入项。
-- [ ] 为新增设备提供可选的点位模板，不只创建空白点位行。
-- [x] 无用文件清理已完成并提交，远端状态已更新。
-
-### P1：让运行中心成为真正的操作页面
-
-- [ ] 增加设备总数、在线数、故障数、Bad 点位数等概览卡片。
-- [ ] 增加设备筛选、点位搜索、质量筛选和最后更新时间提示。
-- [ ] 为可写点位增加受控写入入口和确认提示，写入仍必须调用 SDK 的点位名 API。
-- [ ] 增加报警/异常列表，区分连接故障、轮询失败、Bad 质量和数据库记录失败。
-- [ ] 明确应用启动策略：手动启动、启动后自动运行，或由设置项控制；当前为手动启动。
-- [ ] 数据库记录开关与运行中心状态需要更直观地联动和展示。
-
-### P1：SDK 与质量保障
-
-- [x] 已恢复轻量 `IndustrialCommSdk.Tests` 回归工程；当前覆盖超时与诊断、TCP 分帧、配置、批量计划以及开放式 MES HTTP JSON，共 55 项测试。
-- [ ] 为 `IndustrialSdkConfig.ToJson/Save` 和 `TagTable.ToJson/SaveJson` 补自动化回归验证；当前只有 PowerShell 运行时往返检查。
-- [ ] 替换 Modbus / PollingScheduler 剩余手写 batch 日志，统一使用 `BatchPlanDiagnostics`。
-- [ ] 根据 `ProtocolCapabilities` 动态禁用调试页面不支持的操作和输入项。
-- [ ] S7 / MC 当前只有批量计划，仍需实现真正的协议级连续合并读取。
-- [ ] 写批量计划目前仍是保守单点组，需结合真实设备限制决定是否合并。
-
-### 2026-07-11 SDK 持续优化
-
-- 修复 MES HTTP 在 5xx 响应下重试计数不递增、可能无限循环的可靠性缺陷。
-- `HttpResponseMessage` 现在按请求及时释放，避免长时间运行时连接与资源泄漏。
-- 新增自定义 `HttpMessageHandler`（可指定所有权）及外部 `HttpClient` 注入构造方式；外部客户端不会被 SDK 修改或释放。
-- SDK 超时改为请求级关联取消，不依赖修改共享 `HttpClient.Timeout`。
-- 当时新增 4 项 MES HTTP 自动化测试，验证 5xx 有界重试、重试恢复、4xx 不重试、处理器所有权及外部客户端生命周期；该历史阶段测试为 20/20 通过。当前基线已更新为 55/55，见“2026-07-14 MES HTTP 生产加固与 JSON 接收”。
-
-### P2：交付与维护
-
-- [ ] 增加发布目录生成方式和最小部署说明，输出应包含 EXE、SDK 依赖和可编辑 `Config` 目录。
-- [ ] 评估是否把项目名 `IndustrialCommDemo` 改为正式产品名；在功能稳定前不做大范围命名迁移。
-- [x] 已重写 README，从约 900 行压缩为面向使用者的项目概览、构建测试、快速开始、配置、MES HTTP、Demo 和文档入口；历史可靠性与协议审查细节由 `docs` 承载。
-- [x] 已按连接、输入解析、历史查询和状态持久化等职责拆分 Modbus、设备配置、数据库三个大型 Demo 页面 code-behind。
-- [ ] 只有真实项目需要时才扩展 Omron、Allen-Bradley 等协议，当前不提前堆模块。
+1. 为各程序集补独立 NuGet 元数据和版本策略。
+2. 增加包级 API 兼容性检测和依赖图 CI。
+3. 在单独版本中迁移 OPC UA 异步 API。
+4. 评估 `net472;net8.0` 多目标，不与协议行为优化混在同一变更中。

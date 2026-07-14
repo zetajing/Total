@@ -7,7 +7,12 @@
     <RootNamespace>IndustrialCommMinimal.WinForms</RootNamespace>
   </PropertyGroup>
   <ItemGroup>
-    <ProjectReference Include="..\IndustrialCommSdk\IndustrialCommSdk.csproj" />
+    <ProjectReference Include="..\IndustrialCommSdk.Runtime\IndustrialCommSdk.Runtime.csproj" />
+    <ProjectReference Include="..\IndustrialCommSdk.Transport\IndustrialCommSdk.Transport.csproj" />
+    <ProjectReference Include="..\IndustrialCommSdk.Protocols.Modbus\IndustrialCommSdk.Protocols.Modbus.csproj" />
+    <ProjectReference Include="..\IndustrialCommSdk.Protocols.S7\IndustrialCommSdk.Protocols.S7.csproj" />
+    <ProjectReference Include="..\IndustrialCommSdk.Protocols.Mc\IndustrialCommSdk.Protocols.Mc.csproj" />
+    <ProjectReference Include="..\IndustrialCommSdk.Mes.Http\IndustrialCommSdk.Mes.Http.csproj" />
   </ItemGroup>
   <ItemGroup>
     <Compile Update="MainForm.cs">
