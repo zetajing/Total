@@ -78,7 +78,7 @@ namespace IndustrialCommDemo.Helpers
                 BaseUrl = DefaultBaseUrl,
                 Endpoint = "/upload",
                 TimeoutMilliseconds = 5000,
-                MaxRetries = 2,
+                MaxRetries = 0,
                 RetryDelayMilliseconds = 500,
                 MaxResponseContentBytes = 1024 * 1024,
             };
@@ -91,6 +91,68 @@ namespace IndustrialCommDemo.Helpers
             {
                 ["sample"] = "value",
             }.ToString(Newtonsoft.Json.Formatting.Indented);
+        }
+
+        public static string CreateDefaultReceiverConfiguration()
+        {
+            return new JObject
+            {
+                ["listenPrefix"] = "http://127.0.0.1:8081/mes/",
+                ["maxRequestContentBytes"] = 1024 * 1024,
+                ["handlerTimeoutMilliseconds"] = 5000,
+                ["requiredAuthorizationHeaderValue"] = string.Empty,
+                ["responseStatusCode"] = 200,
+                ["responseJson"] = new JObject { ["success"] = true },
+            }.ToString(Newtonsoft.Json.Formatting.Indented);
+        }
+
+        public static MesDemoReceiverConfiguration ParseReceiverConfiguration(string json)
+        {
+            ValidateObject(json, "MES 接收配置");
+            JObject root;
+            try { root = JObject.Parse(json); }
+            catch (JsonException ex) { throw new InvalidOperationException("MES 接收配置 JSON 无法解析。", ex); }
+
+            var listenPrefix = (string)root["listenPrefix"];
+            var maximumBytes = (int?)root["maxRequestContentBytes"];
+            var handlerTimeout = (int?)root["handlerTimeoutMilliseconds"];
+            var responseStatusCode = (int?)root["responseStatusCode"];
+            var responseJson = root["responseJson"] as JObject;
+            if (string.IsNullOrWhiteSpace(listenPrefix))
+                throw new InvalidOperationException("接收配置字段 listenPrefix 不能为空。");
+            if (!maximumBytes.HasValue || !handlerTimeout.HasValue || !responseStatusCode.HasValue)
+                throw new InvalidOperationException("接收配置必须包含正文上限、处理超时和响应状态码。");
+            if (responseJson == null)
+                throw new InvalidOperationException("接收配置字段 responseJson 必须是 JSON 对象。");
+            Uri prefix;
+            if (!Uri.TryCreate(listenPrefix, UriKind.Absolute, out prefix) ||
+                (prefix.Scheme != Uri.UriSchemeHttp && prefix.Scheme != Uri.UriSchemeHttps) ||
+                !listenPrefix.EndsWith("/", StringComparison.Ordinal) ||
+                !string.IsNullOrEmpty(prefix.Query) || !string.IsNullOrEmpty(prefix.Fragment))
+                throw new InvalidOperationException("listenPrefix 必须是以 / 结尾且不含查询或片段的 HTTP/HTTPS 地址。");
+            if (maximumBytes.Value <= 0 || handlerTimeout.Value <= 0)
+                throw new InvalidOperationException("正文上限和处理超时必须大于 0。");
+            if (responseStatusCode.Value < 200 || responseStatusCode.Value > 599)
+                throw new InvalidOperationException("响应状态码必须在 200 到 599 之间。");
+
+            return new MesDemoReceiverConfiguration
+            {
+                Options = new MesJsonReceiverOptions
+                {
+                    ListenPrefix = listenPrefix.Trim(),
+                    MaxRequestContentBytes = maximumBytes.Value,
+                    HandlerTimeoutMilliseconds = handlerTimeout.Value,
+                    RequiredAuthorizationHeaderValue = ((string)root["requiredAuthorizationHeaderValue"] ?? string.Empty).Trim(),
+                },
+                ResponseStatusCode = responseStatusCode.Value,
+                ResponseJson = responseJson.ToString(Newtonsoft.Json.Formatting.None),
+            };
+        }
+
+        public static string FormatReceiverConfiguration(string json)
+        {
+            ParseReceiverConfiguration(json);
+            return JObject.Parse(json).ToString(Newtonsoft.Json.Formatting.Indented);
         }
 
         private static void ValidateObject(string json, string label)
@@ -135,5 +197,12 @@ namespace IndustrialCommDemo.Helpers
             [DataMember(Name = "retryDelayMilliseconds", Order = 5)] public int? RetryDelayMilliseconds { get; set; }
             [DataMember(Name = "maxResponseContentBytes", Order = 6)] public int? MaxResponseContentBytes { get; set; }
         }
+    }
+
+    internal sealed class MesDemoReceiverConfiguration
+    {
+        public MesJsonReceiverOptions Options { get; set; }
+        public int ResponseStatusCode { get; set; }
+        public string ResponseJson { get; set; }
     }
 }

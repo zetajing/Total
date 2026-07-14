@@ -69,8 +69,8 @@ namespace IndustrialCommSdk.Mes
         {
             var url = CombineUrl(_options.BaseUrl, endpoint);
             var stopwatch = Stopwatch.StartNew();
-            _logger.Info(string.Format("MES HTTP TX begin | Endpoint={0} | Url={1} | Body={2}",
-                endpoint, url, TruncateBody(json)));
+            _logger.Info(string.Format("MES HTTP TX begin | Endpoint={0} | Url={1} | BodyBytes={2}",
+                endpoint, url, Encoding.UTF8.GetByteCount(json)));
 
             var retries = 0;
             while (true)
@@ -93,10 +93,10 @@ namespace IndustrialCommSdk.Mes
                                 timeoutSource.Token).ConfigureAwait(false);
 
                             _logger.Info(string.Format(
-                                "MES HTTP RX | Endpoint={0} | Status={1} | Body={2} | Elapsed={3}ms",
+                                "MES HTTP RX | Endpoint={0} | Status={1} | BodyBytes={2} | Elapsed={3}ms",
                                 endpoint,
                                 (int)response.StatusCode,
-                                TruncateBody(responseBody),
+                                Encoding.UTF8.GetByteCount(responseBody ?? string.Empty),
                                 stopwatch.ElapsedMilliseconds));
 
                             if (response.IsSuccessStatusCode)
@@ -105,16 +105,15 @@ namespace IndustrialCommSdk.Mes
                                 return CreateResponse(endpoint, response, responseBody);
                             }
 
-                            if ((int)response.StatusCode >= 400 && (int)response.StatusCode < 500)
+                            if ((int)response.StatusCode < 500)
                             {
                                 _lastRequestSuccess = false;
                                 return CreateResponse(endpoint, response, responseBody);
                             }
 
                             throw new HttpRequestException(string.Format(
-                                "MES HTTP server error. Status={0}, Body={1}",
-                                (int)response.StatusCode,
-                                TruncateBody(responseBody)));
+                                "MES HTTP server error. Status={0}.",
+                                (int)response.StatusCode));
                         }
                     }
                 }
@@ -264,12 +263,6 @@ namespace IndustrialCommSdk.Mes
         private static int CalculateRetryDelay(int baseDelayMilliseconds, int retryNumber)
         {
             return (int)Math.Min((long)baseDelayMilliseconds * Math.Min(retryNumber, 60), 30000L);
-        }
-
-        private static string TruncateBody(string body)
-        {
-            if (string.IsNullOrEmpty(body)) return "(empty)";
-            return body.Length <= 500 ? body : body.Substring(0, 497) + "...";
         }
 
         private static void ValidateOptions(MesHttpClientOptions options)

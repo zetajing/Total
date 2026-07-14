@@ -10,6 +10,7 @@
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
 
             <GroupBox Header="MES HTTP 配置 JSON" Grid.Row="0" Grid.Column="0" Margin="0,0,12,12">
@@ -70,6 +71,53 @@
                     <TextBlock x:Name="MesReasonPhraseTextBlock" Grid.Row="3" Grid.Column="1" Margin="0,4" Text="（未响应）"/>
                     <TextBlock Grid.Row="4" Margin="0,7,0,0" Text="响应正文" FontWeight="SemiBold" VerticalAlignment="Top"/>
                     <TextBox x:Name="MesResponseBodyTextBox" Grid.Row="4" Grid.Column="1" Margin="0,7,0,0"
+                             MinHeight="180" IsReadOnly="True" AcceptsReturn="True" TextWrapping="NoWrap"
+                             FontFamily="Consolas" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto"/>
+                </Grid>
+            </GroupBox>
+
+            <GroupBox Header="MES HTTP JSON 接收配置" Grid.Row="2" Grid.Column="0" Margin="0,12,12,0">
+                <Grid Margin="12">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+                    <TextBox x:Name="MesReceiverConfigJsonTextBox" MinHeight="260" AcceptsReturn="True"
+                             AcceptsTab="True" TextWrapping="NoWrap" FontFamily="Consolas"
+                             VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto"
+                             TextChanged="ReceiverConfigJsonTextBox_TextChanged"/>
+                    <UniformGrid Grid.Row="1" Columns="3" Margin="0,10,0,0">
+                        <Button Margin="0,0,4,0" Padding="8" Click="FormatReceiverConfigButton_Click" Content="校验 / 格式化"/>
+                        <Button x:Name="MesReceiverStartButton" Margin="4,0" Padding="8" Background="#059669"
+                                Foreground="White" BorderThickness="0" Click="StartReceiverButton_Click" Content="启动接收"/>
+                        <Button x:Name="MesReceiverStopButton" Margin="4,0,0,0" Padding="8"
+                                Click="StopReceiverButton_Click" Content="停止接收"/>
+                    </UniformGrid>
+                    <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,10,0,0">
+                        <TextBlock Text="状态：" FontWeight="SemiBold"/>
+                        <TextBlock x:Name="MesReceiverStatusTextBlock" Foreground="IndianRed" Text="未启动"/>
+                    </StackPanel>
+                </Grid>
+            </GroupBox>
+
+            <GroupBox Header="MES 主动推送 JSON" Grid.Row="2" Grid.Column="1" Margin="0,12,0,0">
+                <Grid Margin="12">
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="100"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/><RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+                    <TextBlock Grid.Row="0" Margin="0,4" Text="接收端点" FontWeight="SemiBold"/>
+                    <TextBlock x:Name="MesReceivedEndpointTextBlock" Grid.Row="0" Grid.Column="1" Margin="0,4" Text="（未接收）"/>
+                    <TextBlock Grid.Row="1" Margin="0,4" Text="远端地址" FontWeight="SemiBold"/>
+                    <TextBlock x:Name="MesReceivedRemoteTextBlock" Grid.Row="1" Grid.Column="1" Margin="0,4" Text="（未接收）"/>
+                    <TextBlock Grid.Row="2" Margin="0,4" Text="Content-Type" FontWeight="SemiBold"/>
+                    <TextBlock x:Name="MesReceivedContentTypeTextBlock" Grid.Row="2" Grid.Column="1" Margin="0,4" Text="（未接收）"/>
+                    <TextBlock Grid.Row="3" Margin="0,4" Text="接收时间" FontWeight="SemiBold"/>
+                    <TextBlock x:Name="MesReceivedAtTextBlock" Grid.Row="3" Grid.Column="1" Margin="0,4" Text="（未接收）"/>
+                    <TextBlock Grid.Row="4" Margin="0,7,0,0" Text="原始正文" FontWeight="SemiBold" VerticalAlignment="Top"/>
+                    <TextBox x:Name="MesReceivedBodyTextBox" Grid.Row="4" Grid.Column="1" Margin="0,7,0,0"
                              MinHeight="180" IsReadOnly="True" AcceptsReturn="True" TextWrapping="NoWrap"
                              FontFamily="Consolas" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto"/>
                 </Grid>

@@ -16,6 +16,7 @@ namespace IndustrialCommDemo.Views
     {
         private DemoAppContext _ctx;
         private IMesHttpClient _httpClient;
+        private IMesJsonReceiver _receiver;
         private string _endpoint;
         private bool _initialized;
 
@@ -29,6 +30,7 @@ namespace IndustrialCommDemo.Views
             _ctx = ctx ?? throw new ArgumentNullException(nameof(ctx));
             ApplySavedState();
             UpdateClientState(false, "配置未应用");
+            UpdateReceiverState(false, "未启动");
         }
 
         private void ConfigJsonTextBox_TextChanged(object sender, TextChangedEventArgs e)
@@ -88,6 +90,81 @@ namespace IndustrialCommDemo.Views
             catch (Exception ex) { _ctx.HandleError("MES 上传报文 JSON 无效。", ex, true); }
         }
 
+        private async void ReceiverConfigJsonTextBox_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            if (!_initialized || _receiver == null) return;
+            await StopReceiverAsync();
+            UpdateReceiverState(false, "配置已修改，请重新启动");
+        }
+
+        private void FormatReceiverConfigButton_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                MesReceiverConfigJsonTextBox.Text = MesDemoJson.FormatReceiverConfiguration(
+                    MesReceiverConfigJsonTextBox.Text);
+                _ctx.SetHeaderStatus("MES 接收配置 JSON 校验通过", Brushes.LightGreen);
+            }
+            catch (Exception ex) { _ctx.HandleError("MES 接收配置 JSON 无效。", ex, true); }
+        }
+
+        private async void StartReceiverButton_Click(object sender, RoutedEventArgs e)
+        {
+            MesJsonReceiver receiver = null;
+            try
+            {
+                var config = MesDemoJson.ParseReceiverConfiguration(MesReceiverConfigJsonTextBox.Text);
+                await StopReceiverAsync();
+                receiver = new MesJsonReceiver(
+                    config.Options,
+                    (request, token) =>
+                    {
+                        Dispatcher.BeginInvoke(new Action(() => DisplayReceivedJson(request)));
+                        return Task.FromResult(new MesJsonReceiveResponse
+                        {
+                            StatusCode = config.ResponseStatusCode,
+                            Json = config.ResponseJson,
+                        });
+                    },
+                    _ctx.SdkLogger);
+                await receiver.StartAsync(CancellationToken.None);
+                _receiver = receiver;
+                receiver = null;
+                UpdateReceiverState(true, "正在监听 " + config.Options.ListenPrefix);
+                _ctx.SetHeaderStatus("MES HTTP JSON 接收器已启动", Brushes.LightGreen);
+            }
+            catch (Exception ex)
+            {
+                receiver?.Dispose();
+                UpdateReceiverState(false, "启动失败");
+                _ctx.HandleError(
+                    "MES HTTP JSON 接收器启动失败。监听非本机地址时请检查 Windows URL ACL。",
+                    ex,
+                    true);
+            }
+        }
+
+        private async void StopReceiverButton_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                await StopReceiverAsync();
+                UpdateReceiverState(false, "已停止");
+                _ctx.SetHeaderStatus("MES HTTP JSON 接收器已停止", Brushes.Khaki);
+            }
+            catch (Exception ex) { _ctx.HandleError("MES HTTP JSON 接收器停止失败。", ex, true); }
+        }
+
+        private void DisplayReceivedJson(MesJsonReceiveRequest request)
+        {
+            MesReceivedEndpointTextBlock.Text = request.Endpoint;
+            MesReceivedRemoteTextBlock.Text = request.RemoteEndPoint ?? "（未知）";
+            MesReceivedContentTypeTextBlock.Text = request.ContentType ?? "（未提供）";
+            MesReceivedAtTextBlock.Text = DateTimeOffset.Now.ToString("yyyy-MM-dd HH:mm:ss.fff zzz", CultureInfo.InvariantCulture);
+            MesReceivedBodyTextBox.Text = request.Body ?? string.Empty;
+            _ctx.SetHeaderStatus("收到 MES HTTP JSON: " + request.Endpoint, Brushes.LightGreen);
+        }
+
         private async void SendJsonButton_Click(object sender, RoutedEventArgs e)
         {
             try
@@ -133,8 +210,9 @@ namespace IndustrialCommDemo.Views
             }
         }
 
-        public Task ResetClientAsync()
+        public async Task ResetClientAsync()
         {
+            await StopReceiverAsync();
             var client = _httpClient;
             _httpClient = null;
             _endpoint = null;
@@ -143,7 +221,15 @@ namespace IndustrialCommDemo.Views
                 try { client.Dispose(); } catch { }
             }
             if (_initialized) UpdateClientState(false, "配置未应用");
-            return Task.CompletedTask;
+        }
+
+        private async Task StopReceiverAsync()
+        {
+            var receiver = _receiver;
+            _receiver = null;
+            if (receiver == null) return;
+            try { await receiver.StopAsync(CancellationToken.None); }
+            finally { receiver.Dispose(); }
         }
 
         public void SaveState()
@@ -152,6 +238,7 @@ namespace IndustrialCommDemo.Views
             var state = _ctx.UiState.Mes ?? (_ctx.UiState.Mes = new MesUiState());
             state.ConfigJson = MesConfigJsonTextBox.Text;
             state.RequestJson = MesPayloadJsonTextBox.Text;
+            state.ReceiverConfigJson = MesReceiverConfigJsonTextBox.Text;
         }
 
         private void ApplySavedState()
@@ -163,6 +250,9 @@ namespace IndustrialCommDemo.Views
             MesPayloadJsonTextBox.Text = string.IsNullOrWhiteSpace(state.RequestJson)
                 ? MesDemoJson.CreateDefaultRequest()
                 : state.RequestJson;
+            MesReceiverConfigJsonTextBox.Text = string.IsNullOrWhiteSpace(state.ReceiverConfigJson)
+                ? MesDemoJson.CreateDefaultReceiverConfiguration()
+                : state.ReceiverConfigJson;
             _initialized = true;
         }
 
@@ -171,6 +261,14 @@ namespace IndustrialCommDemo.Views
             MesStatusTextBlock.Text = text;
             MesStatusTextBlock.Foreground = ready ? Brushes.ForestGreen : Brushes.IndianRed;
             MesSendButton.IsEnabled = ready;
+        }
+
+        private void UpdateReceiverState(bool running, string text)
+        {
+            MesReceiverStatusTextBlock.Text = text;
+            MesReceiverStatusTextBlock.Foreground = running ? Brushes.ForestGreen : Brushes.IndianRed;
+            MesReceiverStartButton.IsEnabled = !running;
+            MesReceiverStopButton.IsEnabled = running;
         }
 
     }

@@ -4,6 +4,7 @@ using System.Net;
 using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
+using IndustrialCommSdk.Diagnostics;
 using IndustrialCommSdk.Mes;
 using NUnit.Framework;
 
@@ -12,6 +13,20 @@ namespace IndustrialCommSdk.Tests
     [TestFixture]
     public sealed class MesHttpClientTests
     {
+        [Test]
+        public void PostRetriesAreDisabledByDefault()
+        {
+            var handler = new QueueHandler(
+                Response(HttpStatusCode.ServiceUnavailable, "first-attempt"),
+                Response(HttpStatusCode.OK, "would-be-duplicate"));
+
+            using (var client = new MesHttpClient(CreateOptions(), handler, true))
+                Assert.ThrowsAsync<HttpRequestException>(async () =>
+                    await client.SendJsonAsync("events/upload", "{}", CancellationToken.None));
+
+            Assert.That(handler.RequestCount, Is.EqualTo(1));
+        }
+
         [Test]
         public void ServerErrorsRetryOnlyUpToConfiguredLimit()
         {
@@ -64,6 +79,42 @@ namespace IndustrialCommSdk.Tests
             Assert.That(handler.RequestCount, Is.EqualTo(1));
             Assert.That(result.StatusCode, Is.EqualTo(422));
             Assert.That(result.Body, Is.EqualTo("{\"error\":\"invalid\"}"));
+        }
+
+        [Test]
+        public async Task RedirectReturnsOriginalResponseWithoutRetry()
+        {
+            var handler = new QueueHandler(Response(HttpStatusCode.Redirect, "redirected"));
+            var options = CreateOptions();
+            options.MaxRetries = 3;
+
+            MesJsonResponse result;
+            using (var client = new MesHttpClient(options, handler, true))
+                result = await client.SendJsonAsync("custom/report", "{}", CancellationToken.None);
+
+            Assert.That(handler.RequestCount, Is.EqualTo(1));
+            Assert.That(result.StatusCode, Is.EqualTo(302));
+            Assert.That(result.Body, Is.EqualTo("redirected"));
+        }
+
+        [Test]
+        public async Task LogsContainOnlyBodySizeNotBodyContent()
+        {
+            const string requestSecret = "request-secret-4711";
+            const string responseSecret = "response-secret-8152";
+            var handler = new QueueHandler(Response(HttpStatusCode.OK, "{\"value\":\"" + responseSecret + "\"}"));
+            var logger = new RecordingLogger();
+
+            using (var client = new MesHttpClient(CreateOptions(), handler, true, logger))
+                await client.SendJsonAsync(
+                    "custom/report",
+                    "{\"value\":\"" + requestSecret + "\"}",
+                    CancellationToken.None);
+
+            var messages = string.Join(Environment.NewLine, logger.Messages);
+            Assert.That(messages, Does.Contain("BodyBytes="));
+            Assert.That(messages, Does.Not.Contain(requestSecret));
+            Assert.That(messages, Does.Not.Contain(responseSecret));
         }
 
         [Test]
@@ -270,6 +321,15 @@ namespace IndustrialCommSdk.Tests
                 if (RequestCount == 1) throw new HttpRequestException("temporary network failure");
                 return Task.FromResult(Response(HttpStatusCode.OK, "{}"));
             }
+        }
+
+        private sealed class RecordingLogger : IIndustrialLogger
+        {
+            public IList<string> Messages { get; } = new List<string>();
+            public void Trace(string message) { Messages.Add(message); }
+            public void Info(string message) { Messages.Add(message); }
+            public void Warn(string message) { Messages.Add(message); }
+            public void Error(string message, Exception exception) { Messages.Add(message); }
         }
     }
 }

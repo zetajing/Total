@@ -152,8 +152,10 @@ namespace IndustrialCommDemo.Services
     {
         /// <summary>MES HTTP 传输配置 JSON。</summary>
         [DataMember(Order = 1)] public string ConfigJson { get; set; }
-        /// <summary>包含 endpoint 和 payload 的完整 HTTP 请求 JSON。</summary>
+        /// <summary>按原样发送的 HTTP JSON 正文。</summary>
         [DataMember(Order = 2)] public string RequestJson { get; set; }
+        /// <summary>MES 主动推送 HTTP JSON 的本地接收配置。</summary>
+        [DataMember(Order = 3)] public string ReceiverConfigJson { get; set; }
     }
 
     /// <summary>

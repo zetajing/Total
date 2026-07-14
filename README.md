@@ -132,7 +132,7 @@ dotnet build .\Total.sln --configuration Release
 dotnet test .\IndustrialCommSdk.Tests\IndustrialCommSdk.Tests.csproj --configuration Release
 ```
 
-当前回归集包含 47 项测试，覆盖配置、TCP 分帧、连接超时、诊断、批量计划、MES HTTP 原样 JSON 上传、重试与资源生命周期。
+当前回归集包含 55 项测试，覆盖配置、TCP 分帧、连接超时、诊断、批量计划、MES HTTP JSON 原样发送与接收、重试及资源生命周期。
 
 普通应用继续只引用 `IndustrialCommSdk`，原有 `IndustrialClientFactory`、`SimpleClient`
 和 JSON 自动选协议的使用方式不变。仅需要公共接口、配置、轮询、传输、诊断、存储或
@@ -266,7 +266,7 @@ if (!validation.IsValid)
 
 ## MES HTTP
 
-MES HTTP 不内置任何业务操作或字段。调用方提供 BaseUrl 下的安全相对端点和 JSON 对象正文；请求统一使用 UTF-8 JSON（`Content-Type: application/json`，`Accept: application/json`）。默认客户端共享 HTTP 连接池，仅对 5xx、网络异常和超时执行有上限的退避重试，4xx 会直接返回业务响应。
+MES HTTP 不内置任何业务操作或字段。调用方提供 BaseUrl 下的安全相对端点和 JSON 对象正文；请求统一使用 UTF-8 JSON（`Content-Type: application/json`，`Accept: application/json`）。默认客户端共享 HTTP 连接池，2xx、3xx、4xx 会直接返回原始响应。为避免 POST 重复报工，默认不重试；只有服务端支持幂等时才应显式配置对 5xx、网络异常和超时的有界重试。
 
 ```csharp
 using IndustrialCommSdk.Mes;
@@ -275,7 +275,7 @@ using (var mes = new MesHttpClient(new MesHttpClientOptions
 {
     BaseUrl = "http://mes-server:8080/api",
     TimeoutMilliseconds = 5000,
-    MaxRetries = 2,
+    MaxRetries = 0, // 服务端支持幂等时才设置为大于 0
     RetryDelayMilliseconds = 500,
     MaxResponseContentBytes = 1024 * 1024,
 }))
@@ -291,6 +291,34 @@ using (var mes = new MesHttpClient(new MesHttpClientOptions
 ```
 
 SDK 会先确认正文是合法 JSON 对象，但不会重新序列化，因此字段顺序、空格和正文内容会按输入原样发送。端点必须是相对路径，不能传入外部绝对 URL。
+
+MES 主动推送使用独立的开放式 JSON 接收器。业务处理器会收到相对端点、请求头、远端地址和原始 JSON，并异步返回状态码及 JSON：
+
+```csharp
+var receiveOptions = new MesJsonReceiverOptions
+{
+    ListenPrefix = "http://127.0.0.1:8081/mes/",
+    MaxRequestContentBytes = 1024 * 1024,
+    HandlerTimeoutMilliseconds = 5000,
+};
+
+using (var receiver = new MesJsonReceiver(receiveOptions, (request, token) =>
+{
+    Console.WriteLine(request.Endpoint);
+    Console.WriteLine(request.Body);
+    return Task.FromResult(new MesJsonReceiveResponse
+    {
+        StatusCode = 200,
+        Json = "{\"success\":true}",
+    });
+}))
+{
+    await receiver.StartAsync(CancellationToken.None);
+    // 应用退出时调用 StopAsync。
+}
+```
+
+接收器仅接受 POST 和 UTF-8 JSON 对象，并限制正文大小。`RequiredAuthorizationHeaderValue` 可用于校验完整 Authorization 请求头。默认监听本机地址；监听其他地址时，Windows 可能需要预先配置 URL ACL。
 
 需要代理、证书、统一认证或模拟测试时，可以注入处理器：
 
@@ -325,7 +353,7 @@ using (var mes = new MesHttpClient(options, sharedHttpClient, logger: null))
 - 运行中心：统一启动、停止和查看设备及点位状态
 - 设备配置：表单与 JSON 配置维护
 - 历史数据：实时流水、筛选、统计、导出和清理
-- 调试与维护：各协议直连、Socket、MES HTTP 双 JSON 编辑器、网卡和存储设置
+- 调试与维护：各协议直连、Socket、MES HTTP JSON 发送与主动接收、网卡和存储设置
 - 运行日志：应用日志与 SDK 日志分离展示
 
 ### WinForms 最小验证程序
