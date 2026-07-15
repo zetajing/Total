@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 using IndustrialCommSdk.Abstractions;
-using IndustrialCommSdk.Configuration;
+using IndustrialCommSdk.Runtime.Configuration;
 using IndustrialCommSdk.Diagnostics;
 using S7.Net;
 

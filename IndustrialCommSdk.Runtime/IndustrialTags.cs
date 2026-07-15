@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using IndustrialCommSdk.Abstractions;
 using IndustrialCommSdk.Exceptions;
 
-namespace IndustrialCommSdk
+namespace IndustrialCommSdk.Runtime
 {
     /// <summary>描述一个包含地址、数据类型和长度的工业点位。</summary>
     public class IndustrialTag

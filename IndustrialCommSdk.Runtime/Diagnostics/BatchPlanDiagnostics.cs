@@ -3,7 +3,7 @@ using System.Globalization;
 using System.Linq;
 using IndustrialCommSdk.Abstractions;
 
-namespace IndustrialCommSdk.Diagnostics
+namespace IndustrialCommSdk.Runtime.Diagnostics
 {
     /// <summary>
     /// Formats protocol-neutral batch plan diagnostics so protocols, polling, and Demo logs

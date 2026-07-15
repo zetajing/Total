@@ -4,7 +4,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using IndustrialCommSdk.Abstractions;
 
-namespace IndustrialCommSdk
+namespace IndustrialCommSdk.Runtime
 {
     /// <summary>表示一次设备连接诊断的耗时、健康状态和错误信息。</summary>
     public sealed class IndustrialConnectionTestResult

@@ -4,7 +4,7 @@ using System.Linq;
 using IndustrialCommSdk.Abstractions;
 using IndustrialCommSdk.Diagnostics;
 
-namespace IndustrialCommSdk.Configuration
+namespace IndustrialCommSdk.Runtime.Configuration
 {
     public interface IProtocolSettings
     {

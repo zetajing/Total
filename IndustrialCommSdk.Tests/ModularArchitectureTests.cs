@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using IndustrialCommSdk.Abstractions;
-using IndustrialCommSdk.Configuration;
+using IndustrialCommSdk.Runtime.Configuration;
 using IndustrialCommSdk.Diagnostics;
 using IndustrialCommSdk.Protocols.Mc;
 using IndustrialCommSdk.Protocols.Modbus;
@@ -10,6 +10,8 @@ using IndustrialCommSdk.Protocols.Mqtt;
 using IndustrialCommSdk.Protocols.OpcUa;
 using IndustrialCommSdk.Protocols.Redis;
 using IndustrialCommSdk.Protocols.S7;
+using IndustrialCommSdk.Runtime;
+using IndustrialCommSdk.Storage;
 using Newtonsoft.Json;
 using NUnit.Framework;
 
@@ -38,6 +40,20 @@ namespace IndustrialCommSdk.Tests
             Assert.Throws<KeyNotFoundException>(() => sdk.Protocols.Get("s7"));
             Assert.Throws<KeyNotFoundException>(() => sdk.Protocols.Get("mc"));
             Assert.Throws<KeyNotFoundException>(() => sdk.Protocols.Get("opcua"));
+        }
+
+        [TestCase(typeof(IndustrialConfiguredClient), "IndustrialCommSdk.Runtime")]
+        [TestCase(typeof(BufferedIndustrialDataRecorder), "IndustrialCommSdk.Storage")]
+        public void ModulePublicTypes_StayInsideTheAssemblyNamespace(Type representativeType, string expectedNamespace)
+        {
+            var misplaced = representativeType.Assembly.GetExportedTypes()
+                .Where(type => type.Namespace == null ||
+                    (!string.Equals(type.Namespace, expectedNamespace, StringComparison.Ordinal) &&
+                     !type.Namespace.StartsWith(expectedNamespace + ".", StringComparison.Ordinal)))
+                .Select(type => type.FullName)
+                .OrderBy(name => name, StringComparer.Ordinal)
+                .ToArray();
+            Assert.That(misplaced, Is.Empty);
         }
 
         [Test]

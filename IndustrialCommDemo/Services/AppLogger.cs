@@ -5,6 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Threading;
 using IndustrialCommSdk.Diagnostics;
+using IndustrialCommSdk.Storage;
 
 namespace IndustrialCommDemo.Services
 {

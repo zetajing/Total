@@ -1,5 +1,5 @@
 using IndustrialCommSdk;
-using IndustrialCommSdk.Configuration;
+using IndustrialCommSdk.Runtime.Configuration;
 using IndustrialCommSdk.Protocols.Modbus;
 using NUnit.Framework;
 

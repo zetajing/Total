@@ -6,7 +6,8 @@ using System.Windows.Controls;
 using System.Windows.Media;
 using IndustrialCommSdk;
 using IndustrialCommSdk.Abstractions;
-using IndustrialCommSdk.Configuration;
+using IndustrialCommSdk.Runtime.Configuration;
+using IndustrialCommSdk.Runtime;
 
 namespace IndustrialCommDemo.Views
 {

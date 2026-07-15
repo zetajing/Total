@@ -6,7 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using IndustrialCommSdk;
 using IndustrialCommSdk.Abstractions;
-using IndustrialCommSdk.Configuration;
+using IndustrialCommSdk.Runtime.Configuration;
 using IndustrialCommSdk.Diagnostics;
 using IndustrialCommSdk.Protocols.Mc;
 using IndustrialCommSdk.Protocols.Modbus;

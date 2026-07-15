@@ -4,7 +4,7 @@ using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using IndustrialCommSdk.Abstractions;
-using IndustrialCommSdk.Configuration;
+using IndustrialCommSdk.Runtime.Configuration;
 using IndustrialCommSdk.Diagnostics;
 
 namespace IndustrialCommSdk.Runtime

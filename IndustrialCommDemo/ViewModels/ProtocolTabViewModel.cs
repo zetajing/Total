@@ -5,6 +5,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using IndustrialCommDemo.Helpers;
 using IndustrialCommSdk;
+using IndustrialCommSdk.Runtime;
 using IndustrialCommSdk.Abstractions;
 
 namespace IndustrialCommDemo.ViewModels

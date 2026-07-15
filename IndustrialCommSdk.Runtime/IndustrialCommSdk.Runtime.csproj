@@ -2,7 +2,7 @@
   <PropertyGroup>
     <TargetFramework>net472</TargetFramework>
     <LangVersion>latest</LangVersion>
-    <RootNamespace>IndustrialCommSdk</RootNamespace>
+    <RootNamespace>IndustrialCommSdk.Runtime</RootNamespace>
     <AssemblyName>IndustrialCommSdk.Runtime</AssemblyName>
   </PropertyGroup>
   <ItemGroup>

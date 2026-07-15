@@ -1,17 +1,17 @@
 # SDK 核心可扩展平台设计
 
-本文档记录 `IndustrialCommSdk` 从“多个协议客户端集合”演进为“可扩展工业通讯平台”的当前状态。当前改造保持非破坏式：不修改现有 `IIndustrialClient` 方法签名，不影响现有 Demo 和业务调用；但平台模型已经接入核心实现、三大 PLC 协议、轮询调度和 Demo 页面。
+本文档记录 `IndustrialCommSdk` 从“多个协议客户端集合”演进为模块化工业通讯平台后的当前状态。程序集和公开命名空间已经完成破坏性收敛；`IIndustrialClient` 契约保持稳定，运行时扩展统一位于 `IndustrialCommSdk.Runtime` 及其子命名空间。
 
 ## 当前新增平台组件
 
 ```text
-IndustrialCommSdk/Abstractions/ProtocolCapabilities.cs
-IndustrialCommSdk/Abstractions/IndustrialAddress.cs
-IndustrialCommSdk/Abstractions/BatchOptions.cs
-IndustrialCommSdk/Abstractions/BatchSplitPlan.cs
-IndustrialCommSdk/Abstractions/PlatformInterfaces.cs
-IndustrialCommSdk/IndustrialClientPlatformExtensions.cs
-IndustrialCommSdk/Diagnostics/BatchPlanDiagnostics.cs
+IndustrialCommSdk.Abstractions/Abstractions/ProtocolCapabilities.cs
+IndustrialCommSdk.Abstractions/Abstractions/IndustrialAddress.cs
+IndustrialCommSdk.Abstractions/Abstractions/BatchOptions.cs
+IndustrialCommSdk.Abstractions/Abstractions/BatchSplitPlan.cs
+IndustrialCommSdk.Abstractions/Abstractions/PlatformInterfaces.cs
+IndustrialCommSdk.Runtime/IndustrialClientPlatformExtensions.cs
+IndustrialCommSdk.Runtime/Diagnostics/BatchPlanDiagnostics.cs
 IndustrialCommDemo/Helpers/CapabilityDisplayHelper.cs
 ```
 
@@ -32,6 +32,9 @@ var capabilities = client.GetCapabilities();
 - Siemens S7
 - Mitsubishi MC 3E
 - TCP Socket
+- OPC UA
+- MQTT
+- Redis
 
 `IndustrialClientBase` 已实现 `IProtocolCapabilityProvider`，所有继承基类的协议客户端默认具备能力描述。第三方协议客户端可以实现 `IProtocolCapabilityProvider` 覆盖默认能力。
 
@@ -173,7 +176,7 @@ Demo 已经在协议页面展示能力信息：
 - 批量计划统计
 - 能力 provider override 与 fallback
 
-移除测试项目之前，轮询调度曾覆盖以下场景：
+当前自动化测试覆盖以下轮询场景：
 
 - 协议不支持订阅时拒绝
 - 订阅周期低于推荐最小值时拒绝
@@ -191,7 +194,7 @@ Demo 已经在协议页面展示能力信息：
 - S7 / MC 的 planner 当前只负责拆批计划，底层读取执行仍复用现有逐项 `ReadManyAsync` 路径；真正的协议级多点合并读取可以后续单独做。
 - Demo 已展示 `ProtocolCapabilities`，但还未按能力自动禁用控件或调整输入项。
 - `BatchPlanDiagnostics` 已覆盖计划组和执行组日志格式；后续还需要逐步替换各处手写日志为统一 formatter。
-- NuGet 拆包暂缓，先稳定 Abstractions/Core 边界。
+- 程序集边界已经拆分完成；独立 NuGet 打包和统一版本策略仍待后续完成。
 
 ## 建议下一步
 

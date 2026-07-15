@@ -7,6 +7,7 @@ using System.Windows.Controls;
 using System.Windows.Media;
 using IndustrialCommDemo.Helpers;
 using IndustrialCommSdk;
+using IndustrialCommSdk.Runtime;
 using IndustrialCommSdk.Abstractions;
 using IndustrialCommSdk.Protocols.Modbus;
 

@@ -8,7 +8,7 @@ using System.Threading.Tasks;
 using IndustrialCommSdk.Abstractions;
 using IndustrialCommSdk.Diagnostics;
 using IndustrialCommSdk.Exceptions;
-using IndustrialCommSdk.Polling;
+using IndustrialCommSdk.Runtime.Polling;
 using Modbus.Device;
 
 namespace IndustrialCommSdk.Protocols.Modbus

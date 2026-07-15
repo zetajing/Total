@@ -1,7 +1,7 @@
 using System;
 using IndustrialCommSdk;
 using IndustrialCommSdk.Abstractions;
-using IndustrialCommSdk.Configuration;
+using IndustrialCommSdk.Runtime.Configuration;
 using IndustrialCommSdk.Protocols.OpcUa;
 using NUnit.Framework;
 

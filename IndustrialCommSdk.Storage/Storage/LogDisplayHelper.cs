@@ -7,7 +7,7 @@ using System.Text;
 using System.Threading;
 using IndustrialCommSdk.Storage;
 
-namespace IndustrialCommSdk.Diagnostics
+namespace IndustrialCommSdk.Storage
 {
     /// <summary>
     ///     日志显示辅助静态类。

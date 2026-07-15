@@ -15,6 +15,7 @@
 
 ```csharp
 using IndustrialCommSdk;
+using IndustrialCommSdk.Runtime;
 using IndustrialCommSdk.Protocols.Modbus;
 
 var options = new ModbusTcpClientOptions

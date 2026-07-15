@@ -7,8 +7,8 @@ using System.Threading;
 using System.Threading.Tasks;
 using IndustrialCommSdk.Abstractions;
 using IndustrialCommSdk.Diagnostics;
-using IndustrialCommSdk.Internal;
-using IndustrialCommSdk.Polling;
+using IndustrialCommSdk.Runtime;
+using IndustrialCommSdk.Runtime.Polling;
 using IndustrialCommSdk.Protocols.Common;
 using IndustrialCommSdk.Transport;
 

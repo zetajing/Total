@@ -1,7 +1,7 @@
 using System;
 using IndustrialCommSdk.Abstractions;
 
-namespace IndustrialCommSdk
+namespace IndustrialCommSdk.Runtime
 {
     /// <summary>
     /// Platform-level helpers for clients. These methods keep IIndustrialClient stable while allowing

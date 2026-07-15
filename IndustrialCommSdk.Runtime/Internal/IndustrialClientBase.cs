@@ -8,7 +8,7 @@ using IndustrialCommSdk.Abstractions;
 using IndustrialCommSdk.Diagnostics;
 using IndustrialCommSdk.Exceptions;
 
-namespace IndustrialCommSdk.Internal
+namespace IndustrialCommSdk.Runtime
 {
     /// <summary>工业客户端公共基类，统一处理操作串行化、超时、健康状态和轮询订阅。</summary>
     public abstract partial class IndustrialClientBase : IIndustrialClient, IProtocolCapabilityProvider, IIndustrialDiagnosticsProvider
@@ -363,4 +363,3 @@ namespace IndustrialCommSdk.Internal
         }
     }
 }
-

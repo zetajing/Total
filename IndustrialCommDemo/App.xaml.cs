@@ -2,6 +2,7 @@ using System.Configuration;
 using System.Data;
 using System.Windows;
 using IndustrialCommSdk.Diagnostics;
+using IndustrialCommSdk.Storage;
 
 namespace IndustrialCommDemo;
 

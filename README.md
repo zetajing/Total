@@ -22,6 +22,21 @@
 
 协议模块互不引用，也不引用聚合程序集。第三方驱动包只存在于对应协议项目中。
 
+常用命名空间与程序集保持一致：
+
+```csharp
+using IndustrialCommSdk;                       // 聚合入口 IndustrialSdk
+using IndustrialCommSdk.Runtime;               // 快捷扩展、TagTable、DeviceHost
+using IndustrialCommSdk.Runtime.Configuration; // 注册表、Provider、强类型配置
+using IndustrialCommSdk.Storage;               // 历史存储、缓冲记录器、日志显示帮助
+```
+
+命名空间迁移不提供兼容包装：快捷扩展、Tag 和 TagTable 从 `IndustrialCommSdk` 移到
+`IndustrialCommSdk.Runtime`；配置从 `IndustrialCommSdk.Configuration` 移到
+`IndustrialCommSdk.Runtime.Configuration`；轮询从 `IndustrialCommSdk.Polling` 移到
+`IndustrialCommSdk.Runtime.Polling`；自定义协议基类 `IndustrialClientBase` 直接位于
+`IndustrialCommSdk.Runtime`；`LogDisplayHelper` 位于 `IndustrialCommSdk.Storage`。
+
 ## 构建与测试
 
 需要 Windows、Visual Studio 2022 或 .NET SDK，以及 .NET Framework 4.7.2 Developer Pack。
@@ -38,6 +53,7 @@ dotnet test IndustrialCommSdk.Tests/IndustrialCommSdk.Tests.csproj -c Release
 
 ```csharp
 using IndustrialCommSdk;
+using IndustrialCommSdk.Runtime;
 using IndustrialCommSdk.Protocols.Modbus;
 
 using (var client = new ModbusTcpClient(new ModbusTcpClientOptions
@@ -60,6 +76,17 @@ using (var client = new ModbusTcpClient(new ModbusTcpClientOptions
 ```
 
 其他协议分别使用 `ModbusRtuClient`、`SiemensS7Client`、`MitsubishiMcClient`、`OpcUaClient`、`MqttClient` 和 `RedisClient` 及其 Options。
+
+### 每个协议的最小示例
+
+- [示例索引](docs/protocols/README.md)
+- [Modbus TCP](docs/protocols/modbus-tcp.md)
+- [Modbus RTU](docs/protocols/modbus-rtu.md)
+- [Siemens S7](docs/protocols/siemens-s7.md)
+- [Mitsubishi MC](docs/protocols/mitsubishi-mc.md)
+- [OPC UA](docs/protocols/opc-ua.md)
+- [MQTT](docs/protocols/mqtt.md)
+- [Redis](docs/protocols/redis.md)
 
 ## 聚合入口与配置
 

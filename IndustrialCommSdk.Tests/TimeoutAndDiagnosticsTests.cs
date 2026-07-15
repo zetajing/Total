@@ -4,8 +4,8 @@ using System.Threading.Tasks;
 using IndustrialCommSdk.Abstractions;
 using IndustrialCommSdk.Diagnostics;
 using IndustrialCommSdk.Exceptions;
-using IndustrialCommSdk.Internal;
-using IndustrialCommSdk.Polling;
+using IndustrialCommSdk.Runtime;
+using IndustrialCommSdk.Runtime.Polling;
 using NUnit.Framework;
 
 namespace IndustrialCommSdk.Tests

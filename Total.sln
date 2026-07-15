@@ -13,8 +13,28 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "IndustrialCommSdk.Tests", "
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{6FCFA53C-7A3B-4D35-80B7-FF8A19423179}"
 	ProjectSection(SolutionItems) = preProject
+		BEGINNER_GUIDE.md = BEGINNER_GUIDE.md
+		CORE_EXTENSIBILITY.md = CORE_EXTENSIBILITY.md
 		PROJECT_CONTEXT.md = PROJECT_CONTEXT.md
 		README.md = README.md
+	EndProjectSection
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "docs", "docs", "{5B8B6892-2BA5-4C6D-8A65-7B83872B9D1E}"
+	ProjectSection(SolutionItems) = preProject
+		docs\p0-p1-reliability-update.md = docs\p0-p1-reliability-update.md
+		docs\protocol-review.md = docs\protocol-review.md
+	EndProjectSection
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "protocols", "protocols", "{E97AB419-E80C-4540-8806-AC523E4E1C4B}"
+	ProjectSection(SolutionItems) = preProject
+		docs\protocols\mitsubishi-mc.md = docs\protocols\mitsubishi-mc.md
+		docs\protocols\modbus-rtu.md = docs\protocols\modbus-rtu.md
+		docs\protocols\modbus-tcp.md = docs\protocols\modbus-tcp.md
+		docs\protocols\mqtt.md = docs\protocols\mqtt.md
+		docs\protocols\opc-ua.md = docs\protocols\opc-ua.md
+		docs\protocols\README.md = docs\protocols\README.md
+		docs\protocols\redis.md = docs\protocols\redis.md
+		docs\protocols\siemens-s7.md = docs\protocols\siemens-s7.md
 	EndProjectSection
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "IndustrialCommSdk.Abstractions", "IndustrialCommSdk.Abstractions\IndustrialCommSdk.Abstractions.csproj", "{9472CF83-CD65-4CD3-818E-B73CB5F5FD18}"
@@ -246,6 +266,9 @@ Global
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{E97AB419-E80C-4540-8806-AC523E4E1C4B} = {5B8B6892-2BA5-4C6D-8A65-7B83872B9D1E}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {70AC9ABF-FD0C-4404-9978-24B1239DE14B}

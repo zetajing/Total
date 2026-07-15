@@ -5,7 +5,7 @@ using System.Threading.Tasks;
 using IndustrialCommSdk.Abstractions;
 using IndustrialCommSdk.Exceptions;
 
-namespace IndustrialCommSdk
+namespace IndustrialCommSdk.Runtime
 {
     /// <summary>工业客户端的写入与值转换快捷扩展。</summary>
     public static partial class IndustrialClientQuickExtensions
@@ -354,4 +354,3 @@ namespace IndustrialCommSdk
         }
     }
 }
-

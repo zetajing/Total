@@ -5,7 +5,7 @@ using System.Threading.Tasks;
 using IndustrialCommSdk.Abstractions;
 using IndustrialCommSdk.Exceptions;
 
-namespace IndustrialCommSdk
+namespace IndustrialCommSdk.Runtime
 {
     /// <summary>工业客户端的连接与强类型读取快捷扩展。</summary>
     public static partial class IndustrialClientQuickExtensions
@@ -429,4 +429,3 @@ namespace IndustrialCommSdk
         }
     }
 }
-

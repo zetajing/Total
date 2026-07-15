@@ -9,7 +9,7 @@ using Newtonsoft.Json.Converters;
 using Newtonsoft.Json.Linq;
 using Newtonsoft.Json.Serialization;
 
-namespace IndustrialCommSdk.Configuration
+namespace IndustrialCommSdk.Runtime.Configuration
 {
     public sealed class IndustrialConfigValidationResult
     {

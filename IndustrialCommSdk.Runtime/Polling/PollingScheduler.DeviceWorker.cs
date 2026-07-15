@@ -10,7 +10,7 @@ using System.Threading.Tasks;
 using IndustrialCommSdk.Abstractions;
 using IndustrialCommSdk.Diagnostics;
 
-namespace IndustrialCommSdk.Polling
+namespace IndustrialCommSdk.Runtime.Polling
 {
     /// <summary>
     /// 按设备合并轮询的调度器。同一客户端仅运行一个后台循环，多个订阅到期时会合并重复点位，
@@ -403,4 +403,3 @@ namespace IndustrialCommSdk.Polling
         }
     }
 }
-

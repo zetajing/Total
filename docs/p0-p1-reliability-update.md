@@ -7,10 +7,10 @@
 - 合并分支：`optimize-p0-p1` → `master`
 - 合并提交：`1afa2eb44394361548f8fd3d313b7c939bed89ca`
 - 影响范围：
-  - `IndustrialCommSdk/Protocols/Mc/MitsubishiMcClient.cs`
-  - `IndustrialCommSdk/Protocols/S7/SiemensS7Client.cs`
-  - `IndustrialCommSdk/Internal/IndustrialClientBase.cs`
-  - `IndustrialCommSdk/Polling/PollingScheduler.cs`
+  - `IndustrialCommSdk.Protocols.Mc/Mc/MitsubishiMcClient.cs`
+  - `IndustrialCommSdk.Protocols.S7/S7/SiemensS7Client.cs`
+  - `IndustrialCommSdk.Runtime/Internal/IndustrialClientBase.cs`
+  - `IndustrialCommSdk.Runtime/Polling/PollingScheduler.cs`
 
 ## P0：必须先做稳的部分
 

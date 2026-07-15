@@ -9,7 +9,7 @@ using System.Text;
 using System.Xml;
 using IndustrialCommSdk.Abstractions;
 
-namespace IndustrialCommSdk
+namespace IndustrialCommSdk.Runtime
 {
     /// <summary>
     /// 表示可按名称或地址查询的点位表，并提供 JSON、CSV 加载入口。
