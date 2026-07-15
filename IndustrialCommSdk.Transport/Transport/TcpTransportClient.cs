@@ -1,7 +1,8 @@
 using System;
+using System.Diagnostics;
+using System.IO;
 using System.Net;
 using System.Net.Sockets;
-using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
 using IndustrialCommSdk.Exceptions;
@@ -9,39 +10,17 @@ using IndustrialCommSdk.Exceptions;
 namespace IndustrialCommSdk.Transport
 {
     /// <summary>
-    /// TCP 传输客户端。实现 <see cref="ITransportClient"/> 接口，提供基于 TCP 协议的客户端连接、断开、发送和接收数据的完整功能。
-    /// 支持自动重连、连接超时和并发访问控制。
+    /// Thread-safe TCP transport client. Every I/O operation uses an immutable connection snapshot,
+    /// so disconnect, reconnect and disposal cannot replace the stream underneath an operation.
     /// </summary>
-    public sealed class TcpTransportClient : IStreamingTransportClient
+    public sealed partial class TcpTransportClient : IStreamingTransportClient
     {
-        /// <summary>
-        /// TCP 传输选项，包含主机地址、端口号及各种超时设置。
-        /// </summary>
         private readonly TcpTransportOptions _options;
-
-        /// <summary>
-        /// 用于控制并发访问的信号量，确保同一时刻只有一个操作在执行。
-        /// </summary>
         private readonly SemaphoreSlim _gate = new SemaphoreSlim(1, 1);
         private readonly SemaphoreSlim _sendGate = new SemaphoreSlim(1, 1);
         private readonly SemaphoreSlim _receiveGate = new SemaphoreSlim(1, 1);
-
-        /// <summary>
-        /// 底层的 TCP 客户端实例。
-        /// </summary>
-        private TcpClient _client;
-
-        /// <summary>
-        /// 与 TCP 客户端关联的网络流，用于发送和接收数据。
-        /// </summary>
-        private NetworkStream _stream;
         private int _disposed;
 
-        /// <summary>
-        /// 使用指定的传输选项初始化 <see cref="TcpTransportClient"/> 类的新实例。
-        /// </summary>
-        /// <param name="options">TCP 传输选项，包含连接和超时配置。</param>
-        /// <exception cref="ArgumentNullException">当 <paramref name="options"/> 为 <c>null</c> 时抛出。</exception>
         public TcpTransportClient(TcpTransportOptions options)
         {
             _options = options ?? throw new ArgumentNullException(nameof(options));
@@ -52,47 +31,30 @@ namespace IndustrialCommSdk.Transport
             if (_options.ReceiveTimeoutMilliseconds <= 0) throw new ArgumentOutOfRangeException(nameof(options), "Receive timeout must be greater than zero.");
         }
 
-        /// <summary>
-        /// 获取一个值，该值指示客户端当前是否已连接到远程端点。
-        /// 通过检查底层 TCP 连接的轮询状态来判断连接的实时可用性。
-        /// </summary>
         public bool IsConnected
         {
             get
             {
-                var client = _client;
-                if (client == null || !client.Connected)
-                {
-                    return false;
-                }
+                var connection = Volatile.Read(ref _connection);
+                return connection != null && connection.IsConnected;
+            }
+        }
 
-                try
-                {
-                    return !(client.Client.Poll(1, SelectMode.SelectRead) && client.Client.Available == 0);
-                }
-                catch
-                {
-                    return false;
-                }
+        public EndPoint RemoteEndPoint
+        {
+            get
+            {
+                var connection = Volatile.Read(ref _connection);
+                return connection == null ? null : connection.RemoteEndPoint;
             }
         }
 
         /// <summary>
-        /// 获取远程端点的网络地址。如果客户端未连接，则返回 <c>null</c>。
+        /// Changes whenever the active connection is published or invalidated. Framing layers use
+        /// this value to ensure buffered bytes never cross a TCP connection boundary.
         /// </summary>
-        public EndPoint RemoteEndPoint
-        {
-            get { return _client == null ? null : _client.Client.RemoteEndPoint; }
-        }
+        internal long ConnectionGeneration { get { return Volatile.Read(ref _connectionGeneration); } }
 
-        /// <summary>
-        /// 异步连接到远程端点。如果当前已连接，则直接返回。
-        /// 连接操作受配置的超时时间限制，超时后将抛出 <see cref="IndustrialTimeoutException"/>。
-        /// </summary>
-        /// <param name="cancellationToken">用于取消连接操作的取消令牌。</param>
-        /// <returns>表示异步连接操作的任务。</returns>
-        /// <exception cref="IndustrialTimeoutException">连接操作超时时抛出。</exception>
-        /// <exception cref="IndustrialConnectionException">TCP 连接失败时抛出，内部包含原始的 <see cref="SocketException"/>。</exception>
         public async Task ConnectAsync(CancellationToken cancellationToken)
         {
             ThrowIfDisposed();
@@ -100,41 +62,54 @@ namespace IndustrialCommSdk.Transport
             try
             {
                 ThrowIfDisposed();
-                if (IsConnected)
+                if (GetConnectedState() != null)
                 {
                     return;
                 }
 
-                DisposeClient();
-                _client = new TcpClient();
-                _client.NoDelay = true;
-                _client.SendTimeout = _options.SendTimeoutMilliseconds;
-                _client.ReceiveTimeout = _options.ReceiveTimeoutMilliseconds;
-
-                var connectTask = _client.ConnectAsync(_options.Host, _options.Port);
-                var timeoutTask = Task.Delay(_options.ConnectTimeoutMilliseconds, cancellationToken);
-                var completedTask = await Task.WhenAny(connectTask, timeoutTask).ConfigureAwait(false);
-                if (completedTask != connectTask)
+                InvalidateCurrentConnection();
+                var client = CreateClient();
+                var published = false;
+                try
                 {
-                    DisposeClient();
-                    try
+                    RegisterPendingClient(client);
+                    var connectTask = client.ConnectAsync(_options.Host, _options.Port);
+                    var timeoutTask = Task.Delay(_options.ConnectTimeoutMilliseconds, cancellationToken);
+                    var completedTask = await Task.WhenAny(connectTask, timeoutTask).ConfigureAwait(false);
+                    if (completedTask != connectTask)
                     {
-                        await connectTask.ConfigureAwait(false);
+                        CloseClient(client);
+                        await IgnoreFailureAsync(connectTask).ConfigureAwait(false);
+                        cancellationToken.ThrowIfCancellationRequested();
+                        throw new IndustrialTimeoutException("TCP connect timeout.");
                     }
-                    catch
-                    {
-                        // 关闭尚在连接的套接字会使连接任务失败；下面保留原始取消或超时语义。
-                    }
-                    cancellationToken.ThrowIfCancellationRequested();
-                    throw new IndustrialTimeoutException("TCP connect timeout.");
-                }
 
-                await connectTask.ConfigureAwait(false);
-                _stream = _client.GetStream();
+                    await connectTask.ConfigureAwait(false);
+                    var connection = new ConnectionState(client, client.GetStream());
+                    PublishConnection(connection);
+                    published = true;
+                }
+                finally
+                {
+                    ClearPendingClient(client);
+                    if (!published)
+                    {
+                        CloseClient(client);
+                    }
+                }
             }
             catch (SocketException ex)
             {
                 throw new IndustrialConnectionException("TCP connect failed.", ex);
+            }
+            catch (ObjectDisposedException ex)
+            {
+                if (Volatile.Read(ref _disposed) != 0)
+                {
+                    throw new ObjectDisposedException(nameof(TcpTransportClient));
+                }
+
+                throw new IndustrialConnectionException("TCP connect was interrupted.", ex);
             }
             finally
             {
@@ -142,11 +117,6 @@ namespace IndustrialCommSdk.Transport
             }
         }
 
-        /// <summary>
-        /// 异步断开与远程端点的连接。释放底层 TCP 客户端和网络流资源。
-        /// </summary>
-        /// <param name="cancellationToken">用于取消断开操作的取消令牌。</param>
-        /// <returns>表示异步断开操作的任务。</returns>
         public async Task DisconnectAsync(CancellationToken cancellationToken)
         {
             ThrowIfDisposed();
@@ -154,7 +124,7 @@ namespace IndustrialCommSdk.Transport
             try
             {
                 ThrowIfDisposed();
-                DisposeClient();
+                InvalidateCurrentConnection();
             }
             finally
             {
@@ -162,14 +132,6 @@ namespace IndustrialCommSdk.Transport
             }
         }
 
-        /// <summary>
-        /// 异步向远程端点发送数据负载。发送前会自动确保连接处于可用状态。
-        /// </summary>
-        /// <param name="payload">要发送的二进制数据负载。不能为 <c>null</c>。</param>
-        /// <param name="cancellationToken">用于取消发送操作的取消令牌。</param>
-        /// <returns>表示异步发送操作的任务。</returns>
-        /// <exception cref="ArgumentNullException">当 <paramref name="payload"/> 为 <c>null</c> 时抛出。</exception>
-        /// <exception cref="IndustrialConnectionException">客户端未连接且自动重连失败时抛出。</exception>
         public async Task SendAsync(byte[] payload, CancellationToken cancellationToken)
         {
             if (payload == null) throw new ArgumentNullException(nameof(payload));
@@ -178,12 +140,30 @@ namespace IndustrialCommSdk.Transport
             try
             {
                 ThrowIfDisposed();
-                await EnsureConnectedAsync(cancellationToken).ConfigureAwait(false);
-                await AwaitIoAsync(
-                    _stream.WriteAsync(payload, 0, payload.Length, cancellationToken),
-                    _options.SendTimeoutMilliseconds,
-                    "TCP send timeout.",
-                    cancellationToken).ConfigureAwait(false);
+                var connection = await EnsureConnectedAsync(cancellationToken).ConfigureAwait(false);
+                try
+                {
+                    await AwaitIoAsync(
+                        connection.Stream.WriteAsync(payload, 0, payload.Length, cancellationToken),
+                        connection,
+                        _options.SendTimeoutMilliseconds,
+                        "TCP send timeout.",
+                        cancellationToken).ConfigureAwait(false);
+                }
+                catch (IndustrialTimeoutException)
+                {
+                    throw;
+                }
+                catch (OperationCanceledException)
+                {
+                    ThrowIfDisposed();
+                    throw;
+                }
+                catch (Exception ex) when (IsConnectionFailure(ex))
+                {
+                    InvalidateConnection(connection);
+                    ThrowDisposedOrConnectionFailure("TCP send failed because the connection was closed.", ex);
+                }
             }
             finally
             {
@@ -191,14 +171,6 @@ namespace IndustrialCommSdk.Transport
             }
         }
 
-        /// <summary>
-        /// 异步从远程端点接收指定长度的数据。如果在接收过程中连接被对端关闭，则抛出 <see cref="IndustrialConnectionException"/>。
-        /// </summary>
-        /// <param name="length">要接收的确切字节数。不能为负数。</param>
-        /// <param name="cancellationToken">用于取消接收操作的取消令牌。</param>
-        /// <returns>表示异步接收操作的任务，结果包含接收到的字节数组。</returns>
-        /// <exception cref="ArgumentOutOfRangeException">当 <paramref name="length"/> 为负数时抛出。</exception>
-        /// <exception cref="IndustrialConnectionException">客户端未连接、自动重连失败或远程对端关闭连接时抛出。</exception>
         public async Task<byte[]> ReceiveExactAsync(int length, CancellationToken cancellationToken)
         {
             if (length < 0) throw new ArgumentOutOfRangeException(nameof(length));
@@ -207,33 +179,54 @@ namespace IndustrialCommSdk.Transport
             try
             {
                 ThrowIfDisposed();
-                await EnsureConnectedAsync(cancellationToken).ConfigureAwait(false);
-
+                var connection = await EnsureConnectedAsync(cancellationToken).ConfigureAwait(false);
                 var buffer = new byte[length];
                 var offset = 0;
                 var stopwatch = Stopwatch.StartNew();
-                while (offset < length)
+
+                try
                 {
-                    var remainingTimeout = _options.ReceiveTimeoutMilliseconds - (int)stopwatch.ElapsedMilliseconds;
-                    if (remainingTimeout <= 0)
+                    while (offset < length)
                     {
-                        DisposeClient();
-                        throw new IndustrialTimeoutException("TCP receive timeout.");
+                        var remainingTimeout = _options.ReceiveTimeoutMilliseconds - (int)stopwatch.ElapsedMilliseconds;
+                        if (remainingTimeout <= 0)
+                        {
+                            InvalidateConnection(connection);
+                            throw new IndustrialTimeoutException("TCP receive timeout.");
+                        }
+
+                        var read = await AwaitIoAsync(
+                            connection.Stream.ReadAsync(buffer, offset, length - offset, cancellationToken),
+                            connection,
+                            remainingTimeout,
+                            "TCP receive timeout.",
+                            cancellationToken).ConfigureAwait(false);
+                        if (read == 0)
+                        {
+                            InvalidateConnection(connection);
+                            throw new IndustrialConnectionException("Remote peer closed the connection.");
+                        }
+
+                        offset += read;
                     }
 
-                    var read = await AwaitIoAsync(
-                        _stream.ReadAsync(buffer, offset, length - offset, cancellationToken),
-                        remainingTimeout,
-                        "TCP receive timeout.",
-                        cancellationToken).ConfigureAwait(false);
-                    if (read == 0)
-                    {
-                        DisposeClient();
-                        throw new IndustrialConnectionException("Remote peer closed the connection.");
-                    }
-                    offset += read;
+                    return buffer;
                 }
-                return buffer;
+                catch (IndustrialCommunicationException)
+                {
+                    throw;
+                }
+                catch (OperationCanceledException)
+                {
+                    ThrowIfDisposed();
+                    throw;
+                }
+                catch (Exception ex) when (IsConnectionFailure(ex))
+                {
+                    InvalidateConnection(connection);
+                    ThrowDisposedOrConnectionFailure("TCP receive failed because the connection was closed.", ex);
+                    return null;
+                }
             }
             finally
             {
@@ -241,40 +234,60 @@ namespace IndustrialCommSdk.Transport
             }
         }
 
-        /// <summary>
-        /// 接收一批不定长原始数据。适用于服务端主动推送或长度未知的 Socket 协议；
-        /// TCP 是字节流，本方法返回的是一次网络读取结果，不代表完整业务报文边界。
-        /// </summary>
         public async Task<byte[]> ReceiveAsync(int maxLength, CancellationToken cancellationToken)
+        {
+            var result = await ReceiveWithGenerationAsync(maxLength, cancellationToken).ConfigureAwait(false);
+            return result.Payload;
+        }
+
+        internal async Task<TransportReadResult> ReceiveWithGenerationAsync(int maxLength, CancellationToken cancellationToken)
         {
             if (maxLength <= 0) throw new ArgumentOutOfRangeException(nameof(maxLength));
             ThrowIfDisposed();
-
             await _receiveGate.WaitAsync(cancellationToken).ConfigureAwait(false);
             try
             {
                 ThrowIfDisposed();
-                await EnsureConnectedAsync(cancellationToken).ConfigureAwait(false);
+                var connection = await EnsureConnectedAsync(cancellationToken).ConfigureAwait(false);
                 var buffer = new byte[maxLength];
-                var read = await AwaitIoAsync(
-                    _stream.ReadAsync(buffer, 0, buffer.Length, cancellationToken),
-                    _options.ReceiveTimeoutMilliseconds,
-                    "TCP receive timeout.",
-                    cancellationToken).ConfigureAwait(false);
-                if (read == 0)
+                try
                 {
-                    DisposeClient();
-                    throw new IndustrialConnectionException("Remote peer closed the connection.");
-                }
+                    var read = await AwaitIoAsync(
+                        connection.Stream.ReadAsync(buffer, 0, buffer.Length, cancellationToken),
+                        connection,
+                        _options.ReceiveTimeoutMilliseconds,
+                        "TCP receive timeout.",
+                        cancellationToken).ConfigureAwait(false);
+                    if (read == 0)
+                    {
+                        InvalidateConnection(connection);
+                        throw new IndustrialConnectionException("Remote peer closed the connection.");
+                    }
 
-                if (read == buffer.Length)
+                    if (read != buffer.Length)
+                    {
+                        var result = new byte[read];
+                        Buffer.BlockCopy(buffer, 0, result, 0, read);
+                        buffer = result;
+                    }
+
+                    return new TransportReadResult(buffer, connection.Generation);
+                }
+                catch (IndustrialCommunicationException)
                 {
-                    return buffer;
+                    throw;
                 }
-
-                var result = new byte[read];
-                Buffer.BlockCopy(buffer, 0, result, 0, read);
-                return result;
+                catch (OperationCanceledException)
+                {
+                    ThrowIfDisposed();
+                    throw;
+                }
+                catch (Exception ex) when (IsConnectionFailure(ex))
+                {
+                    InvalidateConnection(connection);
+                    ThrowDisposedOrConnectionFailure("TCP receive failed because the connection was closed.", ex);
+                    return default(TransportReadResult);
+                }
             }
             finally
             {
@@ -282,7 +295,12 @@ namespace IndustrialCommSdk.Transport
             }
         }
 
-        private async Task AwaitIoAsync(Task operation, int timeoutMilliseconds, string timeoutMessage, CancellationToken cancellationToken)
+        private async Task AwaitIoAsync(
+            Task operation,
+            ConnectionState connection,
+            int timeoutMilliseconds,
+            string timeoutMessage,
+            CancellationToken cancellationToken)
         {
             var timeoutTask = Task.Delay(timeoutMilliseconds, cancellationToken);
             var completed = await Task.WhenAny(operation, timeoutTask).ConfigureAwait(false);
@@ -292,20 +310,18 @@ namespace IndustrialCommSdk.Transport
                 return;
             }
 
-            DisposeClient();
-            try
-            {
-                await operation.ConfigureAwait(false);
-            }
-            catch
-            {
-                // 超时后关闭连接会使挂起的异步 I/O 以异常结束；对外统一报告超时。
-            }
+            InvalidateConnection(connection);
+            await IgnoreFailureAsync(operation).ConfigureAwait(false);
             cancellationToken.ThrowIfCancellationRequested();
             throw new IndustrialTimeoutException(timeoutMessage);
         }
 
-        private async Task<T> AwaitIoAsync<T>(Task<T> operation, int timeoutMilliseconds, string timeoutMessage, CancellationToken cancellationToken)
+        private async Task<T> AwaitIoAsync<T>(
+            Task<T> operation,
+            ConnectionState connection,
+            int timeoutMilliseconds,
+            string timeoutMessage,
+            CancellationToken cancellationToken)
         {
             var timeoutTask = Task.Delay(timeoutMilliseconds, cancellationToken);
             var completed = await Task.WhenAny(operation, timeoutTask).ConfigureAwait(false);
@@ -314,31 +330,19 @@ namespace IndustrialCommSdk.Transport
                 return await operation.ConfigureAwait(false);
             }
 
-            DisposeClient();
-            try
-            {
-                await operation.ConfigureAwait(false);
-            }
-            catch
-            {
-                // 超时后关闭连接会使挂起的异步 I/O 以异常结束；对外统一报告超时。
-            }
+            InvalidateConnection(connection);
+            await IgnoreFailureAsync(operation).ConfigureAwait(false);
             cancellationToken.ThrowIfCancellationRequested();
             throw new IndustrialTimeoutException(timeoutMessage);
         }
 
-        /// <summary>
-        /// 确保客户端处于连接状态。如果已连接则直接返回；否则根据 <see cref="TcpTransportOptions.AutoReconnect"/> 配置决定是否自动重新连接。
-        /// </summary>
-        /// <param name="cancellationToken">用于取消连接操作的取消令牌。</param>
-        /// <returns>表示异步确保连接操作的任务。</returns>
-        /// <exception cref="IndustrialConnectionException">客户端未连接且自动重连已禁用时抛出。</exception>
-        private async Task EnsureConnectedAsync(CancellationToken cancellationToken)
+        private async Task<ConnectionState> EnsureConnectedAsync(CancellationToken cancellationToken)
         {
             ThrowIfDisposed();
-            if (IsConnected)
+            var connection = GetConnectedState();
+            if (connection != null)
             {
-                return;
+                return connection;
             }
 
             if (!_options.AutoReconnect)
@@ -347,29 +351,16 @@ namespace IndustrialCommSdk.Transport
             }
 
             await ConnectAsync(cancellationToken).ConfigureAwait(false);
-        }
-
-        /// <summary>
-        /// 释放底层 TCP 客户端和网络流资源。将网络流和客户端对象置为 <c>null</c>。
-        /// </summary>
-        private void DisposeClient()
-        {
-            if (_stream != null)
+            ThrowIfDisposed();
+            connection = GetConnectedState();
+            if (connection == null)
             {
-                _stream.Dispose();
-                _stream = null;
+                throw new IndustrialConnectionException("TCP client is not connected.");
             }
 
-            if (_client != null)
-            {
-                _client.Close();
-                _client = null;
-            }
+            return connection;
         }
 
-        /// <summary>
-        /// 释放客户端使用的所有托管资源，包括 TCP 客户端、网络流和并发信号量。
-        /// </summary>
         public void Dispose()
         {
             if (Interlocked.Exchange(ref _disposed, 1) != 0)
@@ -377,9 +368,22 @@ namespace IndustrialCommSdk.Transport
                 return;
             }
 
-            // 关闭流会解除挂起的异步 I/O；随后等待各方向当前操作退出。
-            // 信号量本身不释放，使 Dispose 前已排队的调用仍可获得锁、检查状态并安全失败。
-            DisposeClient();
+            ConnectionState connection;
+            TcpClient pendingClient;
+            lock (_connectionSync)
+            {
+                connection = _connection;
+                pendingClient = _pendingClient;
+                Volatile.Write(ref _connection, null);
+                _pendingClient = null;
+                Interlocked.Increment(ref _connectionGeneration);
+            }
+
+            connection?.Close();
+            CloseClient(pendingClient);
+
+            // Do not dispose the semaphores: callers queued immediately before disposal must still
+            // enter their finally blocks safely and then observe ObjectDisposedException.
             WaitForGate(_gate);
             WaitForGate(_sendGate);
             WaitForGate(_receiveGate);
@@ -393,10 +397,49 @@ namespace IndustrialCommSdk.Transport
             }
         }
 
+        private void ThrowDisposedOrConnectionFailure(string message, Exception innerException)
+        {
+            if (Volatile.Read(ref _disposed) != 0)
+            {
+                throw new ObjectDisposedException(nameof(TcpTransportClient));
+            }
+
+            throw new IndustrialConnectionException(message, innerException);
+        }
+
+        private static bool IsConnectionFailure(Exception exception)
+        {
+            return exception is IOException || exception is SocketException || exception is ObjectDisposedException;
+        }
+
+        private static async Task IgnoreFailureAsync(Task task)
+        {
+            try
+            {
+                await task.ConfigureAwait(false);
+            }
+            catch
+            {
+                // Closing the connection is expected to fault an outstanding connect or I/O task.
+            }
+        }
+
+        private static void CloseClient(TcpClient client)
+        {
+            if (client == null)
+            {
+                return;
+            }
+
+            try { client.Close(); }
+            catch { }
+        }
+
         private static void WaitForGate(SemaphoreSlim gate)
         {
             gate.Wait();
             gate.Release();
         }
+
     }
 }

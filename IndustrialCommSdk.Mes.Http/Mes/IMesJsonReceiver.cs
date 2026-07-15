@@ -13,7 +13,10 @@ namespace IndustrialCommSdk.Mes
         /// <summary>开始监听。</summary>
         Task StartAsync(CancellationToken cancellationToken);
 
-        /// <summary>停止监听并等待正在处理的请求退出。</summary>
+        /// <summary>
+        /// 停止监听，并在配置的处理器时限内等待正在处理的请求退出。
+        /// 不响应取消的处理器不会阻塞停止，但会继续受到跟踪且保留其并发容量，直到真正结束。
+        /// </summary>
         Task StopAsync(CancellationToken cancellationToken);
     }
 }

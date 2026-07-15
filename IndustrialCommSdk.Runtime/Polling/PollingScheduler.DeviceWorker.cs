@@ -16,12 +16,21 @@ namespace IndustrialCommSdk.Runtime.Polling
     /// 按设备合并轮询的调度器。同一客户端仅运行一个后台循环，多个订阅到期时会合并重复点位，
     /// 减少重复请求，并使用固定节拍推进下一次轮询时间，避免“读取耗时 + Interval”造成累计漂移。
     /// </summary>
-    /// <summary>单设备轮询、批处理和事件分发。</summary>
     public sealed partial class PollingScheduler : IPollingScheduler
-    {        private sealed class DeviceWorker : IDisposable
+    {
+        private sealed class DeviceWorker : IDisposable
         {
-            private readonly IIndustrialClient _client;
-            private readonly IBatchOperationPlanner _planner;
+            private const int StateActive = 0;
+            private const int StateStopping = 1;
+            private const int StateStopped = 2;
+
+            private static readonly AsyncLocal<DeviceWorker> CurrentWorker = new AsyncLocal<DeviceWorker>();
+            [ThreadStatic]
+            private static DeviceWorker _dispatchingWorker;
+
+            private readonly string _deviceId;
+            private IIndustrialClient _client;
+            private IBatchOperationPlanner _planner;
             private readonly ProtocolCapabilities _capabilities;
             private readonly IIndustrialLogger _logger;
             private readonly Action<string, DeviceWorker> _onStopped;
@@ -29,8 +38,10 @@ namespace IndustrialCommSdk.Runtime.Polling
                 new ConcurrentDictionary<string, SubscriptionRegistration>(StringComparer.OrdinalIgnoreCase);
             private readonly CancellationTokenSource _cts = new CancellationTokenSource();
             private readonly SemaphoreSlim _wakeSignal = new SemaphoreSlim(0, 1);
+            private readonly object _lifecycleSync = new object();
             private readonly Task _loopTask;
-            private int _disposed;
+            private int _state;
+            private int _resourcesDisposed;
 
             public DeviceWorker(
                 IIndustrialClient client,
@@ -39,6 +50,7 @@ namespace IndustrialCommSdk.Runtime.Polling
                 Action<string, DeviceWorker> onStopped)
             {
                 _client = client;
+                _deviceId = client.DeviceId;
                 _planner = client as IBatchOperationPlanner;
                 _capabilities = capabilities ?? ProtocolCapabilities.ForProtocol(client.Kind);
                 _logger = logger;
@@ -48,38 +60,58 @@ namespace IndustrialCommSdk.Runtime.Polling
 
             public bool TryAdd(IIndustrialClient client, SubscriptionRegistration registration)
             {
-                if (Volatile.Read(ref _disposed) != 0)
-                    return false;
-
-                if (!ReferenceEquals(_client, client))
-                    throw new InvalidOperationException(
-                        string.Format(
-                            "Device '{0}' already has an active polling worker for a different client instance.",
-                            client.DeviceId));
-
-                if (!_registrations.TryAdd(registration.Request.SubscriptionKey, registration))
-                    throw new InvalidOperationException("Subscription is already registered on this device worker.");
-
-                if (Volatile.Read(ref _disposed) != 0)
+                lock (_lifecycleSync)
                 {
-                    SubscriptionRegistration ignored;
-                    _registrations.TryRemove(registration.Request.SubscriptionKey, out ignored);
-                    return false;
-                }
+                    if (_state != StateActive)
+                        return false;
 
-                Wake();
-                return true;
+                    if (!ReferenceEquals(_client, client))
+                        throw new InvalidOperationException(
+                            string.Format(
+                                "Device '{0}' already has an active polling worker for a different client instance.",
+                                client.DeviceId));
+
+                    if (!_registrations.TryAdd(registration.Request.SubscriptionKey, registration))
+                        throw new InvalidOperationException("Subscription is already registered on this device worker.");
+
+                    SignalWakeNoLock();
+                    return true;
+                }
+            }
+
+            public bool IsStopped
+            {
+                get
+                {
+                    lock (_lifecycleSync)
+                        return _state == StateStopped;
+                }
             }
 
             public void Remove(string subscriptionId)
             {
-                SubscriptionRegistration ignored;
-                _registrations.TryRemove(subscriptionId, out ignored);
-                Wake();
+                lock (_lifecycleSync)
+                {
+                    if (_state != StateActive)
+                        return;
+
+                    SubscriptionRegistration ignored;
+                    _registrations.TryRemove(subscriptionId, out ignored);
+                    if (_registrations.IsEmpty)
+                    {
+                        _state = StateStopping;
+                        CancelNoThrow();
+                    }
+                    else
+                    {
+                        SignalWakeNoLock();
+                    }
+                }
             }
 
             private async Task LoopAsync()
             {
+                CurrentWorker.Value = this;
                 try
                 {
                     while (!_cts.IsCancellationRequested)
@@ -115,12 +147,27 @@ namespace IndustrialCommSdk.Runtime.Polling
                 }
                 catch (Exception ex)
                 {
-                    _logger.Error("Device polling worker terminated unexpectedly | Device=" + _client.DeviceId, ex);
+                    _logger.Error("Device polling worker terminated unexpectedly | Device=" + _deviceId, ex);
                 }
                 finally
                 {
-                    if (_onStopped != null)
-                        _onStopped(_client.DeviceId, this);
+                    lock (_lifecycleSync)
+                    {
+                        _state = StateStopped;
+                        _client = null;
+                        _planner = null;
+                    }
+
+                    try
+                    {
+                        if (_onStopped != null)
+                            _onStopped(_deviceId, this);
+                    }
+                    finally
+                    {
+                        CurrentWorker.Value = null;
+                        DisposeResources();
+                    }
                 }
             }
 
@@ -148,9 +195,14 @@ namespace IndustrialCommSdk.Runtime.Polling
                     return;
 
                 var valuesByKey = await ExecutePollingReadsAsync(mergedRequests).ConfigureAwait(false);
+                _cts.Token.ThrowIfCancellationRequested();
 
                 foreach (var registration in due)
                 {
+                    _cts.Token.ThrowIfCancellationRequested();
+                    if (!_registrations.ContainsKey(registration.Request.SubscriptionKey))
+                        continue;
+
                     var values = new List<DataValue>(registration.Request.Items.Count);
                     foreach (var request in registration.Request.Items)
                     {
@@ -179,7 +231,21 @@ namespace IndustrialCommSdk.Runtime.Polling
                     {
                         var handler = registration.Handler;
                         if (handler != null)
-                            handler(_client, new SubscriptionEvent(registration.Request.SubscriptionKey, values, now));
+                        {
+                            var client = _client;
+                            if (client == null)
+                                throw new OperationCanceledException(_cts.Token);
+                            var previousDispatchingWorker = _dispatchingWorker;
+                            _dispatchingWorker = this;
+                            try
+                            {
+                                handler(client, new SubscriptionEvent(registration.Request.SubscriptionKey, values, now));
+                            }
+                            finally
+                            {
+                                _dispatchingWorker = previousDispatchingWorker;
+                            }
+                        }
                     }
                     catch (Exception ex)
                     {
@@ -200,7 +266,10 @@ namespace IndustrialCommSdk.Runtime.Polling
 
                     try
                     {
-                        var result = await _client.ReadManyAsync(batch, _cts.Token).ConfigureAwait(false);
+                        var client = _client;
+                        if (client == null)
+                            throw new OperationCanceledException(_cts.Token);
+                        var result = await client.ReadManyAsync(batch, _cts.Token).ConfigureAwait(false);
                         MapBatchResults(batch, result, valuesByKey);
                     }
                     catch (OperationCanceledException) when (_cts.IsCancellationRequested)
@@ -213,7 +282,7 @@ namespace IndustrialCommSdk.Runtime.Polling
                             string.Format(
                                 CultureInfo.InvariantCulture,
                                 "Polling read batch failed | Device={0} | Protocol={1} | Batch={2}/{3} | Requests={4}",
-                                _client.DeviceId,
+                                _deviceId,
                                 _capabilities.DisplayName,
                                 i + 1,
                                 batches.Count,
@@ -244,7 +313,7 @@ namespace IndustrialCommSdk.Runtime.Polling
                                 string.Format(
                                     CultureInfo.InvariantCulture,
                                     "Polling batch plan | Device={0} | Protocol={1} | Planner={2} | OriginalRequests={3} | PlannedBatches={4} | SavedCalls={5}",
-                                    _client.DeviceId,
+                                    _deviceId,
                                     _capabilities.DisplayName,
                                     _planner.GetType().Name,
                                     plan.OriginalRequestCount,
@@ -259,7 +328,7 @@ namespace IndustrialCommSdk.Runtime.Polling
                             string.Format(
                                 CultureInfo.InvariantCulture,
                                 "Polling batch planner failed; using fallback split | Device={0} | Protocol={1}",
-                                _client.DeviceId,
+                                _deviceId,
                                 _capabilities.DisplayName),
                             ex);
                     }
@@ -298,7 +367,7 @@ namespace IndustrialCommSdk.Runtime.Polling
                     string.Format(
                         CultureInfo.InvariantCulture,
                         "Polling read split by capability | Device={0} | Protocol={1} | Requests={2} | MaxReadItems={3}",
-                        _client.DeviceId,
+                        _deviceId,
                         _capabilities.DisplayName,
                         mergedRequests.Count,
                         maxItems));
@@ -353,22 +422,16 @@ namespace IndustrialCommSdk.Runtime.Polling
 
             private async Task WaitForWakeAsync(TimeSpan delay)
             {
-                if (delay == Timeout.InfiniteTimeSpan)
-                {
-                    await _wakeSignal.WaitAsync(_cts.Token).ConfigureAwait(false);
-                    return;
-                }
-
-                if (delay <= TimeSpan.Zero)
+                if (delay != Timeout.InfiniteTimeSpan && delay <= TimeSpan.Zero)
                     return;
 
-                var delayTask = Task.Delay(delay, _cts.Token);
-                var wakeTask = _wakeSignal.WaitAsync(_cts.Token);
-                await Task.WhenAny(delayTask, wakeTask).ConfigureAwait(false);
-                _cts.Token.ThrowIfCancellationRequested();
+                // The timed semaphore wait removes itself when the timeout wins. Using
+                // Task.WhenAny with a separate WaitAsync leaves a losing waiter behind,
+                // and that stale waiter can consume a later subscription wake-up.
+                await _wakeSignal.WaitAsync(delay, _cts.Token).ConfigureAwait(false);
             }
 
-            private void Wake()
+            private void SignalWakeNoLock()
             {
                 try
                 {
@@ -383,22 +446,53 @@ namespace IndustrialCommSdk.Runtime.Polling
                 }
             }
 
-            public void Dispose()
+            private void CancelNoThrow()
             {
-                if (Interlocked.Exchange(ref _disposed, 1) != 0)
-                    return;
-
-                _cts.Cancel();
-                Wake();
                 try
                 {
-                    _loopTask.Wait(TimeSpan.FromSeconds(2));
+                    _cts.Cancel();
                 }
-                catch
+                catch (Exception ex)
                 {
+                    _logger.Error("Polling worker cancellation callback failed | Device=" + _deviceId, ex);
                 }
+            }
+
+            private void BeginStop()
+            {
+                lock (_lifecycleSync)
+                {
+                    if (_state != StateActive)
+                        return;
+
+                    _state = StateStopping;
+                    CancelNoThrow();
+                }
+            }
+
+            private void DisposeResources()
+            {
+                if (Interlocked.Exchange(ref _resourcesDisposed, 1) != 0)
+                    return;
+
                 _wakeSignal.Dispose();
                 _cts.Dispose();
+            }
+
+            public void Dispose()
+            {
+                BeginStop();
+
+                // A handler may synchronously dispose its scheduler. Waiting for this
+                // worker from its own callback would deadlock; LoopAsync owns cleanup.
+                // A callback can complete a TaskCompletionSource whose continuation runs
+                // inline with a clean ExecutionContext. AsyncLocal is hidden in that case,
+                // but the continuation is still physically blocking this dispatch thread.
+                if (ReferenceEquals(CurrentWorker.Value, this) || ReferenceEquals(_dispatchingWorker, this))
+                    return;
+
+                _loopTask.GetAwaiter().GetResult();
+                DisposeResources();
             }
         }
     }

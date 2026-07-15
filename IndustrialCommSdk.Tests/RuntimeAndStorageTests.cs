@@ -162,7 +162,14 @@ namespace IndustrialCommSdk.Tests
                 using (var cancelled = new CancellationTokenSource())
                 {
                     cancelled.Cancel();
-                    Assert.ThrowsAsync<OperationCanceledException>(() => recorder.StopAsync(cancelled.Token));
+                    try
+                    {
+                        await recorder.StopAsync(cancelled.Token);
+                        Assert.Fail("预取消令牌应取消本次 StopAsync 等待。");
+                    }
+                    catch (OperationCanceledException)
+                    {
+                    }
                 }
 
                 store.ReleaseWrites.TrySetResult(true);
@@ -236,8 +243,10 @@ namespace IndustrialCommSdk.Tests
             public int FailuresRemaining { get; set; }
             public int WriteCalls { get; private set; }
             public bool BlockWrites { get; set; }
-            public TaskCompletionSource<bool> WriteStarted { get; } = new TaskCompletionSource<bool>();
-            public TaskCompletionSource<bool> ReleaseWrites { get; } = new TaskCompletionSource<bool>();
+            public TaskCompletionSource<bool> WriteStarted { get; } =
+                new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            public TaskCompletionSource<bool> ReleaseWrites { get; } =
+                new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
             public Task InitializeAsync(CancellationToken token) { return Task.CompletedTask; }
             public async Task WriteAsync(IReadOnlyCollection<IndustrialDataRecord> records, CancellationToken token)
             {

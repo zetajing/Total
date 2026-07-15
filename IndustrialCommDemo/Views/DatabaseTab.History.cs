@@ -12,7 +12,7 @@ namespace IndustrialCommDemo.Views
 {
     public partial class DatabaseTab
     {
-        private async Task RefreshHistoryAsync(SqlServerIndustrialDataStore store, CancellationToken ct)
+        private async Task RefreshHistoryAsync(IIndustrialHistoryStore store, CancellationToken ct)
         {
             var lastId = 0L;
             var initialLoad = true;

@@ -130,34 +130,177 @@ namespace IndustrialCommSdk.Transport
         private readonly ITcpMessageFramer _framer;
         private readonly List<byte> _receiveBuffer = new List<byte>();
         private readonly SemaphoreSlim _receiveGate = new SemaphoreSlim(1, 1);
+        private readonly CancellationTokenSource _disposeCancellation = new CancellationTokenSource();
+        private readonly object _bufferSync = new object();
+        private long _bufferGeneration;
         private int _disposed;
 
         public FramedTcpClient(TcpTransportOptions options, ITcpMessageFramer framer)
         {
             _transport = new TcpTransportClient(options ?? throw new ArgumentNullException(nameof(options)));
             _framer = framer ?? throw new ArgumentNullException(nameof(framer));
+            _bufferGeneration = _transport.ConnectionGeneration;
         }
         public bool IsConnected { get { return _transport.IsConnected; } }
-        public Task ConnectAsync(CancellationToken cancellationToken) { ThrowIfDisposed(); return _transport.ConnectAsync(cancellationToken); }
-        public Task DisconnectAsync(CancellationToken cancellationToken) { ThrowIfDisposed(); return _transport.DisconnectAsync(cancellationToken); }
+
+        public async Task ConnectAsync(CancellationToken cancellationToken)
+        {
+            ThrowIfDisposed();
+            await _transport.ConnectAsync(cancellationToken).ConfigureAwait(false);
+            SynchronizeBufferGeneration(_transport.ConnectionGeneration);
+        }
+
+        public async Task DisconnectAsync(CancellationToken cancellationToken)
+        {
+            ThrowIfDisposed();
+            await _transport.DisconnectAsync(cancellationToken).ConfigureAwait(false);
+            ClearReceiveBuffer(_transport.ConnectionGeneration);
+        }
+
         public Task SendFrameAsync(byte[] payload, CancellationToken cancellationToken) { ThrowIfDisposed(); return _transport.SendAsync(_framer.Encode(payload), cancellationToken); }
+
         public async Task<byte[]> ReceiveFrameAsync(CancellationToken cancellationToken)
         {
             ThrowIfDisposed();
-            await _receiveGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+            var gateAcquired = false;
+            using (var linkedCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _disposeCancellation.Token))
+            {
+                try
+                {
+                    await _receiveGate.WaitAsync(linkedCancellation.Token).ConfigureAwait(false);
+                    gateAcquired = true;
+                    ThrowIfDisposed();
+
+                    while (true)
+                    {
+                        var activeGeneration = _transport.ConnectionGeneration;
+                        byte[] payload;
+                        var frameExtracted = TryExtractFrame(activeGeneration, out payload);
+                        if (frameExtracted)
+                        {
+                            if (_transport.ConnectionGeneration == activeGeneration)
+                            {
+                                return payload;
+                            }
+
+                            SynchronizeBufferGeneration(_transport.ConnectionGeneration);
+                            continue;
+                        }
+
+                        var read = await _transport.ReceiveWithGenerationAsync(8192, linkedCancellation.Token).ConfigureAwait(false);
+                        AddChunk(read);
+                    }
+                }
+                catch
+                {
+                    // A caller that is still queued on the receive gate does not own the
+                    // shared framing buffer. Its cancellation must not erase a partial frame
+                    // accumulated by the active receiver.
+                    if (gateAcquired)
+                    {
+                        ClearReceiveBuffer(_transport.ConnectionGeneration);
+                    }
+                    if (Volatile.Read(ref _disposed) != 0)
+                    {
+                        throw new ObjectDisposedException(nameof(FramedTcpClient));
+                    }
+
+                    throw;
+                }
+                finally
+                {
+                    if (gateAcquired)
+                    {
+                        _receiveGate.Release();
+                    }
+                }
+            }
+        }
+
+        private bool TryExtractFrame(long generation, out byte[] payload)
+        {
+            lock (_bufferSync)
+            {
+                SynchronizeBufferGenerationUnsafe(generation);
+                try
+                {
+                    return _framer.TryExtractFrame(_receiveBuffer, out payload);
+                }
+                catch
+                {
+                    _receiveBuffer.Clear();
+                    _bufferGeneration = _transport.ConnectionGeneration;
+                    throw;
+                }
+            }
+        }
+
+        private void AddChunk(TcpTransportClient.TransportReadResult read)
+        {
+            lock (_bufferSync)
+            {
+                var activeGeneration = _transport.ConnectionGeneration;
+                if (activeGeneration != read.Generation)
+                {
+                    SynchronizeBufferGenerationUnsafe(activeGeneration);
+                    return;
+                }
+
+                SynchronizeBufferGenerationUnsafe(read.Generation);
+                _receiveBuffer.AddRange(read.Payload);
+            }
+        }
+
+        private void SynchronizeBufferGeneration(long generation)
+        {
+            lock (_bufferSync)
+            {
+                SynchronizeBufferGenerationUnsafe(generation);
+            }
+        }
+
+        private void SynchronizeBufferGenerationUnsafe(long generation)
+        {
+            if (_bufferGeneration == generation)
+            {
+                return;
+            }
+
+            _receiveBuffer.Clear();
+            _bufferGeneration = generation;
+        }
+
+        private void ClearReceiveBuffer(long generation)
+        {
+            lock (_bufferSync)
+            {
+                _receiveBuffer.Clear();
+                _bufferGeneration = generation;
+            }
+        }
+
+        private void ThrowIfDisposed() { if (Volatile.Read(ref _disposed) != 0) throw new ObjectDisposedException(nameof(FramedTcpClient)); }
+
+        public void Dispose()
+        {
+            if (Interlocked.Exchange(ref _disposed, 1) != 0)
+            {
+                return;
+            }
+
+            _disposeCancellation.Cancel();
             try
             {
-                byte[] payload;
-                while (!_framer.TryExtractFrame(_receiveBuffer, out payload))
-                {
-                    var chunk = await _transport.ReceiveAsync(8192, cancellationToken).ConfigureAwait(false);
-                    _receiveBuffer.AddRange(chunk);
-                }
-                return payload;
+                _transport.Dispose();
             }
-            finally { _receiveGate.Release(); }
+            finally
+            {
+                // The semaphore intentionally remains undisposed. A receive queued just before
+                // disposal can then unwind without ObjectDisposedException escaping from finally.
+                _receiveGate.Wait();
+                _receiveGate.Release();
+                ClearReceiveBuffer(_transport.ConnectionGeneration);
+            }
         }
-        private void ThrowIfDisposed() { if (Volatile.Read(ref _disposed) != 0) throw new ObjectDisposedException(nameof(FramedTcpClient)); }
-        public void Dispose() { if (Interlocked.Exchange(ref _disposed, 1) != 0) return; _transport.Dispose(); _receiveGate.Dispose(); }
     }
 }

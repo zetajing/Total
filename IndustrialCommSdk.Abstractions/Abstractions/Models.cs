@@ -90,6 +90,10 @@ namespace IndustrialCommSdk.Abstractions
             if (string.IsNullOrWhiteSpace(subscriptionKey)) throw new ArgumentException("Subscription key cannot be null or empty.", nameof(subscriptionKey));
             if (string.IsNullOrWhiteSpace(deviceId)) throw new ArgumentException("Device ID cannot be null or empty.", nameof(deviceId));
             if (items == null) throw new ArgumentNullException(nameof(items));
+            foreach (var item in items)
+            {
+                if (item == null) throw new ArgumentException("Subscription items cannot contain null entries.", nameof(items));
+            }
             if (interval <= TimeSpan.Zero) throw new ArgumentOutOfRangeException(nameof(interval));
 
             SubscriptionKey = subscriptionKey;

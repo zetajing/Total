@@ -44,7 +44,7 @@ namespace IndustrialCommSdk.Storage
     /// <summary>
     /// 把通信线程产生的读取结果放入有界队列，再由单独后台任务批量写库。
     /// <para>完整数据流如下：</para>
-    /// <para>PLC 读取回调 → <see cref="TryRecord"/> 快速入队 → 后台任务合并批次 → SQL Server。</para>
+    /// <para>PLC 读取回调 → <see cref="TryRecord"/> 快速入队 → 后台任务合并批次 → 配置的数据库。</para>
     /// <para>
     /// 这种结构叫“生产者/消费者”：通信线程是生产者，数据库线程是消费者。
     /// 数据库变慢或短暂断线时不会阻塞设备通信；队列满时会丢弃最新批次并记录警告，
@@ -64,7 +64,7 @@ namespace IndustrialCommSdk.Storage
         // Dispose 才会取消仍在等待的任务。
         private readonly CancellationTokenSource _stopSource = new CancellationTokenSource();
         private Task _worker;
-        private readonly object _stopGate = new object();
+        private readonly SemaphoreSlim _lifecycleGate = new SemaphoreSlim(1, 1);
         private Task _stopTask;
 
         // 使用整数配合 Interlocked/Volatile 代替普通 bool，确保多线程能看到一致的启动状态。
@@ -104,21 +104,26 @@ namespace IndustrialCommSdk.Storage
         public async Task StartAsync(CancellationToken cancellationToken)
         {
             if (Volatile.Read(ref _disposed) != 0) throw new ObjectDisposedException(nameof(BufferedIndustrialDataRecorder));
-            // CompareExchange 保证并发调用 StartAsync 时只有第一个调用真正执行启动逻辑。
-            if (Interlocked.CompareExchange(ref _started, 1, 0) != 0) return;
+            await _lifecycleGate.WaitAsync(cancellationToken).ConfigureAwait(false);
             try
             {
+                if (Volatile.Read(ref _disposed) != 0) throw new ObjectDisposedException(nameof(BufferedIndustrialDataRecorder));
+                if (Volatile.Read(ref _started) != 0) return;
+                if (_stopTask != null || _queue.IsAddingCompleted)
+                    throw new InvalidOperationException("A stopped database recorder cannot be restarted. Create a new recorder instance.");
+
                 await _store.InitializeAsync(cancellationToken).ConfigureAwait(false);
-                _logger.Info(string.Format(CultureInfo.InvariantCulture, "DATABASE recorder started | QueueCapacity={0} | BatchSize={1} | Retries={2}", _options.QueueCapacity, _options.BatchSize, _options.RetryCount));
+                if (Volatile.Read(ref _disposed) != 0) throw new ObjectDisposedException(nameof(BufferedIndustrialDataRecorder));
+                cancellationToken.ThrowIfCancellationRequested();
 
                 // Task.Run 把持续运行的队列消费者放到线程池，不占用 WPF UI 线程。
                 _worker = Task.Run(() => ProcessQueueAsync(_stopSource.Token));
+                Volatile.Write(ref _started, 1);
+                _logger.Info(string.Format(CultureInfo.InvariantCulture, "DATABASE recorder started | QueueCapacity={0} | BatchSize={1} | Retries={2}", _options.QueueCapacity, _options.BatchSize, _options.RetryCount));
             }
-            catch
+            finally
             {
-                // 初始化失败后恢复未启动状态，调用方可以修正连接字符串并创建新记录器重试。
-                Interlocked.Exchange(ref _started, 0);
-                throw;
+                _lifecycleGate.Release();
             }
         }
 
@@ -138,11 +143,24 @@ namespace IndustrialCommSdk.Storage
 
             // 入队前转换并复制可变数据，确保后台线程读取的是调用时刻的稳定快照。
             var records = values.Select(value => IndustrialDataRecord.FromDataValue(protocol, deviceId, value)).ToArray();
-            if (_queue.TryAdd(records))
+            try
             {
-                Interlocked.Add(ref _acceptedRecordCount, records.Length);
-                _logger.Trace(string.Format(CultureInfo.InvariantCulture, "DATABASE batch queued | Records={0} | QueuedBatches={1}", records.Length, _queue.Count));
-                return true;
+                if (_queue.TryAdd(records))
+                {
+                    Interlocked.Add(ref _acceptedRecordCount, records.Length);
+                    _logger.Trace(string.Format(CultureInfo.InvariantCulture, "DATABASE batch queued | Records={0} | QueuedBatches={1}", records.Length, _queue.Count));
+                    return true;
+                }
+            }
+            catch (ObjectDisposedException)
+            {
+                return false;
+            }
+            catch (InvalidOperationException)
+            {
+                // StopAsync may complete adding after the fast state check above. Stopping is a normal
+                // producer race and must be reported as a rejected batch rather than an exception.
+                return false;
             }
 
             // TryAdd 不等待空间。队列满说明数据库速度已明显落后，优先保护通信和内存。
@@ -169,21 +187,27 @@ namespace IndustrialCommSdk.Storage
         public async Task StopAsync(CancellationToken cancellationToken)
         {
             Task stopTask;
-            lock (_stopGate)
+            await _lifecycleGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+            try
             {
                 if (_stopTask == null)
                 {
-                    if (Interlocked.Exchange(ref _started, 0) == 0)
+                    if (Volatile.Read(ref _started) == 0)
                     {
                         return;
                     }
 
                     // 取消调用方的等待不会取消实际排空过程；后续 StopAsync 或 Dispose
                     // 仍可取得同一个任务并继续等待，避免队列处于“已停止但无人收尾”的状态。
+                    Volatile.Write(ref _started, 0);
                     _queue.CompleteAdding();
                     _stopTask = CompleteStopAsync();
                 }
                 stopTask = _stopTask;
+            }
+            finally
+            {
+                _lifecycleGate.Release();
             }
 
             var completed = await Task.WhenAny(stopTask, Task.Delay(Timeout.Infinite, cancellationToken)).ConfigureAwait(false);
@@ -209,6 +233,7 @@ namespace IndustrialCommSdk.Storage
             _queue.Dispose();
             _stopSource.Dispose();
             _store.Dispose();
+            _lifecycleGate.Dispose();
             Interlocked.Exchange(ref _started, 0);
         }
 
@@ -289,4 +314,3 @@ namespace IndustrialCommSdk.Storage
         }
     }
 }
-

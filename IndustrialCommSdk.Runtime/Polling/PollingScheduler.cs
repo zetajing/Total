@@ -16,7 +16,6 @@ namespace IndustrialCommSdk.Runtime.Polling
     /// 按设备合并轮询的调度器。同一客户端仅运行一个后台循环，多个订阅到期时会合并重复点位，
     /// 减少重复请求，并使用固定节拍推进下一次轮询时间，避免“读取耗时 + Interval”造成累计漂移。
     /// </summary>
-    /// <summary>合并设备订阅并管理轮询工作器。</summary>
     public sealed partial class PollingScheduler : IPollingScheduler
     {
         private readonly ConcurrentDictionary<string, SubscriptionRegistration> _subscriptions =
@@ -25,7 +24,11 @@ namespace IndustrialCommSdk.Runtime.Polling
         private readonly ConcurrentDictionary<string, DeviceWorker> _workers =
             new ConcurrentDictionary<string, DeviceWorker>(StringComparer.OrdinalIgnoreCase);
 
+        private readonly ConcurrentDictionary<DeviceWorker, byte> _retiringWorkers =
+            new ConcurrentDictionary<DeviceWorker, byte>();
+
         private readonly IIndustrialLogger _logger;
+        private readonly object _lifecycleSync = new object();
         private int _disposed;
 
         public PollingScheduler(IIndustrialLogger logger = null)
@@ -39,98 +42,111 @@ namespace IndustrialCommSdk.Runtime.Polling
             EventHandler<SubscriptionEvent> handler,
             CancellationToken cancellationToken)
         {
-            ThrowIfDisposed();
-            if (client == null) throw new ArgumentNullException(nameof(client));
-            if (request == null) throw new ArgumentNullException(nameof(request));
-            if (!string.Equals(client.DeviceId, request.DeviceId, StringComparison.OrdinalIgnoreCase))
-                throw new ArgumentException("Subscription device ID does not match the client device ID.", nameof(request));
-            if (request.Items == null || request.Items.Count == 0)
-                throw new ArgumentException("Subscription must contain at least one read request.", nameof(request));
-
-            var capabilities = IndustrialCommSdk.Runtime.IndustrialClientPlatformExtensions.GetCapabilities(client);
-            if (!capabilities.SupportsSubscriptions)
-                throw new NotSupportedException(string.Format("Protocol '{0}' does not support polling subscriptions.", capabilities.DisplayName));
-            if (request.Interval < capabilities.RecommendedMinPollingInterval)
-                throw new ArgumentOutOfRangeException(
-                    nameof(request),
-                    string.Format(
-                        CultureInfo.InvariantCulture,
-                        "Subscription interval {0}ms is below the recommended minimum {1}ms for {2}.",
-                        request.Interval.TotalMilliseconds,
-                        capabilities.RecommendedMinPollingInterval.TotalMilliseconds,
-                        capabilities.DisplayName));
-
-            cancellationToken.ThrowIfCancellationRequested();
-
-            var registration = new SubscriptionRegistration(request, handler);
-            if (!_subscriptions.TryAdd(request.SubscriptionKey, registration))
-                throw new InvalidOperationException(string.Format("Subscription '{0}' already exists.", request.SubscriptionKey));
-
-            try
+            lock (_lifecycleSync)
             {
-                while (true)
-                {
-                    ThrowIfDisposed();
-                    cancellationToken.ThrowIfCancellationRequested();
+                ThrowIfDisposed();
+                if (client == null) throw new ArgumentNullException(nameof(client));
+                if (request == null) throw new ArgumentNullException(nameof(request));
+                if (!string.Equals(client.DeviceId, request.DeviceId, StringComparison.OrdinalIgnoreCase))
+                    throw new ArgumentException("Subscription device ID does not match the client device ID.", nameof(request));
+                if (request.Items == null || request.Items.Count == 0)
+                    throw new ArgumentException("Subscription must contain at least one read request.", nameof(request));
 
-                    var worker = _workers.GetOrAdd(
-                        client.DeviceId,
-                        _ => new DeviceWorker(client, capabilities, _logger, RemoveStoppedWorker));
-
-                    if (worker.TryAdd(client, registration))
-                    {
-                        _logger.Info(string.Format(
-                            "SUBSCRIPTION started | Key={0} | Device={1} | Items={2} | Interval={3}ms | Protocol={4}",
-                            request.SubscriptionKey,
-                            client.DeviceId,
-                            request.Items.Count,
+                var capabilities = IndustrialCommSdk.Runtime.IndustrialClientPlatformExtensions.GetCapabilities(client);
+                if (!capabilities.SupportsSubscriptions)
+                    throw new NotSupportedException(string.Format("Protocol '{0}' does not support polling subscriptions.", capabilities.DisplayName));
+                if (request.Interval < capabilities.RecommendedMinPollingInterval)
+                    throw new ArgumentOutOfRangeException(
+                        nameof(request),
+                        string.Format(
+                            CultureInfo.InvariantCulture,
+                            "Subscription interval {0}ms is below the recommended minimum {1}ms for {2}.",
                             request.Interval.TotalMilliseconds,
+                            capabilities.RecommendedMinPollingInterval.TotalMilliseconds,
                             capabilities.DisplayName));
-                        return Task.FromResult(request.SubscriptionKey);
-                    }
 
-                    // The worker was already stopping between GetOrAdd and TryAdd. Remove that exact
-                    // instance and retry so the subscription is not attached to a dead loop.
-                    RemoveStoppedWorker(client.DeviceId, worker);
+                cancellationToken.ThrowIfCancellationRequested();
+
+                var registration = new SubscriptionRegistration(request, handler);
+                if (!_subscriptions.TryAdd(request.SubscriptionKey, registration))
+                    throw new InvalidOperationException(string.Format("Subscription '{0}' already exists.", request.SubscriptionKey));
+
+                try
+                {
+                    while (true)
+                    {
+                        ThrowIfDisposed();
+                        cancellationToken.ThrowIfCancellationRequested();
+
+                        var worker = _workers.GetOrAdd(
+                            client.DeviceId,
+                            _ => new DeviceWorker(client, capabilities, _logger, RemoveStoppedWorker));
+
+                        if (worker.TryAdd(client, registration))
+                        {
+                            _logger.Info(string.Format(
+                                "SUBSCRIPTION started | Key={0} | Device={1} | Items={2} | Interval={3}ms | Protocol={4}",
+                                request.SubscriptionKey,
+                                client.DeviceId,
+                                request.Items.Count,
+                                request.Interval.TotalMilliseconds,
+                                capabilities.DisplayName));
+                            return Task.FromResult(request.SubscriptionKey);
+                        }
+
+                        // The worker was already stopping between GetOrAdd and TryAdd. Remove that exact
+                        // instance and retry so the subscription is not attached to a dead loop.
+                        RemoveStoppedWorker(client.DeviceId, worker);
+                    }
                 }
-            }
-            catch
-            {
-                SubscriptionRegistration ignored;
-                _subscriptions.TryRemove(request.SubscriptionKey, out ignored);
-                throw;
+                catch
+                {
+                    SubscriptionRegistration ignored;
+                    _subscriptions.TryRemove(request.SubscriptionKey, out ignored);
+                    throw;
+                }
             }
         }
 
         public Task UnsubscribeAsync(string subscriptionId, CancellationToken cancellationToken)
         {
-            ThrowIfDisposed();
-            cancellationToken.ThrowIfCancellationRequested();
-            if (string.IsNullOrWhiteSpace(subscriptionId))
-                throw new ArgumentException("Subscription ID is required.", nameof(subscriptionId));
-
-            SubscriptionRegistration registration;
-            if (_subscriptions.TryRemove(subscriptionId, out registration))
+            lock (_lifecycleSync)
             {
-                DeviceWorker worker;
-                if (_workers.TryGetValue(registration.Request.DeviceId, out worker))
-                    worker.Remove(subscriptionId);
+                ThrowIfDisposed();
+                cancellationToken.ThrowIfCancellationRequested();
+                if (string.IsNullOrWhiteSpace(subscriptionId))
+                    throw new ArgumentException("Subscription ID is required.", nameof(subscriptionId));
 
-                _logger.Info("SUBSCRIPTION stopped | Key=" + subscriptionId);
+                SubscriptionRegistration registration;
+                if (_subscriptions.TryRemove(subscriptionId, out registration))
+                {
+                    DeviceWorker worker;
+                    if (_workers.TryGetValue(registration.Request.DeviceId, out worker))
+                        worker.Remove(subscriptionId);
+
+                    _logger.Info("SUBSCRIPTION stopped | Key=" + subscriptionId);
+                }
+
+                return Task.CompletedTask;
             }
-
-            return Task.CompletedTask;
         }
 
         public void Dispose()
         {
-            if (Interlocked.Exchange(ref _disposed, 1) != 0)
-                return;
+            DeviceWorker[] workers;
+            lock (_lifecycleSync)
+            {
+                if (Interlocked.Exchange(ref _disposed, 1) != 0)
+                    return;
 
-            foreach (var worker in _workers.Values)
+                workers = _workers.Values.Concat(_retiringWorkers.Keys).Distinct().ToArray();
+            }
+
+            foreach (var worker in workers)
                 worker.Dispose();
 
             _workers.Clear();
+            _retiringWorkers.Clear();
             _subscriptions.Clear();
         }
 
@@ -141,6 +157,20 @@ namespace IndustrialCommSdk.Runtime.Polling
             {
                 DeviceWorker removed;
                 _workers.TryRemove(deviceId, out removed);
+            }
+
+            if (worker.IsStopped)
+            {
+                byte ignored;
+                _retiringWorkers.TryRemove(worker, out ignored);
+                return;
+            }
+
+            _retiringWorkers.TryAdd(worker, 0);
+            if (worker.IsStopped)
+            {
+                byte ignored;
+                _retiringWorkers.TryRemove(worker, out ignored);
             }
         }
 

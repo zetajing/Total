@@ -18,26 +18,36 @@
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" /><RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" /><RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" /><RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
 
-                    <TextBlock Grid.ColumnSpan="2" Margin="0,0,0,12" FontSize="18" FontWeight="SemiBold" Foreground="#17324D" Text="SQL Server 历史数据" />
+                    <TextBlock Grid.ColumnSpan="2" Margin="0,0,0,12" FontSize="18" FontWeight="SemiBold" Foreground="#17324D" Text="数据库历史数据" />
 
-                    <TextBlock Grid.Row="1" VerticalAlignment="Center" Text="连接字符串" />
-                    <TextBox x:Name="ConnectionStringTextBox" Grid.Row="1" Grid.Column="1" Margin="0,6"
+                    <TextBlock Grid.Row="1" VerticalAlignment="Center" Text="数据库类型" />
+                    <ComboBox x:Name="DatabaseProviderComboBox" Grid.Row="1" Grid.Column="1" Margin="0,6"
+                              SelectedIndex="0" SelectionChanged="DatabaseProviderComboBox_SelectionChanged">
+                        <ComboBoxItem Content="SQL Server" Tag="sqlserver" />
+                        <ComboBoxItem Content="MySQL 8.0+" Tag="mysql" />
+                    </ComboBox>
+                    <TextBlock Grid.Row="2" VerticalAlignment="Center" Text="连接字符串" />
+                    <TextBox x:Name="ConnectionStringTextBox" Grid.Row="2" Grid.Column="1" Margin="0,6"
                              Text="Server=localhost;Database=UpperComputerDb;Integrated Security=True;Encrypt=True;TrustServerCertificate=True;" />
-                    <TextBlock Grid.Row="2" VerticalAlignment="Center" Text="历史表" />
-                    <TextBox x:Name="TableNameTextBox" Grid.Row="2" Grid.Column="1" Margin="0,6" Text="dbo.IndustrialDataHistory" />
-                    <TextBlock Grid.Row="3" VerticalAlignment="Center" Text="自动记录" />
-                    <CheckBox x:Name="EnabledCheckBox" Grid.Row="3" Grid.Column="1" Margin="0,10" VerticalAlignment="Center"
+                    <TextBlock Grid.Row="3" VerticalAlignment="Center" Text="历史表" />
+                    <TextBox x:Name="TableNameTextBox" Grid.Row="3" Grid.Column="1" Margin="0,6" Text="dbo.IndustrialDataHistory" />
+                    <TextBlock Grid.Row="4" VerticalAlignment="Center" Text="自动记录" />
+                    <CheckBox x:Name="EnabledCheckBox" Grid.Row="4" Grid.Column="1" Margin="0,10" VerticalAlignment="Center"
                               Focusable="False" IsHitTestVisible="False"
                               Content="保存 Modbus / S7 / MC 的读取和轮询结果" />
+                    <TextBlock x:Name="ProviderHintTextBlock" Grid.Row="5" Grid.Column="1" Margin="0,2,0,0"
+                               Foreground="#64748B" TextWrapping="Wrap"
+                               Text="SQL Server 使用 schema.table；建议使用 Windows 身份验证。" />
                 </Grid>
             </Border>
 
             <StackPanel Grid.Row="1" Margin="0,16,0,0" Orientation="Horizontal">
-                <Button Width="150" Padding="12,8" Background="#2563EB" Foreground="White" BorderThickness="0"
+                <Button x:Name="StartButton" Width="150" Padding="12,8" Background="#2563EB" Foreground="White" BorderThickness="0"
                         Click="StartButton_Click" Content="测试并启用" />
-                <Button Width="110" Margin="10,0,0,0" Padding="12,8" Background="#E2E8F0" BorderBrush="#CBD5E1"
+                <Button x:Name="StopButton" Width="110" Margin="10,0,0,0" Padding="12,8" Background="#E2E8F0" BorderBrush="#CBD5E1"
                         Click="StopButton_Click" Content="停止记录" />
             </StackPanel>
 

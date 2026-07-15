@@ -1,33 +1,37 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
 using System.Net;
-using System.Net.Http.Headers;
-using System.Runtime.Serialization;
-using System.Runtime.Serialization.Json;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
-using System.Xml;
 using IndustrialCommSdk.Diagnostics;
 
 namespace IndustrialCommSdk.Mes
 {
     /// <summary>基于 HttpListener 的开放式 MES HTTP JSON 接收器。</summary>
-    public sealed class MesJsonReceiver : IMesJsonReceiver
+    public sealed partial class MesJsonReceiver : IMesJsonReceiver
     {
+        private const int Stopped = 0;
+        private const int Running = 1;
+        private const int Stopping = 2;
+
         private readonly MesJsonReceiverOptions _options;
         private readonly MesJsonReceiveHandler _handler;
         private readonly IIndustrialLogger _logger;
         private readonly SemaphoreSlim _lifecycleGate = new SemaphoreSlim(1, 1);
+        private readonly SemaphoreSlim _requestSlots;
         private readonly ConcurrentDictionary<int, Task> _activeRequests = new ConcurrentDictionary<int, Task>();
+        private readonly ConcurrentDictionary<int, Task> _activeHandlers = new ConcurrentDictionary<int, Task>();
+        private readonly AsyncLocal<int?> _currentRequestId = new AsyncLocal<int?>();
+
         private HttpListener _listener;
         private CancellationTokenSource _stopSource;
         private Task _acceptLoopTask;
+        private Task _stopCompletion = Task.CompletedTask;
         private int _nextRequestId;
-        private int _running;
+        private int _lifecycleGeneration;
+        private int _state;
         private int _disposed;
 
         public MesJsonReceiver(
@@ -39,309 +43,400 @@ namespace IndustrialCommSdk.Mes
             _handler = handler ?? throw new ArgumentNullException(nameof(handler));
             _logger = logger ?? NullIndustrialLogger.Instance;
             ValidateOptions(options);
+            _requestSlots = new SemaphoreSlim(options.MaxConcurrentRequests, options.MaxConcurrentRequests);
         }
 
-        public bool IsRunning => Volatile.Read(ref _running) != 0;
+        public bool IsRunning => Volatile.Read(ref _state) == Running;
 
         public async Task StartAsync(CancellationToken cancellationToken)
         {
-            ThrowIfDisposed();
-            await _lifecycleGate.WaitAsync(cancellationToken).ConfigureAwait(false);
-            try
+            while (true)
             {
-                if (IsRunning) return;
-
-                var listener = new HttpListener();
-                listener.Prefixes.Add(_options.ListenPrefix);
-                try { listener.Start(); }
-                catch
+                ThrowIfDisposed();
+                Task pendingStop = null;
+                await _lifecycleGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+                try
                 {
-                    listener.Close();
-                    throw;
+                    // Start may have passed the fast disposed check and then waited behind a
+                    // concurrent Dispose. Recheck while holding the lifecycle gate so a disposed
+                    // receiver can never publish a new listener after Dispose has returned.
+                    ThrowIfDisposed();
+                    if (_state == Running) return;
+                    if (_state == Stopping)
+                    {
+                        pendingStop = _stopCompletion;
+                    }
+                    else
+                    {
+                        var listener = new HttpListener();
+                        listener.Prefixes.Add(_options.ListenPrefix);
+                        try { listener.Start(); }
+                        catch
+                        {
+                            listener.Close();
+                            throw;
+                        }
+
+                        var stopSource = new CancellationTokenSource();
+                        _listener = listener;
+                        _stopSource = stopSource;
+                        Volatile.Write(ref _state, Running);
+                        _acceptLoopTask = AcceptLoopAsync(listener, stopSource.Token);
+                        _logger.Info("MES HTTP receiver started | Prefix=" + _options.ListenPrefix);
+                        return;
+                    }
+                }
+                finally
+                {
+                    _lifecycleGate.Release();
                 }
 
-                _stopSource?.Dispose();
-                _stopSource = new CancellationTokenSource();
-                _listener = listener;
-                Volatile.Write(ref _running, 1);
-                _acceptLoopTask = Task.Run(() => AcceptLoopAsync(listener, _stopSource.Token));
-                _logger.Info("MES HTTP receiver started | Prefix=" + _options.ListenPrefix);
-            }
-            finally
-            {
-                _lifecycleGate.Release();
+                await AwaitWithCancellationAsync(pendingStop, cancellationToken).ConfigureAwait(false);
             }
         }
 
         public async Task StopAsync(CancellationToken cancellationToken)
         {
+            var callerRequestId = _currentRequestId.Value;
+            Task acceptLoop;
+            Task stopCompletion;
+            CancellationTokenSource sourceToCancel = null;
+            TaskCompletionSource<bool> stopSignal = null;
+            var stopGeneration = 0;
+
             await _lifecycleGate.WaitAsync(cancellationToken).ConfigureAwait(false);
             try
             {
-                if (!IsRunning) return;
-                Volatile.Write(ref _running, 0);
-                _stopSource.Cancel();
-                try { _listener.Close(); } catch { }
-
-                if (_acceptLoopTask != null)
+                if (_state == Stopped) return;
+                acceptLoop = _acceptLoopTask;
+                if (_state == Running)
                 {
-                    try { await _acceptLoopTask.ConfigureAwait(false); }
-                    catch (OperationCanceledException) { }
-                    _acceptLoopTask = null;
-                }
+                    Volatile.Write(ref _state, Stopping);
+                    var listener = _listener;
+                    sourceToCancel = _stopSource;
+                    stopGeneration = ++_lifecycleGeneration;
 
-                var requests = _activeRequests.Values.ToArray();
-                if (requests.Length > 0)
-                {
-                    try { await Task.WhenAll(requests).ConfigureAwait(false); }
-                    catch { }
+                    try { listener?.Close(); } catch { }
+                    _listener = null;
+
+                    stopSignal = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                    stopCompletion = stopSignal.Task;
+                    _stopCompletion = stopCompletion;
                 }
-                _activeRequests.Clear();
-                _listener = null;
-                _logger.Info("MES HTTP receiver stopped | Prefix=" + _options.ListenPrefix);
+                else
+                {
+                    stopCompletion = _stopCompletion;
+                }
             }
             finally
             {
                 _lifecycleGate.Release();
             }
+
+            if (stopSignal != null)
+            {
+                // Start the bounded drain before dispatching cancellation callbacks. A callback
+                // is then free to re-enter StopAsync without the lifecycle gate being held.
+                _ = CompleteStopAndSignalAsync(
+                    stopGeneration,
+                    acceptLoop,
+                    stopSignal);
+                TryCancel(sourceToCancel);
+                DisposeCancellationSourceWhenStopped(stopCompletion, sourceToCancel);
+            }
+
+            // A handler may stop its own receiver. It must not await the request/handler task
+            // that is currently executing it; the background completion still drains it later.
+            if (callerRequestId.HasValue)
+            {
+                await DrainTrackedTasksAsync(
+                    acceptLoop,
+                    callerRequestId,
+                    _options.HandlerTimeoutMilliseconds,
+                    cancellationToken).ConfigureAwait(false);
+                return;
+            }
+
+            await AwaitWithCancellationAsync(stopCompletion, cancellationToken).ConfigureAwait(false);
+        }
+
+        private async Task CompleteStopAndSignalAsync(
+            int generation,
+            Task acceptLoop,
+            TaskCompletionSource<bool> stopSignal)
+        {
+            try
+            {
+                await CompleteStopAsync(generation, acceptLoop).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                _logger.Error("MES HTTP receiver stop completion failed.", ex);
+            }
+            finally
+            {
+                stopSignal.TrySetResult(true);
+            }
+        }
+
+        private async Task CompleteStopAsync(
+            int generation,
+            Task acceptLoop)
+        {
+            // StopAsync schedules this completion after changing state and closing the listener.
+            // Yield once so cancellation dispatch and draining cannot run inline with that setup.
+            await Task.Yield();
+            try
+            {
+                var drained = await DrainTrackedTasksAsync(
+                    acceptLoop,
+                    null,
+                    _options.HandlerTimeoutMilliseconds,
+                    CancellationToken.None).ConfigureAwait(false);
+                if (!drained)
+                {
+                    _logger.Warn(string.Format(
+                        "MES HTTP receiver stop drain timed out; {0} request(s) and {1} handler(s) remain tracked.",
+                        _activeRequests.Count,
+                        _activeHandlers.Count));
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.Error("MES HTTP receiver stop drain failed.", ex);
+            }
+            finally
+            {
+                await _lifecycleGate.WaitAsync().ConfigureAwait(false);
+                try
+                {
+                    if (_state == Stopping && generation == _lifecycleGeneration)
+                    {
+                        _acceptLoopTask = null;
+                        _stopSource = null;
+                        Volatile.Write(ref _state, Stopped);
+                    }
+                }
+                finally
+                {
+                    _lifecycleGate.Release();
+                }
+                _logger.Info("MES HTTP receiver stopped | Prefix=" + _options.ListenPrefix);
+            }
+        }
+
+        private static void DisposeCancellationSourceWhenStopped(
+            Task stopCompletion,
+            CancellationTokenSource stopSource)
+        {
+            if (stopSource == null) return;
+            _ = stopCompletion.ContinueWith(
+                completed =>
+                {
+                    try { stopSource.Dispose(); } catch { }
+                },
+                CancellationToken.None,
+                TaskContinuationOptions.ExecuteSynchronously,
+                TaskScheduler.Default);
+        }
+
+        private async Task<bool> DrainTrackedTasksAsync(
+            Task acceptLoop,
+            int? excludedRequestId,
+            int timeoutMilliseconds,
+            CancellationToken cancellationToken)
+        {
+            var deadline = DateTime.UtcNow.AddMilliseconds(timeoutMilliseconds);
+            while (true)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var tasks = new List<Task>();
+                if (acceptLoop != null && !acceptLoop.IsCompleted) tasks.Add(acceptLoop);
+                tasks.AddRange(_activeRequests
+                    .Where(pair => !excludedRequestId.HasValue || pair.Key != excludedRequestId.Value)
+                    .Select(pair => pair.Value));
+                tasks.AddRange(_activeHandlers
+                    .Where(pair => !excludedRequestId.HasValue || pair.Key != excludedRequestId.Value)
+                    .Select(pair => pair.Value));
+                tasks = tasks.Where(task => task != null && !task.IsCompleted).Distinct().ToList();
+                if (tasks.Count == 0) return true;
+
+                var remaining = deadline - DateTime.UtcNow;
+                if (remaining <= TimeSpan.Zero) return false;
+                var allTasks = Task.WhenAll(tasks);
+                var delay = Task.Delay(remaining, cancellationToken);
+                if (await Task.WhenAny(allTasks, delay).ConfigureAwait(false) != allTasks)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    return false;
+                }
+                try { await allTasks.ConfigureAwait(false); }
+                catch { }
+                acceptLoop = null;
+            }
         }
 
         private async Task AcceptLoopAsync(HttpListener listener, CancellationToken cancellationToken)
         {
-            while (!cancellationToken.IsCancellationRequested)
-            {
-                HttpListenerContext context;
-                try { context = await listener.GetContextAsync().ConfigureAwait(false); }
-                catch (ObjectDisposedException) { break; }
-                catch (HttpListenerException) when (cancellationToken.IsCancellationRequested) { break; }
-                catch (InvalidOperationException) when (cancellationToken.IsCancellationRequested) { break; }
-                catch (Exception ex)
-                {
-                    _logger.Error("MES HTTP receiver accept failed.", ex);
-                    continue;
-                }
-
-                var requestId = Interlocked.Increment(ref _nextRequestId);
-                var task = HandleContextAsync(context, cancellationToken);
-                _activeRequests[requestId] = task;
-                _ = task.ContinueWith(
-                    _ => { Task ignored; _activeRequests.TryRemove(requestId, out ignored); },
-                    CancellationToken.None,
-                    TaskContinuationOptions.ExecuteSynchronously,
-                    TaskScheduler.Default);
-            }
-        }
-
-        private async Task HandleContextAsync(HttpListenerContext context, CancellationToken stopToken)
-        {
-            var response = context.Response;
             try
             {
-                if (!string.Equals(context.Request.HttpMethod, "POST", StringComparison.OrdinalIgnoreCase))
+                var backoffMilliseconds = 50;
+                while (!cancellationToken.IsCancellationRequested)
                 {
-                    response.Headers["Allow"] = "POST";
-                    await WriteJsonAsync(response, 405, "{\"error\":\"method_not_allowed\"}", stopToken).ConfigureAwait(false);
-                    return;
-                }
-
-                if (!IsAuthorized(context.Request.Headers["Authorization"]))
-                {
-                    await WriteJsonAsync(response, 401, "{\"error\":\"unauthorized\"}", stopToken).ConfigureAwait(false);
-                    return;
-                }
-
-                if (!IsJsonContentType(context.Request.ContentType))
-                {
-                    await WriteJsonAsync(response, 415, "{\"error\":\"content_type_must_be_json\"}", stopToken).ConfigureAwait(false);
-                    return;
-                }
-
-                string body;
-                try
-                {
-                    body = await ReadBodyAsync(
-                        context.Request.InputStream,
-                        context.Request.ContentLength64,
-                        _options.MaxRequestContentBytes,
-                        stopToken).ConfigureAwait(false);
-                    ValidateJsonObject(body);
-                }
-                catch (RequestTooLargeException)
-                {
-                    await WriteJsonAsync(response, 413, "{\"error\":\"request_too_large\"}", stopToken).ConfigureAwait(false);
-                    return;
-                }
-                catch (ArgumentException)
-                {
-                    await WriteJsonAsync(response, 400, "{\"error\":\"invalid_json_object\"}", stopToken).ConfigureAwait(false);
-                    return;
-                }
-
-                var request = new MesJsonReceiveRequest
-                {
-                    Endpoint = GetRelativeEndpoint(context.Request),
-                    Body = body,
-                    ContentType = context.Request.ContentType,
-                    RemoteEndPoint = context.Request.RemoteEndPoint?.ToString(),
-                    Headers = CopyHeaders(context.Request),
-                };
-
-                _logger.Info(string.Format(
-                    "MES HTTP receiver RX | Endpoint={0} | Remote={1} | BodyBytes={2}",
-                    request.Endpoint,
-                    request.RemoteEndPoint ?? "(unknown)",
-                    Encoding.UTF8.GetByteCount(body)));
-
-                MesJsonReceiveResponse result;
-                using (var handlerTimeout = CancellationTokenSource.CreateLinkedTokenSource(stopToken))
-                {
-                    var handlerTask = _handler(request, handlerTimeout.Token);
-                    if (handlerTask == null) throw new InvalidOperationException("MES JSON receive handler returned a null task.");
-                    var deadlineTask = Task.Delay(_options.HandlerTimeoutMilliseconds, stopToken);
-                    if (await Task.WhenAny(handlerTask, deadlineTask).ConfigureAwait(false) != handlerTask)
+                    HttpListenerContext context;
+                    try
                     {
-                        stopToken.ThrowIfCancellationRequested();
-                        handlerTimeout.Cancel();
-                        ObserveFault(handlerTask);
-                        throw new HandlerTimeoutException();
+                        context = await listener.GetContextAsync().ConfigureAwait(false);
+                        backoffMilliseconds = 50;
                     }
-                    result = await handlerTask.ConfigureAwait(false);
+                    catch (ObjectDisposedException) { break; }
+                    catch (HttpListenerException ex)
+                    {
+                        if (cancellationToken.IsCancellationRequested || !IsListening(listener)) break;
+                        _logger.Error("MES HTTP receiver accept failed; retrying with backoff.", ex);
+                        if (!await DelayAfterAcceptFailureAsync(backoffMilliseconds, cancellationToken).ConfigureAwait(false)) break;
+                        backoffMilliseconds = Math.Min(backoffMilliseconds * 2, 1000);
+                        continue;
+                    }
+                    catch (InvalidOperationException ex)
+                    {
+                        if (cancellationToken.IsCancellationRequested || !IsListening(listener)) break;
+                        _logger.Error("MES HTTP receiver accept failed; retrying with backoff.", ex);
+                        if (!await DelayAfterAcceptFailureAsync(backoffMilliseconds, cancellationToken).ConfigureAwait(false)) break;
+                        backoffMilliseconds = Math.Min(backoffMilliseconds * 2, 1000);
+                        continue;
+                    }
+                    catch (Exception ex)
+                    {
+                        if (cancellationToken.IsCancellationRequested || !IsListening(listener)) break;
+                        _logger.Error("MES HTTP receiver accept failed; retrying with backoff.", ex);
+                        if (!await DelayAfterAcceptFailureAsync(backoffMilliseconds, cancellationToken).ConfigureAwait(false)) break;
+                        backoffMilliseconds = Math.Min(backoffMilliseconds * 2, 1000);
+                        continue;
+                    }
+
+                    if (!_requestSlots.Wait(0))
+                    {
+                        // Do not create or track an asynchronous response task here. A slow client
+                        // that does not read 429 responses must not bypass MaxConcurrentRequests by
+                        // growing _activeRequests without bound.
+                        RejectOverloaded(context);
+                        continue;
+                    }
+
+                    var requestId = Interlocked.Increment(ref _nextRequestId);
+                    var permit = new RequestPermit(_requestSlots);
+                    TrackRequest(requestId, HandleContextAsync(context, requestId, permit, cancellationToken));
                 }
-
-                if (result == null) throw new InvalidOperationException("MES JSON receive handler returned null.");
-                if (result.StatusCode < 200 || result.StatusCode > 599)
-                    throw new InvalidOperationException("MES JSON receive response status code must be between 200 and 599.");
-                ValidateJsonObject(result.Json);
-                await WriteJsonAsync(response, result.StatusCode, result.Json, stopToken).ConfigureAwait(false);
             }
-            catch (HandlerTimeoutException)
+            finally
             {
-                await TryWriteErrorAsync(response, 504, "{\"error\":\"handler_timeout\"}").ConfigureAwait(false);
-            }
-            catch (OperationCanceledException) when (!stopToken.IsCancellationRequested)
-            {
-                await TryWriteErrorAsync(response, 504, "{\"error\":\"handler_timeout\"}").ConfigureAwait(false);
-            }
-            catch (OperationCanceledException) when (stopToken.IsCancellationRequested)
-            {
-                TryClose(response);
-            }
-            catch (Exception ex)
-            {
-                _logger.Error("MES HTTP receiver request failed.", ex);
-                await TryWriteErrorAsync(response, 500, "{\"error\":\"internal_error\"}").ConfigureAwait(false);
+                await HandleAcceptLoopExitAsync(listener).ConfigureAwait(false);
             }
         }
 
-        private bool IsAuthorized(string actual)
+        private async Task HandleAcceptLoopExitAsync(HttpListener listener)
         {
-            var required = _options.RequiredAuthorizationHeaderValue;
-            if (string.IsNullOrEmpty(required)) return true;
-            if (actual == null || actual.Length != required.Length) return false;
-            var difference = 0;
-            for (var i = 0; i < required.Length; i++) difference |= actual[i] ^ required[i];
-            return difference == 0;
-        }
+            CancellationTokenSource sourceToCancel = null;
+            TaskCompletionSource<bool> stopSignal = null;
+            Task stopCompletion = null;
+            var stopGeneration = 0;
 
-        private static bool IsJsonContentType(string contentType)
-        {
-            MediaTypeHeaderValue parsed;
-            if (!MediaTypeHeaderValue.TryParse(contentType, out parsed)) return false;
-            var mediaType = parsed.MediaType;
-            return string.Equals(mediaType, "application/json", StringComparison.OrdinalIgnoreCase) ||
-                mediaType.EndsWith("+json", StringComparison.OrdinalIgnoreCase);
-        }
-
-        private static async Task<string> ReadBodyAsync(
-            Stream input,
-            long contentLength,
-            int maximumBytes,
-            CancellationToken cancellationToken)
-        {
-            if (contentLength > maximumBytes) throw new RequestTooLargeException();
-            using (var output = new MemoryStream())
-            {
-                var buffer = new byte[8192];
-                while (true)
-                {
-                    var read = await input.ReadAsync(buffer, 0, buffer.Length, cancellationToken).ConfigureAwait(false);
-                    if (read == 0) break;
-                    if (output.Length + read > maximumBytes) throw new RequestTooLargeException();
-                    output.Write(buffer, 0, read);
-                }
-                return new UTF8Encoding(false, true).GetString(output.GetBuffer(), 0, checked((int)output.Length));
-            }
-        }
-
-        private static void ValidateJsonObject(string json)
-        {
-            if (string.IsNullOrWhiteSpace(json) || json.TrimStart()[0] != '{')
-                throw new ArgumentException("JSON root must be an object.", nameof(json));
+            await _lifecycleGate.WaitAsync().ConfigureAwait(false);
             try
             {
-                using (var stream = new MemoryStream(Encoding.UTF8.GetBytes(json)))
-                using (var reader = JsonReaderWriterFactory.CreateJsonReader(
-                    stream, Encoding.UTF8, XmlDictionaryReaderQuotas.Max, null))
-                {
-                    while (reader.Read()) { }
-                }
+                // A normal Stop changes the state before closing the listener. Only an accept loop
+                // that exits while it still owns a Running receiver needs to initiate recovery.
+                if (_state != Running || !ReferenceEquals(_listener, listener)) return;
+
+                Volatile.Write(ref _state, Stopping);
+                sourceToCancel = _stopSource;
+                stopGeneration = ++_lifecycleGeneration;
+                _listener = null;
+
+                stopSignal = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                stopCompletion = stopSignal.Task;
+                _stopCompletion = stopCompletion;
             }
-            catch (Exception ex) when (ex is XmlException || ex is FormatException || ex is SerializationException)
+            finally
             {
-                throw new ArgumentException("JSON is invalid.", nameof(json), ex);
+                _lifecycleGate.Release();
+            }
+
+            try { listener.Close(); } catch { }
+
+            // The current accept task cannot drain itself. The shared stop completion still drains
+            // every admitted request/handler and gives concurrent Stop/Start/Dispose callers one
+            // stable lifecycle task to await.
+            _ = CompleteStopAndSignalAsync(stopGeneration, null, stopSignal);
+            TryCancel(sourceToCancel);
+            DisposeCancellationSourceWhenStopped(stopCompletion, sourceToCancel);
+            _logger.Warn("MES HTTP receiver accept loop exited unexpectedly; transitioning to stopped state.");
+        }
+
+        private void TrackRequest(int requestId, Task task)
+        {
+            _activeRequests[requestId] = task;
+            _ = task.ContinueWith(
+                completed =>
+                {
+                    if (completed.IsFaulted) { var ignoredException = completed.Exception; }
+                    Task ignoredTask;
+                    _activeRequests.TryRemove(requestId, out ignoredTask);
+                },
+                CancellationToken.None,
+                TaskContinuationOptions.ExecuteSynchronously,
+                TaskScheduler.Default);
+        }
+
+        private void TrackHandler(int requestId, Task task, CancellationTokenSource handlerCancellation)
+        {
+            _activeHandlers[requestId] = task;
+            _ = task.ContinueWith(
+                completed =>
+                {
+                    if (completed.IsFaulted) { var ignoredException = completed.Exception; }
+                    Task ignoredTask;
+                    _activeHandlers.TryRemove(requestId, out ignoredTask);
+                    handlerCancellation.Dispose();
+                },
+                CancellationToken.None,
+                TaskContinuationOptions.ExecuteSynchronously,
+                TaskScheduler.Default);
+        }
+
+        private static async Task<bool> DelayAfterAcceptFailureAsync(int delayMilliseconds, CancellationToken token)
+        {
+            try
+            {
+                await Task.Delay(delayMilliseconds, token).ConfigureAwait(false);
+                return true;
+            }
+            catch (OperationCanceledException)
+            {
+                return false;
             }
         }
 
-        private string GetRelativeEndpoint(HttpListenerRequest request)
+        private static bool IsListening(HttpListener listener)
         {
-            var rawUrl = request.RawUrl ?? request.Url.PathAndQuery;
-            var basePath = new Uri(_options.ListenPrefix).AbsolutePath;
-            var relative = rawUrl.StartsWith(basePath, StringComparison.OrdinalIgnoreCase)
-                ? rawUrl.Substring(basePath.Length)
-                : rawUrl.TrimStart('/');
-            return "/" + relative;
+            try { return listener.IsListening; }
+            catch { return false; }
         }
 
-        private static IReadOnlyDictionary<string, string> CopyHeaders(HttpListenerRequest request)
+        private static async Task AwaitWithCancellationAsync(Task task, CancellationToken cancellationToken)
         {
-            var headers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var key in request.Headers.AllKeys) headers[key] = request.Headers[key];
-            return headers;
-        }
+            if (task == null) return;
+            if (!cancellationToken.CanBeCanceled)
+            {
+                await task.ConfigureAwait(false);
+                return;
+            }
 
-        private static async Task WriteJsonAsync(
-            HttpListenerResponse response,
-            int statusCode,
-            string json,
-            CancellationToken cancellationToken)
-        {
-            var bytes = Encoding.UTF8.GetBytes(json);
-            response.StatusCode = statusCode;
-            response.ContentType = "application/json; charset=utf-8";
-            response.ContentEncoding = Encoding.UTF8;
-            response.ContentLength64 = bytes.Length;
-            await response.OutputStream.WriteAsync(bytes, 0, bytes.Length, cancellationToken).ConfigureAwait(false);
-            response.Close();
-        }
-
-        private static async Task TryWriteErrorAsync(HttpListenerResponse response, int statusCode, string json)
-        {
-            try { await WriteJsonAsync(response, statusCode, json, CancellationToken.None).ConfigureAwait(false); }
-            catch { TryClose(response); }
-        }
-
-        private static void TryClose(HttpListenerResponse response)
-        {
-            try { response.Close(); } catch { }
-        }
-
-        private static void ObserveFault(Task task)
-        {
-            _ = task.ContinueWith(
-                completed => { var ignored = completed.Exception; },
-                CancellationToken.None,
-                TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
-                TaskScheduler.Default);
+            var cancellation = Task.Delay(Timeout.Infinite, cancellationToken);
+            if (await Task.WhenAny(task, cancellation).ConfigureAwait(false) != task)
+                throw new OperationCanceledException(cancellationToken);
+            await task.ConfigureAwait(false);
         }
 
         private static void ValidateOptions(MesJsonReceiverOptions options)
@@ -353,6 +448,8 @@ namespace IndustrialCommSdk.Mes
                 !options.ListenPrefix.EndsWith("/", StringComparison.Ordinal) ||
                 !string.IsNullOrEmpty(prefix.Query) || !string.IsNullOrEmpty(prefix.Fragment))
                 throw new ArgumentException("MES receiver ListenPrefix must be an absolute HTTP/HTTPS prefix ending with '/'.", nameof(options));
+            if (options.MaxConcurrentRequests <= 0)
+                throw new ArgumentOutOfRangeException(nameof(options.MaxConcurrentRequests));
             if (options.MaxRequestContentBytes <= 0)
                 throw new ArgumentOutOfRangeException(nameof(options.MaxRequestContentBytes));
             if (options.HandlerTimeoutMilliseconds <= 0)
@@ -368,11 +465,21 @@ namespace IndustrialCommSdk.Mes
         {
             if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
             StopAsync(CancellationToken.None).GetAwaiter().GetResult();
-            _stopSource?.Dispose();
-            _lifecycleGate.Dispose();
+            // The gates intentionally remain undisposed: an uncooperative timed-out handler may
+            // complete later and must still be able to release its bounded request permit safely.
         }
 
-        private sealed class RequestTooLargeException : Exception { }
-        private sealed class HandlerTimeoutException : Exception { }
+        private sealed class RequestPermit : IDisposable
+        {
+            private SemaphoreSlim _slots;
+
+            public RequestPermit(SemaphoreSlim slots) { _slots = slots; }
+
+            public void Dispose()
+            {
+                var slots = Interlocked.Exchange(ref _slots, null);
+                slots?.Release();
+            }
+        }
     }
 }

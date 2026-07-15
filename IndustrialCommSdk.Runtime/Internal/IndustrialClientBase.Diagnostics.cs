@@ -168,6 +168,47 @@ namespace IndustrialCommSdk.Runtime
             await AwaitWithCancellation(WrapTask(task), cancellationToken).ConfigureAwait(false);
         }
 
+        private bool RetainOperationLockUntilCoreCompletes(Task coreTask, string operationName)
+        {
+            if (coreTask == null)
+                return false;
+
+            coreTask.ContinueWith(
+                completed =>
+                {
+                    try
+                    {
+                        if (completed.IsFaulted)
+                        {
+                            var aggregate = completed.Exception;
+                            var flattened = aggregate == null ? null : aggregate.Flatten();
+                            Exception error = flattened;
+                            if (flattened != null && flattened.InnerExceptions.Count == 1)
+                                error = flattened.InnerExceptions[0];
+
+                            _logger.Error(
+                                string.Format(
+                                    "Late {0} core task failed after its caller stopped waiting | Device={1} | Protocol={2}",
+                                    operationName,
+                                    DeviceId,
+                                    Kind),
+                                error);
+                        }
+                    }
+                    finally
+                    {
+                        // Ownership of the semaphore was transferred by the timed-out or
+                        // cancelled caller. Do not admit a new transport operation until the
+                        // non-cooperative core task has actually stopped touching the connection.
+                        _operationLock.Release();
+                    }
+                },
+                CancellationToken.None,
+                TaskContinuationOptions.ExecuteSynchronously,
+                TaskScheduler.Default);
+            return true;
+        }
+
         private static async Task<bool> WrapTask(Task task)
         {
             if (task == null) throw new ArgumentNullException(nameof(task));

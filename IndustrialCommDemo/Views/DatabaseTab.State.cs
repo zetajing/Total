@@ -10,8 +10,15 @@ namespace IndustrialCommDemo.Views
     {
         public void SaveState()
         {
-            _ctx.UiState.Database.ConnectionString = ConnectionStringTextBox.Text;
-            _ctx.UiState.Database.TableName = TableNameTextBox.Text;
+            SaveCurrentProviderDraft();
+            _ctx.UiState.Database.Provider = _selectedProvider;
+            _ctx.UiState.Database.SqlServerConnectionString = _sqlServerConnectionString;
+            _ctx.UiState.Database.SqlServerTableName = _sqlServerTableName;
+            _ctx.UiState.Database.MySqlConnectionString = _mySqlConnectionString;
+            _ctx.UiState.Database.MySqlTableName = _mySqlTableName;
+            // 保留旧字段，旧版 Demo 仍能读取 SQL Server 草稿。
+            _ctx.UiState.Database.ConnectionString = _sqlServerConnectionString;
+            _ctx.UiState.Database.TableName = _sqlServerTableName;
             _ctx.UiState.Database.QueryDeviceId = QueryDeviceComboBox.Text;
             _ctx.UiState.Database.QueryAddress = QueryAddressTextBox.Text;
             _ctx.UiState.Database.AddressContains = QueryContainsCheckBox.IsChecked == true;
@@ -28,8 +35,17 @@ namespace IndustrialCommDemo.Views
         private void ApplySavedState()
         {
             var state = _ctx.UiState.Database ?? new Services.DatabaseUiState();
-            ComboHelper.SetIfNotEmpty(ConnectionStringTextBox, state.ConnectionString);
-            ComboHelper.SetIfNotEmpty(TableNameTextBox, state.TableName);
+            _sqlServerConnectionString = FirstNonEmpty(state.SqlServerConnectionString, state.ConnectionString, DefaultSqlServerConnectionString);
+            _sqlServerTableName = FirstNonEmpty(state.SqlServerTableName, state.TableName, DefaultSqlServerTableName);
+            _mySqlConnectionString = FirstNonEmpty(state.MySqlConnectionString, DefaultMySqlConnectionString);
+            _mySqlTableName = FirstNonEmpty(state.MySqlTableName, DefaultMySqlTableName);
+            _selectedProvider = string.Equals(state.Provider, MySqlProvider, StringComparison.OrdinalIgnoreCase)
+                ? MySqlProvider
+                : SqlServerProvider;
+            _changingProvider = true;
+            ComboHelper.SelectComboBoxByTag(DatabaseProviderComboBox, _selectedProvider);
+            _changingProvider = false;
+            LoadSelectedProviderDraft();
             QueryDeviceComboBox.Text = state.QueryDeviceId ?? string.Empty;
             QueryAddressTextBox.Text = state.QueryAddress ?? string.Empty;
             QueryContainsCheckBox.IsChecked = state.AddressContains;
@@ -44,6 +60,47 @@ namespace IndustrialCommDemo.Views
                 { RetentionComboBox.SelectedItem = item; break; }
             EnabledCheckBox.IsChecked = false;
             StatusTextBlock.Text = "未启用";
+        }
+
+        private void DatabaseProviderComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (_changingProvider || ConnectionStringTextBox == null || TableNameTextBox == null) return;
+            SaveCurrentProviderDraft();
+            var selected = DatabaseProviderComboBox.SelectedItem as ComboBoxItem;
+            _selectedProvider = string.Equals(Convert.ToString(selected?.Tag), MySqlProvider, StringComparison.OrdinalIgnoreCase)
+                ? MySqlProvider
+                : SqlServerProvider;
+            LoadSelectedProviderDraft();
+        }
+
+        private void SaveCurrentProviderDraft()
+        {
+            if (ConnectionStringTextBox == null || TableNameTextBox == null) return;
+            if (_selectedProvider == MySqlProvider)
+            {
+                _mySqlConnectionString = ConnectionStringTextBox.Text;
+                _mySqlTableName = TableNameTextBox.Text;
+            }
+            else
+            {
+                _sqlServerConnectionString = ConnectionStringTextBox.Text;
+                _sqlServerTableName = TableNameTextBox.Text;
+            }
+        }
+
+        private void LoadSelectedProviderDraft()
+        {
+            var isMySql = _selectedProvider == MySqlProvider;
+            ConnectionStringTextBox.Text = isMySql ? _mySqlConnectionString : _sqlServerConnectionString;
+            TableNameTextBox.Text = isMySql ? _mySqlTableName : _sqlServerTableName;
+            ProviderHintTextBlock.Text = isMySql
+                ? "MySQL 支持 table 或 database.table，要求 MySQL 8.0+。ui-state.json 为明文，生产环境不要在连接字符串中持久化密码。"
+                : "SQL Server 使用 schema.table；建议使用 Windows 身份验证。";
+        }
+
+        private static string FirstNonEmpty(params string[] values)
+        {
+            return values.First(value => !string.IsNullOrWhiteSpace(value));
         }
 
         private static string GetComboTagText(ComboBox combo)

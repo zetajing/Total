@@ -106,6 +106,8 @@ namespace IndustrialCommSdk.Runtime
             if (request == null) throw new ArgumentNullException(nameof(request));
             ValidateDeviceId(request.DeviceId);
             await _operationLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+            var releaseOperationLock = true;
+            Task<DataValue> coreTask = null;
             try
             {
                 ThrowIfDisposed();
@@ -114,7 +116,8 @@ namespace IndustrialCommSdk.Runtime
                 {
                     try
                     {
-                        var value = await AwaitWithCancellation(ReadCoreAsync(request, operationCts.Token), operationCts.Token).ConfigureAwait(false);
+                        coreTask = ReadCoreAsync(request, operationCts.Token);
+                        var value = await AwaitWithCancellation(coreTask, operationCts.Token).ConfigureAwait(false);
                         RecordReadResult(value, stopwatch.ElapsedMilliseconds);
                         return value;
                     }
@@ -122,11 +125,15 @@ namespace IndustrialCommSdk.Runtime
                     {
                         var ex = new IndustrialTimeoutException("Industrial read operation timed out.");
                         HandleOperationTimeoutSafely();
+                        if (RetainOperationLockUntilCoreCompletes(coreTask, "read"))
+                            releaseOperationLock = false;
                         RecordFailure(ex, true, stopwatch.ElapsedMilliseconds);
                         return BadValue(request, ex.Message);
                     }
                     catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
                     {
+                        if (RetainOperationLockUntilCoreCompletes(coreTask, "read"))
+                            releaseOperationLock = false;
                         throw;
                     }
                     catch (Exception ex)
@@ -138,7 +145,8 @@ namespace IndustrialCommSdk.Runtime
             }
             finally
             {
-                _operationLock.Release();
+                if (releaseOperationLock)
+                    _operationLock.Release();
             }
         }
 
@@ -150,6 +158,8 @@ namespace IndustrialCommSdk.Runtime
             ValidateRequests(requests.Select(x => x.DeviceId));
 
             await _operationLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+            var releaseOperationLock = true;
+            Task<BatchReadResult> coreTask = null;
             try
             {
                 ThrowIfDisposed();
@@ -158,7 +168,8 @@ namespace IndustrialCommSdk.Runtime
                 {
                     try
                     {
-                        var result = await AwaitWithCancellation(ReadManyCoreAsync(requests, operationCts.Token), operationCts.Token).ConfigureAwait(false);
+                        coreTask = ReadManyCoreAsync(requests, operationCts.Token);
+                        var result = await AwaitWithCancellation(coreTask, operationCts.Token).ConfigureAwait(false);
                         RecordBatchResult(result, stopwatch.ElapsedMilliseconds);
                         return result;
                     }
@@ -166,11 +177,15 @@ namespace IndustrialCommSdk.Runtime
                     {
                         var ex = new IndustrialTimeoutException("Industrial batch read operation timed out.");
                         HandleOperationTimeoutSafely();
+                        if (RetainOperationLockUntilCoreCompletes(coreTask, "batch read"))
+                            releaseOperationLock = false;
                         RecordFailure(ex, true, stopwatch.ElapsedMilliseconds);
                         return CreateBadBatch(requests, ex.Message);
                     }
                     catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
                     {
+                        if (RetainOperationLockUntilCoreCompletes(coreTask, "batch read"))
+                            releaseOperationLock = false;
                         throw;
                     }
                     catch (Exception ex)
@@ -182,7 +197,8 @@ namespace IndustrialCommSdk.Runtime
             }
             finally
             {
-                _operationLock.Release();
+                if (releaseOperationLock)
+                    _operationLock.Release();
             }
         }
 
@@ -192,6 +208,8 @@ namespace IndustrialCommSdk.Runtime
             if (request == null) throw new ArgumentNullException(nameof(request));
             ValidateDeviceId(request.DeviceId);
             await _operationLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+            var releaseOperationLock = true;
+            Task coreTask = null;
             try
             {
                 ThrowIfDisposed();
@@ -200,18 +218,25 @@ namespace IndustrialCommSdk.Runtime
                 {
                     try
                     {
-                        await AwaitWithCancellation(WriteCoreAsync(request, operationCts.Token), operationCts.Token).ConfigureAwait(false);
+                        coreTask = WriteCoreAsync(request, operationCts.Token);
+                        await AwaitWithCancellation(coreTask, operationCts.Token).ConfigureAwait(false);
                         RecordSuccess(stopwatch.ElapsedMilliseconds);
                     }
                     catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
                     {
                         var ex = new IndustrialTimeoutException("Industrial write operation timed out.");
                         HandleOperationTimeoutSafely();
+                        if (RetainOperationLockUntilCoreCompletes(coreTask, "write"))
+                            releaseOperationLock = false;
                         RecordFailure(ex, true, stopwatch.ElapsedMilliseconds);
                         throw ex;
                     }
                     catch (Exception ex)
                     {
+                        var cancelled = ex as OperationCanceledException;
+                        if (cancelled != null && cancellationToken.IsCancellationRequested &&
+                            RetainOperationLockUntilCoreCompletes(coreTask, "write"))
+                            releaseOperationLock = false;
                         RecordFailure(ex, IsConnectionFailure(ex), stopwatch.ElapsedMilliseconds);
                         throw;
                     }
@@ -219,7 +244,8 @@ namespace IndustrialCommSdk.Runtime
             }
             finally
             {
-                _operationLock.Release();
+                if (releaseOperationLock)
+                    _operationLock.Release();
             }
         }
 
@@ -231,6 +257,8 @@ namespace IndustrialCommSdk.Runtime
             ValidateRequests(requests.Select(x => x.DeviceId));
 
             await _operationLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+            var releaseOperationLock = true;
+            Task coreTask = null;
             try
             {
                 ThrowIfDisposed();
@@ -239,18 +267,25 @@ namespace IndustrialCommSdk.Runtime
                 {
                     try
                     {
-                        await AwaitWithCancellation(WriteManyCoreAsync(requests, operationCts.Token), operationCts.Token).ConfigureAwait(false);
+                        coreTask = WriteManyCoreAsync(requests, operationCts.Token);
+                        await AwaitWithCancellation(coreTask, operationCts.Token).ConfigureAwait(false);
                         RecordSuccess(stopwatch.ElapsedMilliseconds);
                     }
                     catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
                     {
                         var ex = new IndustrialTimeoutException("Industrial batch write operation timed out.");
                         HandleOperationTimeoutSafely();
+                        if (RetainOperationLockUntilCoreCompletes(coreTask, "batch write"))
+                            releaseOperationLock = false;
                         RecordFailure(ex, true, stopwatch.ElapsedMilliseconds);
                         throw ex;
                     }
                     catch (Exception ex)
                     {
+                        var cancelled = ex as OperationCanceledException;
+                        if (cancelled != null && cancellationToken.IsCancellationRequested &&
+                            RetainOperationLockUntilCoreCompletes(coreTask, "batch write"))
+                            releaseOperationLock = false;
                         RecordFailure(ex, IsConnectionFailure(ex), stopwatch.ElapsedMilliseconds);
                         throw;
                     }
@@ -258,7 +293,8 @@ namespace IndustrialCommSdk.Runtime
             }
             finally
             {
-                _operationLock.Release();
+                if (releaseOperationLock)
+                    _operationLock.Release();
             }
         }
 
