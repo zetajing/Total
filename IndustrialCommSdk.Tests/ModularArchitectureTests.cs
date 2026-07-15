@@ -12,6 +12,7 @@ using IndustrialCommSdk.Protocols.Redis;
 using IndustrialCommSdk.Protocols.S7;
 using IndustrialCommSdk.Runtime;
 using IndustrialCommSdk.Storage;
+using IndustrialCommSdk.Storage.MySql;
 using Newtonsoft.Json;
 using NUnit.Framework;
 
@@ -44,6 +45,7 @@ namespace IndustrialCommSdk.Tests
 
         [TestCase(typeof(IndustrialConfiguredClient), "IndustrialCommSdk.Runtime")]
         [TestCase(typeof(BufferedIndustrialDataRecorder), "IndustrialCommSdk.Storage")]
+        [TestCase(typeof(MySqlIndustrialDataStore), "IndustrialCommSdk.Storage.MySql")]
         public void ModulePublicTypes_StayInsideTheAssemblyNamespace(Type representativeType, string expectedNamespace)
         {
             var misplaced = representativeType.Assembly.GetExportedTypes()
@@ -150,6 +152,48 @@ namespace IndustrialCommSdk.Tests
                 Assert.That(references.Intersect(allDrivers).Except(owner.Value), Is.Empty,
                     owner.Key.Assembly.GetName().Name + " 引用了其他协议的第三方驱动。");
             }
+        }
+
+        [Test]
+        public void MySqlConnector_IsReferencedOnlyByTheMySqlStorageProvider()
+        {
+            var providerReferences = typeof(MySqlIndustrialDataStore).Assembly
+                .GetReferencedAssemblies().Select(item => item.Name).ToArray();
+
+            CollectionAssert.Contains(providerReferences, "MySqlConnector");
+            CollectionAssert.Contains(providerReferences, "IndustrialCommSdk.Storage");
+            CollectionAssert.DoesNotContain(providerReferences, "IndustrialCommSdk");
+
+            var nonOwners = new[]
+            {
+                typeof(IndustrialSdk).Assembly,
+                typeof(IndustrialConfiguredClient).Assembly,
+                typeof(SqlServerIndustrialDataStore).Assembly,
+                typeof(ModbusTcpClient).Assembly,
+                typeof(SiemensS7Client).Assembly,
+                typeof(MitsubishiMcClient).Assembly,
+                typeof(OpcUaClient).Assembly,
+                typeof(MqttClient).Assembly,
+                typeof(RedisClient).Assembly,
+            }.Distinct();
+            foreach (var assembly in nonOwners)
+            {
+                CollectionAssert.DoesNotContain(
+                    assembly.GetReferencedAssemblies().Select(item => item.Name).ToArray(),
+                    "MySqlConnector",
+                    assembly.GetName().Name + " 不应直接引用 MySQL 驱动。");
+            }
+        }
+
+        [Test]
+        public void Redis_RemainsIndependentFromRelationalHistoryStorage()
+        {
+            var references = typeof(RedisClient).Assembly
+                .GetReferencedAssemblies().Select(item => item.Name).ToArray();
+
+            CollectionAssert.DoesNotContain(references, "IndustrialCommSdk.Storage");
+            CollectionAssert.DoesNotContain(references, "IndustrialCommSdk.Storage.MySql");
+            Assert.IsFalse(typeof(IIndustrialHistoryStore).IsAssignableFrom(typeof(RedisClient)));
         }
 
         private static IEnumerable<TestCaseData> ValidSettings()

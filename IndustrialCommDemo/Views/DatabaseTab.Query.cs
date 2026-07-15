@@ -112,7 +112,7 @@ namespace IndustrialCommDemo.Views
             catch (Exception ex) { _ctx.HandleError("清理历史数据失败。", ex, true); }
         }
 
-        private SqlServerIndustrialDataStore RequireManagementStore()
+        private IIndustrialHistoryStore RequireManagementStore()
         {
             if (_managementStore == null) throw new InvalidOperationException("请先测试并启用数据库连接。");
             return _managementStore;

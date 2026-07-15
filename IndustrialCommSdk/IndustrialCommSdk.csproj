@@ -18,5 +18,6 @@
     <ProjectReference Include="..\IndustrialCommSdk.Protocols.Redis\IndustrialCommSdk.Protocols.Redis.csproj" />
     <ProjectReference Include="..\IndustrialCommSdk.Mes.Http\IndustrialCommSdk.Mes.Http.csproj" />
     <ProjectReference Include="..\IndustrialCommSdk.Storage\IndustrialCommSdk.Storage.csproj" />
+    <ProjectReference Include="..\IndustrialCommSdk.Storage.MySql\IndustrialCommSdk.Storage.MySql.csproj" />
   </ItemGroup>
 </Project>

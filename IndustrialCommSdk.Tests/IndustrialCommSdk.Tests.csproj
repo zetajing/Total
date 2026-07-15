@@ -13,5 +13,6 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\IndustrialCommSdk\IndustrialCommSdk.csproj" />
+    <ProjectReference Include="..\IndustrialCommSdk.Storage.MySql\IndustrialCommSdk.Storage.MySql.csproj" />
   </ItemGroup>
 </Project>

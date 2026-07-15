@@ -14,7 +14,8 @@ using IndustrialCommSdk.Diagnostics;
 namespace IndustrialCommSdk.Storage
 {
     public sealed partial class SqlServerIndustrialDataStore
-    {        private static void ValidateFilter(HistoryQueryFilter filter)
+    {
+        private static void ValidateFilter(HistoryQueryFilter filter)
         {
             if (filter.FromTime.HasValue && filter.ToTime.HasValue && filter.FromTime.Value > filter.ToTime.Value)
                 throw new ArgumentException("开始时间不能晚于结束时间。", nameof(filter));
@@ -53,9 +54,10 @@ namespace IndustrialCommSdk.Storage
         private static IndustrialDataRecord ReadRecord(SqlDataReader reader)
         {
             ProtocolKind protocol; DataType dataType; QualityStatus quality;
-            Enum.TryParse(reader.GetString(1), true, out protocol); Enum.TryParse(reader.GetString(4), true, out dataType); Enum.TryParse(reader.GetString(6), true, out quality);
+            Enum.TryParse(reader.GetString(1), true, out protocol); Enum.TryParse(reader.GetString(4), true, out dataType); Enum.TryParse(reader.GetString(7), true, out quality);
             return new IndustrialDataRecord { Id = reader.GetInt64(0), Protocol = protocol, DeviceId = reader.GetString(2), Address = reader.GetString(3), DataType = dataType,
-                ValueText = reader.IsDBNull(5) ? null : reader.GetString(5), Quality = quality, Timestamp = reader.GetDateTimeOffset(7), ErrorMessage = reader.IsDBNull(8) ? null : reader.GetString(8) };
+                ValueText = reader.IsDBNull(5) ? null : reader.GetString(5), RawData = reader.IsDBNull(6) ? null : (byte[])reader.GetValue(6),
+                Quality = quality, Timestamp = reader.GetDateTimeOffset(8), ErrorMessage = reader.IsDBNull(9) ? null : reader.GetString(9) };
         }
 
         /// <inheritdoc />
@@ -89,27 +91,7 @@ namespace IndustrialCommSdk.Storage
                 using (var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false))
                 {
                     while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
-                    {
-                        ProtocolKind protocol;
-                        DataType dataType;
-                        QualityStatus quality;
-                        Enum.TryParse(reader.GetString(1), true, out protocol);
-                        Enum.TryParse(reader.GetString(4), true, out dataType);
-                        Enum.TryParse(reader.GetString(6), true, out quality);
-
-                        records.Add(new IndustrialDataRecord
-                        {
-                            Id = reader.GetInt64(0),
-                            Protocol = protocol,
-                            DeviceId = reader.GetString(2),
-                            Address = reader.GetString(3),
-                            DataType = dataType,
-                            ValueText = reader.IsDBNull(5) ? null : reader.GetString(5),
-                            Quality = quality,
-                            Timestamp = reader.GetDateTimeOffset(7),
-                            ErrorMessage = reader.IsDBNull(8) ? null : reader.GetString(8),
-                        });
-                    }
+                        records.Add(ReadRecord(reader));
                 }
             }
 
@@ -200,4 +182,3 @@ namespace IndustrialCommSdk.Storage
         }
     }
 }
-

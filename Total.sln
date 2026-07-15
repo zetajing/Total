@@ -37,6 +37,13 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "protocols", "protocols", "{
 		docs\protocols\siemens-s7.md = docs\protocols\siemens-s7.md
 	EndProjectSection
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "storage", "storage", "{C4E8E684-1C52-4F3B-A4C9-2B1965E6D810}"
+	ProjectSection(SolutionItems) = preProject
+		docs\storage\mysql.md = docs\storage\mysql.md
+		docs\storage\README.md = docs\storage\README.md
+		docs\storage\sql-server.md = docs\storage\sql-server.md
+	EndProjectSection
+EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "IndustrialCommSdk.Abstractions", "IndustrialCommSdk.Abstractions\IndustrialCommSdk.Abstractions.csproj", "{9472CF83-CD65-4CD3-818E-B73CB5F5FD18}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "IndustrialCommSdk.Runtime", "IndustrialCommSdk.Runtime\IndustrialCommSdk.Runtime.csproj", "{30F10465-5896-4D89-916C-A7E3CD27929E}"
@@ -60,6 +67,8 @@ EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "IndustrialCommSdk.Mes.Http", "IndustrialCommSdk.Mes.Http\IndustrialCommSdk.Mes.Http.csproj", "{2F51C3AC-0C8F-4F37-955E-0ED25DB04105}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "IndustrialCommSdk.Storage", "IndustrialCommSdk.Storage\IndustrialCommSdk.Storage.csproj", "{A2EB7EF7-2676-49CA-A43B-EBF62483DE06}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "IndustrialCommSdk.Storage.MySql", "IndustrialCommSdk.Storage.MySql\IndustrialCommSdk.Storage.MySql.csproj", "{8D41ED64-F046-4259-8942-62C2B4F4E210}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -263,12 +272,25 @@ Global
 		{A2EB7EF7-2676-49CA-A43B-EBF62483DE06}.Release|x64.Build.0 = Release|Any CPU
 		{A2EB7EF7-2676-49CA-A43B-EBF62483DE06}.Release|x86.ActiveCfg = Release|Any CPU
 		{A2EB7EF7-2676-49CA-A43B-EBF62483DE06}.Release|x86.Build.0 = Release|Any CPU
+		{8D41ED64-F046-4259-8942-62C2B4F4E210}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{8D41ED64-F046-4259-8942-62C2B4F4E210}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{8D41ED64-F046-4259-8942-62C2B4F4E210}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{8D41ED64-F046-4259-8942-62C2B4F4E210}.Debug|x64.Build.0 = Debug|Any CPU
+		{8D41ED64-F046-4259-8942-62C2B4F4E210}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{8D41ED64-F046-4259-8942-62C2B4F4E210}.Debug|x86.Build.0 = Debug|Any CPU
+		{8D41ED64-F046-4259-8942-62C2B4F4E210}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{8D41ED64-F046-4259-8942-62C2B4F4E210}.Release|Any CPU.Build.0 = Release|Any CPU
+		{8D41ED64-F046-4259-8942-62C2B4F4E210}.Release|x64.ActiveCfg = Release|Any CPU
+		{8D41ED64-F046-4259-8942-62C2B4F4E210}.Release|x64.Build.0 = Release|Any CPU
+		{8D41ED64-F046-4259-8942-62C2B4F4E210}.Release|x86.ActiveCfg = Release|Any CPU
+		{8D41ED64-F046-4259-8942-62C2B4F4E210}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{E97AB419-E80C-4540-8806-AC523E4E1C4B} = {5B8B6892-2BA5-4C6D-8A65-7B83872B9D1E}
+		{C4E8E684-1C52-4F3B-A4C9-2B1965E6D810} = {5B8B6892-2BA5-4C6D-8A65-7B83872B9D1E}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {70AC9ABF-FD0C-4404-9978-24B1239DE14B}

@@ -13,7 +13,7 @@ using IndustrialCommSdk.Diagnostics;
 
 namespace IndustrialCommSdk.Storage
 {
-    public sealed partial class SqlServerIndustrialDataStore : IIndustrialDataStore, IIndustrialHistoryManagementStore
+    public sealed partial class SqlServerIndustrialDataStore : IIndustrialHistoryStore
     {
         private readonly SqlServerDataStoreOptions _options;
         private readonly SqlTableIdentifier _table;
@@ -112,8 +112,8 @@ VALUES
                     }
                     catch
                     {
-                        // 任意一条失败就回滚本批次，然后把异常交给后台记录器决定是否重试。
-                        transaction.Rollback();
+                        // 保留原始写入/网络异常；连接已损坏时 Rollback 也可能失败。
+                        try { transaction.Rollback(); } catch { }
                         throw;
                     }
                 }
@@ -127,7 +127,7 @@ VALUES
                 string.Format(
                     CultureInfo.InvariantCulture,
                     @"SELECT TOP (@MaxRows)
-[Id], [Protocol], [DeviceId], [Address], [DataType], [ValueText], [Quality], [Timestamp], [ErrorMessage]
+[Id], [Protocol], [DeviceId], [Address], [DataType], [ValueText], [RawData], [Quality], [Timestamp], [ErrorMessage]
 FROM {0}
 ORDER BY [Id] DESC;",
                     _table.QuotedName),
@@ -147,7 +147,7 @@ ORDER BY [Id] DESC;",
                 string.Format(
                     CultureInfo.InvariantCulture,
                     @"SELECT TOP (@MaxRows)
-[Id], [Protocol], [DeviceId], [Address], [DataType], [ValueText], [Quality], [Timestamp], [ErrorMessage]
+[Id], [Protocol], [DeviceId], [Address], [DataType], [ValueText], [RawData], [Quality], [Timestamp], [ErrorMessage]
 FROM {0}
 WHERE [Id] > @AfterId
 ORDER BY [Id] ASC;",
@@ -160,4 +160,3 @@ ORDER BY [Id] ASC;",
         /// <inheritdoc />
     }
 }
-

@@ -44,7 +44,7 @@ namespace IndustrialCommSdk.Storage
     /// <summary>
     /// 把通信线程产生的读取结果放入有界队列，再由单独后台任务批量写库。
     /// <para>完整数据流如下：</para>
-    /// <para>PLC 读取回调 → <see cref="TryRecord"/> 快速入队 → 后台任务合并批次 → SQL Server。</para>
+    /// <para>PLC 读取回调 → <see cref="TryRecord"/> 快速入队 → 后台任务合并批次 → 配置的数据库。</para>
     /// <para>
     /// 这种结构叫“生产者/消费者”：通信线程是生产者，数据库线程是消费者。
     /// 数据库变慢或短暂断线时不会阻塞设备通信；队列满时会丢弃最新批次并记录警告，
@@ -289,4 +289,3 @@ namespace IndustrialCommSdk.Storage
         }
     }
 }
-

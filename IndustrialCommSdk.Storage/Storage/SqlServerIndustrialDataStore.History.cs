@@ -38,7 +38,7 @@ namespace IndustrialCommSdk.Storage
             var sql = string.Format(
                 CultureInfo.InvariantCulture,
                 @"SELECT TOP (@MaxRows)
-[Id], [Protocol], [DeviceId], [Address], [DataType], [ValueText], [Quality], [Timestamp], [ErrorMessage]
+[Id], [Protocol], [DeviceId], [Address], [DataType], [ValueText], [RawData], [Quality], [Timestamp], [ErrorMessage]
 FROM {0}
 {1}
 ORDER BY [Timestamp] DESC;",
@@ -64,25 +64,7 @@ ORDER BY [Timestamp] DESC;",
                 {
                     while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
                     {
-                        ProtocolKind protocol;
-                        DataType dataType;
-                        QualityStatus quality;
-                        Enum.TryParse(reader.GetString(1), true, out protocol);
-                        Enum.TryParse(reader.GetString(4), true, out dataType);
-                        Enum.TryParse(reader.GetString(6), true, out quality);
-
-                        records.Add(new IndustrialDataRecord
-                        {
-                            Id = reader.GetInt64(0),
-                            Protocol = protocol,
-                            DeviceId = reader.GetString(2),
-                            Address = reader.GetString(3),
-                            DataType = dataType,
-                            ValueText = reader.IsDBNull(5) ? null : reader.GetString(5),
-                            Quality = quality,
-                            Timestamp = reader.GetDateTimeOffset(7),
-                            ErrorMessage = reader.IsDBNull(8) ? null : reader.GetString(8),
-                        });
+                        records.Add(ReadRecord(reader));
                     }
                 }
             }
@@ -143,33 +125,46 @@ ORDER BY [Timestamp] DESC;",
                 throw new ArgumentOutOfRangeException(nameof(request.PageSize));
 
             var where = BuildWhereClause(filter);
-            var countSql = string.Format(CultureInfo.InvariantCulture, "SELECT COUNT_BIG(1) FROM {0} {1};", _table.QuotedName, where);
             var pageSql = string.Format(CultureInfo.InvariantCulture,
-                @"SELECT [Id], [Protocol], [DeviceId], [Address], [DataType], [ValueText], [Quality], [Timestamp], [ErrorMessage]
-FROM {0} {1}
-ORDER BY [Timestamp] DESC, [Id] DESC
-OFFSET @Offset ROWS FETCH NEXT @PageSize ROWS ONLY;", _table.QuotedName, where);
+                @"WITH [Filtered] AS
+(
+    SELECT [Id], ROW_NUMBER() OVER (ORDER BY [Timestamp] DESC, [Id] DESC) AS [RowNumber]
+    FROM {0} WITH (HOLDLOCK) {1}
+),
+[PageRows] AS
+(
+    SELECT [Id], [RowNumber] FROM [Filtered]
+    WHERE [RowNumber] > @Offset AND [RowNumber] <= (@Offset + @PageSize)
+),
+[Total] AS
+(
+    SELECT COUNT_BIG(1) AS [TotalCount] FROM [Filtered]
+)
+SELECT h.[Id], h.[Protocol], h.[DeviceId], h.[Address], h.[DataType], h.[ValueText], h.[RawData],
+       h.[Quality], h.[Timestamp], h.[ErrorMessage], t.[TotalCount]
+FROM [Total] AS t
+LEFT JOIN [PageRows] AS p ON 1 = 1
+LEFT JOIN {0} AS h ON h.[Id] = p.[Id]
+ORDER BY p.[RowNumber];", _table.QuotedName, where);
 
             using (var connection = new SqlConnection(_options.ConnectionString))
+            using (var command = new SqlCommand(pageSql, connection))
             {
+                command.CommandTimeout = _options.CommandTimeoutSeconds;
+                AddFilterParameters(command, filter);
+                command.Parameters.Add("@Offset", SqlDbType.BigInt).Value =
+                    checked((long)(request.PageNumber - 1) * request.PageSize);
+                command.Parameters.Add("@PageSize", SqlDbType.Int).Value = request.PageSize;
                 await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
-                long total;
-                using (var countCommand = new SqlCommand(countSql, connection))
-                {
-                    countCommand.CommandTimeout = _options.CommandTimeoutSeconds;
-                    AddFilterParameters(countCommand, filter);
-                    total = Convert.ToInt64(await countCommand.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false), CultureInfo.InvariantCulture);
-                }
-
                 var records = new List<IndustrialDataRecord>(request.PageSize);
-                using (var command = new SqlCommand(pageSql, connection))
+                long total = 0;
+                using (var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false))
                 {
-                    command.CommandTimeout = _options.CommandTimeoutSeconds;
-                    AddFilterParameters(command, filter);
-                    command.Parameters.Add("@Offset", SqlDbType.Int).Value = checked((request.PageNumber - 1) * request.PageSize);
-                    command.Parameters.Add("@PageSize", SqlDbType.Int).Value = request.PageSize;
-                    using (var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false))
-                        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false)) records.Add(ReadRecord(reader));
+                    while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+                    {
+                        total = reader.GetInt64(10);
+                        if (!reader.IsDBNull(0)) records.Add(ReadRecord(reader));
+                    }
                 }
                 return new HistoryPageResult { Records = records, TotalCount = total, PageNumber = request.PageNumber, PageSize = request.PageSize };
             }
@@ -223,10 +218,18 @@ MIN([Timestamp]), MAX([Timestamp]) FROM {0} {1};", _table.QuotedName, BuildWhere
             filter = filter ?? new HistoryQueryFilter(); ValidateFilter(filter);
             if (maxRows <= 0 || maxRows > 1000) throw new ArgumentOutOfRangeException(nameof(maxRows));
             var sql = string.Format(CultureInfo.InvariantCulture,
-                @"WITH Latest AS (SELECT [Id],[Protocol],[DeviceId],[Address],[DataType],[ValueText],[Quality],[Timestamp],[ErrorMessage],
-ROW_NUMBER() OVER(PARTITION BY [DeviceId],[Address] ORDER BY [Timestamp] DESC,[Id] DESC) AS rn FROM {0} {1})
-SELECT TOP (@MaxRows) [Id],[Protocol],[DeviceId],[Address],[DataType],[ValueText],[Quality],[Timestamp],[ErrorMessage]
-FROM Latest WHERE rn=1 ORDER BY [Timestamp] DESC,[Id] DESC;", _table.QuotedName, BuildWhereClause(filter));
+                @"WITH [Ranked] AS
+(
+    SELECT [Id], ROW_NUMBER() OVER
+        (PARTITION BY [DeviceId], [Address] ORDER BY [Timestamp] DESC, [Id] DESC) AS [rn]
+    FROM {0} {1}
+)
+SELECT TOP (@MaxRows) h.[Id], h.[Protocol], h.[DeviceId], h.[Address], h.[DataType], h.[ValueText],
+       h.[RawData], h.[Quality], h.[Timestamp], h.[ErrorMessage]
+FROM [Ranked] AS r
+INNER JOIN {0} AS h ON h.[Id] = r.[Id]
+WHERE r.[rn] = 1
+ORDER BY h.[Timestamp] DESC, h.[Id] DESC;", _table.QuotedName, BuildWhereClause(filter));
             var records = new List<IndustrialDataRecord>();
             using (var connection = new SqlConnection(_options.ConnectionString)) using (var command = new SqlCommand(sql, connection))
             { command.CommandTimeout = _options.CommandTimeoutSeconds; command.Parameters.Add("@MaxRows", SqlDbType.Int).Value = maxRows; AddFilterParameters(command, filter); await connection.OpenAsync(cancellationToken).ConfigureAwait(false); using (var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false)) while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false)) records.Add(ReadRecord(reader)); }
@@ -234,4 +237,3 @@ FROM Latest WHERE rn=1 ORDER BY [Timestamp] DESC,[Id] DESC;", _table.QuotedName,
         }
     }
 }
-

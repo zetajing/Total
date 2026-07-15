@@ -98,6 +98,11 @@ namespace IndustrialCommDemo.Services
             // 旧版本 ui-state.json 中没有 Database 字段。
             // 这里补默认对象，使升级后的 Demo 可以直接读取旧配置而不会出现空引用。
             state.Database = state.Database ?? new DatabaseUiState();
+            if (string.IsNullOrWhiteSpace(state.Database.Provider)) state.Database.Provider = "sqlserver";
+            if (string.IsNullOrWhiteSpace(state.Database.SqlServerConnectionString))
+                state.Database.SqlServerConnectionString = state.Database.ConnectionString;
+            if (string.IsNullOrWhiteSpace(state.Database.SqlServerTableName))
+                state.Database.SqlServerTableName = state.Database.TableName;
             state.Mes = state.Mes ?? new MesUiState();
 
             state.Modbus.RecentAddresses = state.Modbus.RecentAddresses ?? new List<string>();
@@ -138,7 +143,7 @@ namespace IndustrialCommDemo.Services
         [DataMember(Order = 4)]
         public ProtocolUiState Mc { get; set; } = new ProtocolUiState();
 
-        /// <summary>获取或设置可选的 SQL Server 历史存储配置。</summary>
+        /// <summary>获取或设置可选的 SQL Server / MySQL 历史存储配置。</summary>
         [DataMember(Order = 5)]
         public DatabaseUiState Database { get; set; } = new DatabaseUiState();
 
@@ -159,10 +164,10 @@ namespace IndustrialCommDemo.Services
     }
 
     /// <summary>
-    /// SQL Server 历史存储页面的非敏感配置。
+    /// SQL Server / MySQL 历史存储页面配置。
     /// <para>
-    /// 这里只保存连接字符串和表名，不保存“当前已连接”这种运行时状态。
-    /// Demo 默认使用 Windows 身份验证；如果改成 SQL 用户名/密码，密码也会成为连接字符串的一部分，
+    /// 这里保存两种提供程序的连接字符串草稿和表名，不保存“当前已连接”这种运行时状态。
+    /// 如果使用 SQL/MySQL 用户名和密码，密码会成为连接字符串的一部分，
     /// 因此生产环境应改用受保护的配置系统，而不是直接写入本地 JSON。
     /// </para>
     /// </summary>
@@ -170,12 +175,12 @@ namespace IndustrialCommDemo.Services
     public sealed class DatabaseUiState
     {
         /// <summary>
-        /// 获取或设置连接字符串。Demo 默认使用 Windows 身份验证；不要在此处保存 SQL 登录密码。
+        /// 获取或设置旧版 SQL Server 连接字符串，仅用于迁移。
         /// </summary>
         [DataMember(Order = 1)]
         public string ConnectionString { get; set; }
 
-        /// <summary>获取或设置历史表名。</summary>
+        /// <summary>获取或设置旧版 SQL Server 历史表名，仅用于迁移。</summary>
         [DataMember(Order = 2)]
         public string TableName { get; set; }
         [DataMember(Order = 3)] public string QueryDeviceId { get; set; }
@@ -188,6 +193,11 @@ namespace IndustrialCommDemo.Services
         [DataMember(Order = 10)] public string Protocol { get; set; }
         [DataMember(Order = 11)] public string DataType { get; set; }
         [DataMember(Order = 12)] public string Quality { get; set; }
+        [DataMember(Order = 13)] public string Provider { get; set; } = "sqlserver";
+        [DataMember(Order = 14)] public string SqlServerConnectionString { get; set; }
+        [DataMember(Order = 15)] public string SqlServerTableName { get; set; }
+        [DataMember(Order = 16)] public string MySqlConnectionString { get; set; }
+        [DataMember(Order = 17)] public string MySqlTableName { get; set; }
     }
 
     /// <summary>

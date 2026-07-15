@@ -169,7 +169,7 @@ namespace IndustrialCommSdk.Storage
     /// 工业采集数据存储接口。
     /// <para>
     /// 通过接口隔离后，通信模块只认识“保存历史数据”这一能力，并不知道底层是 SQL Server、
-    /// SQLite 还是测试用内存集合。最重要的是：存储实现不得参与 PLC 实时控制，数据库故障不能
+    /// MySQL 还是测试用内存集合。最重要的是：存储实现不得参与 PLC 实时控制，数据库故障不能
     /// 阻止设备通信、急停或联锁逻辑继续运行。
     /// </para>
     /// </summary>
@@ -196,6 +196,19 @@ namespace IndustrialCommSdk.Storage
         /// 按条件删除历史记录，返回实际删除的行数。
         /// </summary>
         Task<int> DeleteAsync(HistoryQueryFilter filter, CancellationToken cancellationToken);
+    }
+
+    /// <summary>
+    /// Demo 和历史管理页所需的完整存储能力。
+    /// SQL Server 与 MySQL 提供程序实现同一契约，调用方无需分支查询逻辑。
+    /// </summary>
+    public interface IIndustrialHistoryStore : IIndustrialDataStore, IIndustrialHistoryManagementStore
+    {
+        /// <summary>读取最新的若干条历史记录，按 Id 降序。</summary>
+        Task<IReadOnlyList<IndustrialDataRecord>> ReadLatestAsync(int maxRows, CancellationToken cancellationToken);
+
+        /// <summary>读取指定 Id 之后的记录，按 Id 升序，用于增量刷新。</summary>
+        Task<IReadOnlyList<IndustrialDataRecord>> ReadAfterAsync(long afterId, int maxRows, CancellationToken cancellationToken);
     }
 
     /// <summary>
@@ -245,4 +258,3 @@ namespace IndustrialCommSdk.Storage
     /// </para>
     /// </summary>
 }
-
