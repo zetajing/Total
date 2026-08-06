@@ -68,6 +68,9 @@
                             <TabItem Header="Mitsubishi MC">
                                 <views:MitsubishiMcTab x:Name="McControlTag" />
                             </TabItem>
+                            <TabItem Header="OPC UA">
+                                <views:OpcUaTab x:Name="OpcUaControlTag" />
+                            </TabItem>
                             <TabItem Header="Socket TCP">
                                 <views:SocketTcpTab x:Name="SocketControlTag" />
                             </TabItem>

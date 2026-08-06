@@ -48,6 +48,7 @@ namespace IndustrialCommDemo
             ModbusControlTag.Initialize(_ctx);
             S7ControlTag.Initialize(_ctx);
             McControlTag.Initialize(_ctx);
+            OpcUaControlTag.Initialize(_ctx);
             JsonConfigControlTag.Initialize(_ctx);
             SocketControlTag.Initialize(_ctx);
             MesControlTag.Initialize(_ctx);
@@ -82,6 +83,7 @@ namespace IndustrialCommDemo
                 await ModbusControlTag.ResetClientAsync();
                 await S7ControlTag.ResetClientAsync();
                 await McControlTag.ResetClientAsync();
+                await OpcUaControlTag.ResetClientAsync();
                 await SocketControlTag.ResetAllAsync();
                 await MesControlTag.ResetClientAsync();
                 await DatabaseControlTag.StopRecorderAsync();
@@ -108,6 +110,7 @@ namespace IndustrialCommDemo
             ModbusControlTag.SaveState();
             S7ControlTag.SaveState();
             McControlTag.SaveState();
+            OpcUaControlTag.SaveState();
             SocketControlTag.SaveState();
             MesControlTag.SaveState();
             DatabaseControlTag.SaveState();

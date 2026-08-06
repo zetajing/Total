@@ -104,10 +104,12 @@ namespace IndustrialCommDemo.Services
             if (string.IsNullOrWhiteSpace(state.Database.SqlServerTableName))
                 state.Database.SqlServerTableName = state.Database.TableName;
             state.Mes = state.Mes ?? new MesUiState();
+            state.OpcUa = state.OpcUa ?? new OpcUaUiState();
 
             state.Modbus.RecentAddresses = state.Modbus.RecentAddresses ?? new List<string>();
             state.S7.RecentAddresses = state.S7.RecentAddresses ?? new List<string>();
             state.Mc.RecentAddresses = state.Mc.RecentAddresses ?? new List<string>();
+            state.OpcUa.RecentAddresses = state.OpcUa.RecentAddresses ?? new List<string>();
             return state;
         }
     }
@@ -149,6 +151,10 @@ namespace IndustrialCommDemo.Services
 
         [DataMember(Order = 6)]
         public MesUiState Mes { get; set; } = new MesUiState();
+
+        /// <summary>OPC UA 联调页状态；密码不在此状态中保存。</summary>
+        [DataMember(Order = 7)]
+        public OpcUaUiState OpcUa { get; set; } = new OpcUaUiState();
     }
 
     /// <summary>MES HTTP JSON 联调页状态。</summary>
@@ -161,6 +167,25 @@ namespace IndustrialCommDemo.Services
         [DataMember(Order = 2)] public string RequestJson { get; set; }
         /// <summary>MES 主动推送 HTTP JSON 的本地接收配置。</summary>
         [DataMember(Order = 3)] public string ReceiverConfigJson { get; set; }
+    }
+
+    /// <summary>OPC UA Endpoint 和 NodeId 联调页状态。</summary>
+    [DataContract]
+    public sealed class OpcUaUiState
+    {
+        [DataMember(Order = 1)] public string DeviceId { get; set; }
+        [DataMember(Order = 2)] public string EndpointUrl { get; set; }
+        [DataMember(Order = 3)] public string Username { get; set; }
+        [DataMember(Order = 4)] public bool UseSecurity { get; set; }
+        [DataMember(Order = 5)] public bool AutoAcceptUntrustedCertificates { get; set; }
+        [DataMember(Order = 6)] public string ConnectTimeout { get; set; }
+        [DataMember(Order = 7)] public string OperationTimeout { get; set; }
+        [DataMember(Order = 8)] public string SessionTimeout { get; set; }
+        [DataMember(Order = 9)] public string Address { get; set; }
+        [DataMember(Order = 10)] public string DataType { get; set; }
+        [DataMember(Order = 11)] public string Length { get; set; }
+        [DataMember(Order = 12)] public string WriteValue { get; set; }
+        [DataMember(Order = 13)] public List<string> RecentAddresses { get; set; } = new List<string>();
     }
 
     /// <summary>
