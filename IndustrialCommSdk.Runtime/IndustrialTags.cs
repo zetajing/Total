@@ -9,7 +9,7 @@ namespace IndustrialCommSdk.Runtime
     public class IndustrialTag
     {
         /// <summary>创建一个非泛型点位定义。</summary>
-        public IndustrialTag(string address, DataType dataType, ushort length = 1, string name = null)
+        public IndustrialTag(string address, DataType dataType, ushort length = 1, string name = null, bool writable = false)
         {
             if (string.IsNullOrWhiteSpace(address)) throw new ArgumentException("Address cannot be null or empty.", nameof(address));
             if (length == 0) throw new ArgumentOutOfRangeException(nameof(length), "Length must be greater than zero.");
@@ -18,6 +18,7 @@ namespace IndustrialCommSdk.Runtime
             DataType = dataType;
             Length = length;
             Name = name;
+            Writable = writable;
         }
 
         /// <summary>获取协议地址。</summary>
@@ -28,6 +29,8 @@ namespace IndustrialCommSdk.Runtime
         public ushort Length { get; private set; }
         /// <summary>获取可选的业务名称。</summary>
         public string Name { get; private set; }
+        /// <summary>获取该点位是否允许通过远程网关写入；默认不允许。</summary>
+        public bool Writable { get; private set; }
 
         internal ReadRequest ToReadRequest(string deviceId)
         {
@@ -44,8 +47,8 @@ namespace IndustrialCommSdk.Runtime
     public sealed class IndustrialTag<T> : IndustrialTag
     {
         /// <summary>创建一个强类型点位定义。</summary>
-        public IndustrialTag(string address, DataType dataType, ushort length = 1, string name = null)
-            : base(address, dataType, length, name)
+        public IndustrialTag(string address, DataType dataType, ushort length = 1, string name = null, bool writable = false)
+            : base(address, dataType, length, name, writable)
         {
         }
 

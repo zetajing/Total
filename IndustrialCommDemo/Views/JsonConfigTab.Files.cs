@@ -136,7 +136,16 @@ namespace IndustrialCommDemo.Views
             var table = TagTable.FromJson(PointJsonTextBox.Text);
             _pointRows.Clear();
             foreach (var tag in table.Tags)
-                _pointRows.Add(new PointEditorRow { Name = tag.Name, Address = tag.Address, Type = tag.DataType.ToString(), Length = tag.Length });
+            {
+                _pointRows.Add(new PointEditorRow
+                {
+                    Name = tag.Name,
+                    Address = tag.Address,
+                    Type = tag.DataType.ToString(),
+                    Length = tag.Length,
+                    Writable = tag.Writable,
+                });
+            }
         }
 
         private void ApplyPointRowsToJson()
@@ -152,7 +161,12 @@ namespace IndustrialCommDemo.Views
                 DataType dataType;
                 if (!Enum.TryParse(row.Type, true, out dataType)) throw new InvalidOperationException("不支持的点位类型：" + row.Type);
                 if (row.Length == 0) throw new InvalidOperationException("点位长度必须大于 0：" + name);
-                tags.Add(new IndustrialTag(RequireText(row.Address, "点位地址不能为空。"), dataType, row.Length, name));
+                tags.Add(new IndustrialTag(
+                    RequireText(row.Address, "点位地址不能为空。"),
+                    dataType,
+                    row.Length,
+                    name,
+                    row.Writable));
             }
             if (tags.Count == 0) throw new InvalidOperationException("点位表至少需要一个点位。");
             PointJsonTextBox.Text = new TagTable(tags).ToJson();
@@ -194,6 +208,7 @@ namespace IndustrialCommDemo.Views
             public string Address { get; set; }
             public string Type { get; set; } = DataType.Int16.ToString();
             public ushort Length { get; set; } = 1;
+            public bool Writable { get; set; }
         }
     }
 }

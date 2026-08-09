@@ -108,6 +108,7 @@ namespace IndustrialCommSdk.Runtime
                     Address = tag.Address,
                     Type = tag.DataType.ToString(),
                     Length = tag.Length == 1 ? (ushort?)null : tag.Length,
+                    Writable = tag.Writable ? (bool?)true : null,
                 }).ToList(),
             };
 
@@ -164,7 +165,8 @@ namespace IndustrialCommSdk.Runtime
                     GetCell(row, headers, "Address", true),
                     GetCell(row, headers, "Type", true),
                     GetCell(row, headers, "Length", false),
-                    GetCell(row, headers, "Name", false)));
+                    GetCell(row, headers, "Name", false),
+                    GetCell(row, headers, "Writable", false)));
             }
 
             return new TagTable(tags);
@@ -213,13 +215,13 @@ namespace IndustrialCommSdk.Runtime
                     continue;
                 }
 
-                tags.Add(CreateTag(tag.Address, tag.Type, tag.Length, tag.Name));
+                tags.Add(CreateTag(tag.Address, tag.Type, tag.Length, tag.Name, tag.Writable.GetValueOrDefault()));
             }
 
             return new TagTable(tags);
         }
 
-        private static IndustrialTag CreateTag(string address, string type, string length, string name)
+        private static IndustrialTag CreateTag(string address, string type, string length, string name, string writable)
         {
             ushort parsedLength;
             if (string.IsNullOrWhiteSpace(length))
@@ -231,12 +233,38 @@ namespace IndustrialCommSdk.Runtime
                 throw new FormatException(string.Format("Invalid tag length: {0}", length));
             }
 
-            return new IndustrialTag(address, ParseDataType(type), parsedLength, string.IsNullOrWhiteSpace(name) ? null : name);
+            return new IndustrialTag(
+                address,
+                ParseDataType(type),
+                parsedLength,
+                string.IsNullOrWhiteSpace(name) ? null : name,
+                ParseWritable(writable));
         }
 
-        private static IndustrialTag CreateTag(string address, string type, ushort? length, string name)
+        private static IndustrialTag CreateTag(string address, string type, ushort? length, string name, bool writable)
         {
-            return new IndustrialTag(address, ParseDataType(type), length.GetValueOrDefault(1), string.IsNullOrWhiteSpace(name) ? null : name);
+            return new IndustrialTag(
+                address,
+                ParseDataType(type),
+                length.GetValueOrDefault(1),
+                string.IsNullOrWhiteSpace(name) ? null : name,
+                writable);
+        }
+
+        private static bool ParseWritable(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value)) return false;
+            var normalized = value.Trim();
+            if (string.Equals(normalized, "1", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(normalized, "yes", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(normalized, "y", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            bool parsed;
+            if (bool.TryParse(normalized, out parsed)) return parsed;
+            throw new FormatException("Invalid tag writable value: " + value);
         }
 
         private static DataType ParseDataType(string type)
@@ -417,6 +445,9 @@ namespace IndustrialCommSdk.Runtime
 
             [DataMember(Name = "length", EmitDefaultValue = false)]
             public ushort? Length { get; set; }
+
+            [DataMember(Name = "writable", EmitDefaultValue = false)]
+            public bool? Writable { get; set; }
         }
     }
 }
