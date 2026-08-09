@@ -21,7 +21,11 @@ namespace IndustrialCommSdk.Protocols.Mqtt
         public int QualityOfService { get; set; } = 1;
         public bool RetainTelemetry { get; set; } = true;
         public int MaxCommandItems { get; set; } = 200;
+        public int MaxCommandPayloadBytes { get; set; } = 64 * 1024;
+        public int MaxPendingWorkItems { get; set; } = 256;
+        public int MaxConcurrentCommands { get; set; } = 4;
         public TimeSpan HeartbeatInterval { get; set; } = TimeSpan.FromSeconds(15);
+        public TimeSpan ShutdownTimeout { get; set; } = TimeSpan.FromSeconds(3);
     }
 
     public interface IMqttTagGatewayBridge : IDisposable
@@ -41,11 +45,9 @@ namespace IndustrialCommSdk.Protocols.Mqtt
         private readonly SemaphoreSlim _lifecycleGate = new SemaphoreSlim(1, 1);
         private readonly ConcurrentDictionary<string, string> _valueSignatures =
             new ConcurrentDictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        private readonly ConcurrentDictionary<int, Task> _work = new ConcurrentDictionary<int, Task>();
         private readonly JsonSerializerSettings _jsonSettings;
-        private CancellationTokenSource _stopSource;
+        private WorkRun _run;
         private Task _heartbeatTask;
-        private int _nextWorkId;
         private int _running;
         private int _disposed;
 
@@ -57,7 +59,7 @@ namespace IndustrialCommSdk.Protocols.Mqtt
         {
             _broker = broker ?? throw new ArgumentNullException(nameof(broker));
             _gateway = gateway ?? throw new ArgumentNullException(nameof(gateway));
-            _options = options ?? new MqttTagGatewayOptions();
+            _options = CloneOptions(options ?? new MqttTagGatewayOptions());
             _logger = logger ?? NullIndustrialLogger.Instance;
             ValidateOptions(_options);
             _jsonSettings = new JsonSerializerSettings
@@ -73,6 +75,7 @@ namespace IndustrialCommSdk.Protocols.Mqtt
 
         public async Task StartAsync(CancellationToken cancellationToken)
         {
+            WorkRun run;
             ThrowIfDisposed();
             await _lifecycleGate.WaitAsync(cancellationToken).ConfigureAwait(false);
             try
@@ -81,40 +84,38 @@ namespace IndustrialCommSdk.Protocols.Mqtt
                 if (IsRunning) return;
                 if (!_broker.IsRunning) throw new InvalidOperationException("The MQTT broker must be running before the Tag gateway bridge starts.");
 
-                _stopSource = new CancellationTokenSource();
+                run = new WorkRun(_options.MaxConcurrentCommands);
+                _run = run;
                 _broker.MessageReceived += BrokerOnMessageReceived;
                 _gateway.ValuesChanged += GatewayOnValuesChanged;
                 _gateway.DeviceStateChanged += GatewayOnDeviceStateChanged;
                 Volatile.Write(ref _running, 1);
-                _heartbeatTask = HeartbeatLoopAsync(_stopSource.Token);
-                try
-                {
-                    await PublishSnapshotAsync(cancellationToken).ConfigureAwait(false);
-                    await PublishDeviceStatesAsync(cancellationToken).ConfigureAwait(false);
-                }
-                catch
-                {
-                    Volatile.Write(ref _running, 0);
-                    _broker.MessageReceived -= BrokerOnMessageReceived;
-                    _gateway.ValuesChanged -= GatewayOnValuesChanged;
-                    _gateway.DeviceStateChanged -= GatewayOnDeviceStateChanged;
-                    _stopSource.Cancel();
-                    await IgnoreFailureAsync(_heartbeatTask).ConfigureAwait(false);
-                    _stopSource.Dispose();
-                    _stopSource = null;
-                    _heartbeatTask = null;
-                    throw;
-                }
+                _heartbeatTask = HeartbeatLoopAsync(run.Token);
             }
             finally
             {
                 _lifecycleGate.Release();
             }
+
+            using (var startupCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, run.Token))
+            {
+                try
+                {
+                    await PublishSnapshotAsync(startupCancellation.Token).ConfigureAwait(false);
+                    await PublishDeviceStatesAsync(startupCancellation.Token).ConfigureAwait(false);
+                }
+                catch
+                {
+                    try { await StopAsync(CancellationToken.None).ConfigureAwait(false); }
+                    catch (ObjectDisposedException) when (Volatile.Read(ref _disposed) != 0) { }
+                    throw;
+                }
+            }
         }
 
         public async Task StopAsync(CancellationToken cancellationToken)
         {
-            CancellationTokenSource stopSource;
+            WorkRun run;
             Task heartbeat;
             await _lifecycleGate.WaitAsync(cancellationToken).ConfigureAwait(false);
             try
@@ -124,22 +125,36 @@ namespace IndustrialCommSdk.Protocols.Mqtt
                 _broker.MessageReceived -= BrokerOnMessageReceived;
                 _gateway.ValuesChanged -= GatewayOnValuesChanged;
                 _gateway.DeviceStateChanged -= GatewayOnDeviceStateChanged;
-                stopSource = _stopSource;
+                run = _run;
                 heartbeat = _heartbeatTask;
-                _stopSource = null;
+                _run = null;
                 _heartbeatTask = null;
-                stopSource.Cancel();
+                if (run != null) run.StopAccepting();
             }
             finally
             {
                 _lifecycleGate.Release();
             }
 
-            await IgnoreFailureAsync(heartbeat).ConfigureAwait(false);
-            var work = _work.Values.ToArray();
-            if (work.Length > 0) await IgnoreFailureAsync(Task.WhenAll(work)).ConfigureAwait(false);
-            stopSource.Dispose();
             _valueSignatures.Clear();
+            if (run != null) run.Cancel();
+
+            var tasks = new List<Task>();
+            if (heartbeat != null) tasks.Add(heartbeat);
+            if (run != null) tasks.AddRange(run.SnapshotWork());
+            var completion = IgnoreFailureAsync(Task.WhenAll(tasks));
+            if (run != null)
+            {
+                _ = completion.ContinueWith(
+                    completed => run.Dispose(),
+                    CancellationToken.None,
+                    TaskContinuationOptions.ExecuteSynchronously,
+                    TaskScheduler.Default);
+            }
+
+            if (!await WaitWithinAsync(completion, _options.ShutdownTimeout, cancellationToken).ConfigureAwait(false))
+                _logger.Warn(string.Format("MQTT Tag gateway shutdown timed out after {0} ms; detached work will finish in the background.",
+                    (long)_options.ShutdownTimeout.TotalMilliseconds));
         }
 
         public static bool IsClientPublishAllowed(string rootTopic, string clientId, string topic)
@@ -196,7 +211,23 @@ namespace IndustrialCommSdk.Protocols.Mqtt
         private void BrokerOnMessageReceived(object sender, MqttBrokerMessageReceivedEventArgs args)
         {
             if (!IsRunning || !TryParseRequestTopic(args.Topic, out var encodedClientId, out var operation)) return;
-            QueueWork(token => HandleCommandAsync(encodedClientId, operation, args.Payload, token));
+            if (string.IsNullOrWhiteSpace(args.ClientId) ||
+                !string.Equals(encodedClientId, EncodeSegment(args.ClientId), StringComparison.Ordinal))
+            {
+                _logger.Warn(string.Format("MQTT Tag gateway command rejected because the topic client does not match the connected client | Client={0} | Topic={1}",
+                    args.ClientId, args.Topic));
+                return;
+            }
+            var payloadLength = args.Payload == null ? 0 : args.Payload.Length;
+            if (payloadLength > _options.MaxCommandPayloadBytes)
+            {
+                _logger.Warn(string.Format("MQTT Tag gateway command rejected because its payload is too large | Client={0} | Bytes={1} | Limit={2}",
+                    args.ClientId, payloadLength, _options.MaxCommandPayloadBytes));
+                return;
+            }
+            if (!QueueWork(token => HandleCommandAsync(encodedClientId, operation, args.Payload, token)))
+                _logger.Warn(string.Format("MQTT Tag gateway command rejected because the work queue is full | Client={0} | Limit={1}",
+                    args.ClientId, _options.MaxPendingWorkItems));
         }
 
         private async Task HandleCommandAsync(string encodedClientId, string operation, byte[] payload, CancellationToken cancellationToken)
@@ -255,7 +286,7 @@ namespace IndustrialCommSdk.Protocols.Mqtt
 
         private void GatewayOnValuesChanged(object sender, TagGatewayValuesChangedEventArgs args)
         {
-            QueueWork(async token =>
+            if (!QueueWork(async token =>
             {
                 foreach (var value in args.Values)
                 {
@@ -267,17 +298,17 @@ namespace IndustrialCommSdk.Protocols.Mqtt
                     _valueSignatures[key] = signature;
                     await PublishValueAsync(value, false, token).ConfigureAwait(false);
                 }
-            });
+            })) _logger.Warn("MQTT Tag gateway value change was dropped because the work queue is full.");
         }
 
         private void GatewayOnDeviceStateChanged(object sender, TagGatewayDeviceStateChangedEventArgs args)
         {
-            QueueWork(token => PublishJsonAsync(
+            if (!QueueWork(token => PublishJsonAsync(
                 DeviceStateTopic(args.Device.Name),
                 new { type = "deviceState", device = args.Device, timestampUtc = DateTimeOffset.UtcNow },
                 _options.QualityOfService,
                 true,
-                token));
+                token))) _logger.Warn("MQTT Tag gateway device state change was dropped because the work queue is full.");
         }
 
         private Task PublishValueAsync(TagGatewayValue value, bool snapshot, CancellationToken cancellationToken)
@@ -349,23 +380,10 @@ namespace IndustrialCommSdk.Protocols.Mqtt
             return true;
         }
 
-        private void QueueWork(Func<CancellationToken, Task> action)
+        private bool QueueWork(Func<CancellationToken, Task> action)
         {
-            var stopSource = _stopSource;
-            if (!IsRunning || stopSource == null || stopSource.IsCancellationRequested) return;
-            var id = Interlocked.Increment(ref _nextWorkId);
-            var task = Task.Run(async () =>
-            {
-                try { await action(stopSource.Token).ConfigureAwait(false); }
-                catch (OperationCanceledException) when (stopSource.IsCancellationRequested) { }
-                catch (Exception ex) { _logger.Error("MQTT Tag gateway background operation failed.", ex); }
-            });
-            _work[id] = task;
-            _ = task.ContinueWith(
-                completed => { Task ignored; _work.TryRemove(id, out ignored); },
-                CancellationToken.None,
-                TaskContinuationOptions.ExecuteSynchronously,
-                TaskScheduler.Default);
+            var run = _run;
+            return IsRunning && run != null && run.TryQueue(action, _options.MaxPendingWorkItems, _logger);
         }
 
         private static string NormalizeCorrelationId(string value)
@@ -395,7 +413,46 @@ namespace IndustrialCommSdk.Protocols.Mqtt
             NormalizeRoot(options.RootTopic);
             if (options.QualityOfService < 0 || options.QualityOfService > 2) throw new ArgumentOutOfRangeException(nameof(options.QualityOfService));
             if (options.MaxCommandItems <= 0) throw new ArgumentOutOfRangeException(nameof(options.MaxCommandItems));
+            if (options.MaxCommandPayloadBytes <= 0) throw new ArgumentOutOfRangeException(nameof(options.MaxCommandPayloadBytes));
+            if (options.MaxPendingWorkItems <= 0) throw new ArgumentOutOfRangeException(nameof(options.MaxPendingWorkItems));
+            if (options.MaxConcurrentCommands <= 0 || options.MaxConcurrentCommands > options.MaxPendingWorkItems)
+                throw new ArgumentOutOfRangeException(nameof(options.MaxConcurrentCommands));
             if (options.HeartbeatInterval <= TimeSpan.Zero) throw new ArgumentOutOfRangeException(nameof(options.HeartbeatInterval));
+            if (options.ShutdownTimeout <= TimeSpan.Zero) throw new ArgumentOutOfRangeException(nameof(options.ShutdownTimeout));
+        }
+
+        private static MqttTagGatewayOptions CloneOptions(MqttTagGatewayOptions options)
+        {
+            return new MqttTagGatewayOptions
+            {
+                RootTopic = options.RootTopic,
+                QualityOfService = options.QualityOfService,
+                RetainTelemetry = options.RetainTelemetry,
+                MaxCommandItems = options.MaxCommandItems,
+                MaxCommandPayloadBytes = options.MaxCommandPayloadBytes,
+                MaxPendingWorkItems = options.MaxPendingWorkItems,
+                MaxConcurrentCommands = options.MaxConcurrentCommands,
+                HeartbeatInterval = options.HeartbeatInterval,
+                ShutdownTimeout = options.ShutdownTimeout,
+            };
+        }
+
+        private static async Task<bool> WaitWithinAsync(Task task, TimeSpan timeout, CancellationToken cancellationToken)
+        {
+            if (task.IsCompleted)
+            {
+                await task.ConfigureAwait(false);
+                return true;
+            }
+            var delay = Task.Delay(timeout, cancellationToken);
+            var completed = await Task.WhenAny(task, delay).ConfigureAwait(false);
+            if (completed == task)
+            {
+                await task.ConfigureAwait(false);
+                return true;
+            }
+            cancellationToken.ThrowIfCancellationRequested();
+            return false;
         }
 
         private static async Task IgnoreFailureAsync(Task task)
@@ -427,6 +484,79 @@ namespace IndustrialCommSdk.Protocols.Mqtt
             public string Device { get; set; }
             public string Tag { get; set; }
             public JToken Value { get; set; }
+        }
+
+        private sealed class WorkRun : IDisposable
+        {
+            private readonly object _sync = new object();
+            private readonly ConcurrentDictionary<int, Task> _work = new ConcurrentDictionary<int, Task>();
+            private readonly SemaphoreSlim _concurrency;
+            private readonly CancellationTokenSource _stopSource = new CancellationTokenSource();
+            private int _nextWorkId;
+            private bool _accepting = true;
+            private int _disposed;
+
+            public WorkRun(int maxConcurrency)
+            {
+                _concurrency = new SemaphoreSlim(maxConcurrency, maxConcurrency);
+            }
+
+            public CancellationToken Token { get { return _stopSource.Token; } }
+
+            public bool TryQueue(Func<CancellationToken, Task> action, int maxPendingWorkItems, IIndustrialLogger logger)
+            {
+                if (action == null) throw new ArgumentNullException(nameof(action));
+                lock (_sync)
+                {
+                    if (!_accepting || _work.Count >= maxPendingWorkItems) return false;
+                    var id = Interlocked.Increment(ref _nextWorkId);
+                    var task = Task.Run(async () =>
+                    {
+                        var entered = false;
+                        try
+                        {
+                            await _concurrency.WaitAsync(Token).ConfigureAwait(false);
+                            entered = true;
+                            await action(Token).ConfigureAwait(false);
+                        }
+                        catch (OperationCanceledException) when (Token.IsCancellationRequested) { }
+                        catch (Exception ex) { logger.Error("MQTT Tag gateway background operation failed.", ex); }
+                        finally
+                        {
+                            if (entered) _concurrency.Release();
+                        }
+                    });
+                    _work[id] = task;
+                    _ = task.ContinueWith(
+                        completed => { Task ignored; _work.TryRemove(id, out ignored); },
+                        CancellationToken.None,
+                        TaskContinuationOptions.ExecuteSynchronously,
+                        TaskScheduler.Default);
+                    return true;
+                }
+            }
+
+            public void StopAccepting()
+            {
+                lock (_sync) _accepting = false;
+            }
+
+            public void Cancel()
+            {
+                if (!_stopSource.IsCancellationRequested) _stopSource.Cancel();
+            }
+
+            public Task[] SnapshotWork()
+            {
+                lock (_sync) return _work.Values.ToArray();
+            }
+
+            public void Dispose()
+            {
+                if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
+                _concurrency.Dispose();
+                _stopSource.Dispose();
+            }
         }
     }
 }

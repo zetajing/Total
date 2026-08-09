@@ -43,6 +43,8 @@ namespace IndustrialCommSdk.Protocols.Mqtt
         public bool AutoReconnect { get; set; }
         public int ReconnectInitialDelayMilliseconds { get; set; } = 1000;
         public int ReconnectMaxDelayMilliseconds { get; set; } = 30000;
+        public int MaxApplicationMessagePayloadBytes { get; set; } = 1024 * 1024;
+        public int MaxCachedTopics { get; set; } = 10000;
         public string WillTopic { get; set; }
         public byte[] WillPayload { get; set; }
         public int WillQualityOfService { get; set; }
@@ -90,8 +92,10 @@ namespace IndustrialCommSdk.Protocols.Mqtt
         private readonly IMqttClient _client;
         private readonly string _clientId;
         private readonly ConcurrentDictionary<string, byte[]> _latest = new ConcurrentDictionary<string, byte[]>(StringComparer.Ordinal);
+        private readonly ConcurrentQueue<string> _cacheOrder = new ConcurrentQueue<string>();
         private readonly ConcurrentDictionary<string, TaskCompletionSource<byte[]>> _waiters = new ConcurrentDictionary<string, TaskCompletionSource<byte[]>>(StringComparer.Ordinal);
         private readonly ConcurrentDictionary<string, MqttQualityOfServiceLevel> _subscriptions = new ConcurrentDictionary<string, MqttQualityOfServiceLevel>(StringComparer.Ordinal);
+        private readonly object _cacheSync = new object();
         private readonly object _reconnectSync = new object();
         private CancellationTokenSource _reconnectCancellation = new CancellationTokenSource();
         private Task _reconnectTask = Task.CompletedTask;
@@ -102,11 +106,11 @@ namespace IndustrialCommSdk.Protocols.Mqtt
             : base(GetDeviceId(options), ProtocolKind.Mqtt, pollingScheduler ?? new PollingScheduler(logger),
                 logger ?? NullIndustrialLogger.Instance, options.OperationTimeoutMilliseconds)
         {
-            _options = options;
-            ValidateOptions(options);
-            _clientId = string.IsNullOrWhiteSpace(options.ClientId)
+            _options = CloneOptions(options);
+            ValidateOptions(_options);
+            _clientId = string.IsNullOrWhiteSpace(_options.ClientId)
                 ? "IndustrialCommSdk-" + Guid.NewGuid().ToString("N")
-                : options.ClientId;
+                : _options.ClientId;
             _client = new MqttFactory().CreateMqttClient();
             _client.ApplicationMessageReceivedAsync += OnMessageAsync;
             _client.DisconnectedAsync += OnDisconnectedAsync;
@@ -160,8 +164,18 @@ namespace IndustrialCommSdk.Protocols.Mqtt
             if (options.ReconnectInitialDelayMilliseconds <= 0 || options.ReconnectMaxDelayMilliseconds <= 0 ||
                 options.ReconnectInitialDelayMilliseconds > options.ReconnectMaxDelayMilliseconds)
                 throw new ArgumentOutOfRangeException(nameof(options), "Reconnect delays must be positive and the initial delay cannot exceed the maximum delay.");
+            if (options.MaxApplicationMessagePayloadBytes <= 0) throw new ArgumentOutOfRangeException(nameof(options.MaxApplicationMessagePayloadBytes));
+            if (options.MaxCachedTopics <= 0) throw new ArgumentOutOfRangeException(nameof(options.MaxCachedTopics));
             if (options.WillPayload != null && string.IsNullOrWhiteSpace(options.WillTopic))
                 throw new ArgumentException("WillTopic is required when a will payload is configured.", nameof(options));
+            if (options.TlsProtocols.HasValue)
+            {
+                var protocols = options.TlsProtocols.Value;
+                if ((protocols & (SslProtocols.Ssl2 | SslProtocols.Ssl3)) != 0)
+                    throw new ArgumentException("SSL 2.0 and SSL 3.0 are not permitted for MQTT TLS connections.", nameof(options));
+                if (protocols != SslProtocols.None && (protocols & SslProtocols.Tls12) == 0)
+                    throw new ArgumentException("MQTT TLS connections require TLS 1.2 or a system-default protocol set.", nameof(options));
+            }
         }
 
         protected override async Task ConnectCoreAsync(CancellationToken cancellationToken)
@@ -266,8 +280,8 @@ namespace IndustrialCommSdk.Protocols.Mqtt
                     AllowUntrustedCertificates = _options.AllowUntrustedCertificates,
                     IgnoreCertificateChainErrors = _options.IgnoreCertificateChainErrors,
                     IgnoreCertificateRevocationErrors = _options.IgnoreCertificateRevocationErrors,
+                    SslProtocol = _options.TlsProtocols ?? SslProtocols.Tls12,
                 };
-                if (_options.TlsProtocols.HasValue) tlsOptions.SslProtocol = _options.TlsProtocols.Value;
                 if (_options.CertificateValidationCallback != null)
                 {
                     tlsOptions.CertificateValidationHandler = args =>
@@ -316,8 +330,27 @@ namespace IndustrialCommSdk.Protocols.Mqtt
 
         private Task OnMessageAsync(MqttApplicationMessageReceivedEventArgs args)
         {
+            if (args.ApplicationMessage.PayloadSegment.Count > _options.MaxApplicationMessagePayloadBytes)
+            {
+                Logger.Warn(string.Format("MQTT message dropped because its payload is too large | Device={0} | Topic={1} | Bytes={2} | Limit={3}",
+                    DeviceId, args.ApplicationMessage.Topic, args.ApplicationMessage.PayloadSegment.Count,
+                    _options.MaxApplicationMessagePayloadBytes));
+                return Task.CompletedTask;
+            }
+
             var bytes = args.ApplicationMessage.PayloadSegment.ToArray();
-            _latest[args.ApplicationMessage.Topic] = bytes;
+            lock (_cacheSync)
+            {
+                if (!_latest.TryAdd(args.ApplicationMessage.Topic, bytes))
+                {
+                    _latest[args.ApplicationMessage.Topic] = bytes;
+                }
+                else
+                {
+                    _cacheOrder.Enqueue(args.ApplicationMessage.Topic);
+                    TrimCache();
+                }
+            }
             TaskCompletionSource<byte[]> waiter;
             if (_waiters.TryGetValue(args.ApplicationMessage.Topic, out waiter)) waiter.TrySetResult(bytes);
 
@@ -327,6 +360,49 @@ namespace IndustrialCommSdk.Protocols.Mqtt
                 (int)args.ApplicationMessage.QualityOfServiceLevel,
                 args.ApplicationMessage.Retain));
             return Task.CompletedTask;
+        }
+
+        private void TrimCache()
+        {
+            string topic;
+            byte[] ignored;
+            while (_latest.Count > _options.MaxCachedTopics && _cacheOrder.TryDequeue(out topic))
+                _latest.TryRemove(topic, out ignored);
+        }
+
+        private static MqttClientOptions CloneOptions(MqttClientOptions source)
+        {
+            return new MqttClientOptions
+            {
+                DeviceId = source.DeviceId,
+                Host = source.Host,
+                Port = source.Port,
+                ClientId = source.ClientId,
+                Username = source.Username,
+                Password = source.Password,
+                UseTls = source.UseTls,
+                TlsTargetHost = source.TlsTargetHost,
+                AllowUntrustedCertificates = source.AllowUntrustedCertificates,
+                IgnoreCertificateChainErrors = source.IgnoreCertificateChainErrors,
+                IgnoreCertificateRevocationErrors = source.IgnoreCertificateRevocationErrors,
+                TlsProtocols = source.TlsProtocols,
+                CertificateValidationCallback = source.CertificateValidationCallback,
+                QualityOfService = source.QualityOfService,
+                Retain = source.Retain,
+                ConnectTimeoutMilliseconds = source.ConnectTimeoutMilliseconds,
+                OperationTimeoutMilliseconds = source.OperationTimeoutMilliseconds,
+                KeepAliveSeconds = source.KeepAliveSeconds,
+                CleanSession = source.CleanSession,
+                AutoReconnect = source.AutoReconnect,
+                ReconnectInitialDelayMilliseconds = source.ReconnectInitialDelayMilliseconds,
+                ReconnectMaxDelayMilliseconds = source.ReconnectMaxDelayMilliseconds,
+                MaxApplicationMessagePayloadBytes = source.MaxApplicationMessagePayloadBytes,
+                MaxCachedTopics = source.MaxCachedTopics,
+                WillTopic = source.WillTopic,
+                WillPayload = source.WillPayload == null ? null : (byte[])source.WillPayload.Clone(),
+                WillQualityOfService = source.WillQualityOfService,
+                WillRetain = source.WillRetain,
+            };
         }
 
         private void ScheduleReconnect()
