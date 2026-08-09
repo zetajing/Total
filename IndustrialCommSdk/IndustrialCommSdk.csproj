@@ -17,6 +17,8 @@
     <ProjectReference Include="..\IndustrialCommSdk.Protocols.Mqtt\IndustrialCommSdk.Protocols.Mqtt.csproj" />
     <ProjectReference Include="..\IndustrialCommSdk.Protocols.Redis\IndustrialCommSdk.Protocols.Redis.csproj" />
     <ProjectReference Include="..\IndustrialCommSdk.Mes.Http\IndustrialCommSdk.Mes.Http.csproj" />
+    <ProjectReference Include="..\IndustrialCommSdk.Web\IndustrialCommSdk.Web.csproj" />
+    <ProjectReference Include="..\IndustrialCommSdk.FileTransfer.Ftp\IndustrialCommSdk.FileTransfer.Ftp.csproj" />
     <ProjectReference Include="..\IndustrialCommSdk.Storage\IndustrialCommSdk.Storage.csproj" />
     <ProjectReference Include="..\IndustrialCommSdk.Storage.MySql\IndustrialCommSdk.Storage.MySql.csproj" />
   </ItemGroup>
