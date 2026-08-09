@@ -3,11 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Net;
-using System.Net.Security;
 using System.Security.Authentication;
-using System.Security.Cryptography;
-using System.Security.Cryptography.X509Certificates;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using FluentFTP;
@@ -648,62 +644,12 @@ namespace IndustrialCommSdk.FileTransfer.Ftp
 
         private void ValidateCertificate(FtpSslValidationEventArgs args)
         {
-            if (args.PolicyErrors == SslPolicyErrors.None)
-            {
-                args.Accept = true;
-                return;
-            }
-
-            var expected = NormalizeThumbprint(_options.TrustedCertificateThumbprint);
-            string actual = null;
-            if (args.Certificate != null && expected != null)
-            {
-                if (expected.Length == 64)
-                {
-                    using (var sha256 = SHA256.Create())
-                        actual = ToHex(sha256.ComputeHash(args.Certificate.GetRawCertData()));
-                }
-                else
-                {
-                    actual = NormalizeThumbprint(args.Certificate.GetCertHashString());
-                }
-            }
-            args.Accept = !string.IsNullOrEmpty(expected) &&
-                !string.IsNullOrEmpty(actual) &&
-                ConstantTimeEquals(expected, actual);
+            args.Accept = FtpCertificateValidator.IsAccepted(
+                args.Certificate,
+                args.PolicyErrors,
+                _options.TrustedCertificateThumbprint);
             if (!args.Accept)
                 _logger.Warn("FTPS certificate validation failed: " + args.PolicyErrors);
-        }
-
-        private static bool ConstantTimeEquals(string left, string right)
-        {
-            var difference = left.Length ^ right.Length;
-            var length = Math.Max(left.Length, right.Length);
-            for (var index = 0; index < length; index++)
-            {
-                var a = index < left.Length ? left[index] : '\0';
-                var b = index < right.Length ? right[index] : '\0';
-                difference |= a ^ b;
-            }
-            return difference == 0;
-        }
-
-        private static string NormalizeThumbprint(string thumbprint)
-        {
-            if (string.IsNullOrWhiteSpace(thumbprint)) return string.Empty;
-            var result = new StringBuilder(thumbprint.Length);
-            foreach (var value in thumbprint)
-            {
-                if (char.IsWhiteSpace(value) || value == ':' || value == '-') continue;
-                if (!Uri.IsHexDigit(value)) return null;
-                result.Append(char.ToUpperInvariant(value));
-            }
-            return result.ToString();
-        }
-
-        private static string ToHex(byte[] value)
-        {
-            return BitConverter.ToString(value).Replace("-", string.Empty);
         }
 
         private static FtpEncryptionMode ToFluentEncryptionMode(FtpSecurityMode value)
@@ -740,7 +686,7 @@ namespace IndustrialCommSdk.FileTransfer.Ftp
                 throw new ArgumentOutOfRangeException(nameof(options.RetryAttempts));
             if ((options.SslProtocols & (SslProtocols.Ssl2 | SslProtocols.Ssl3)) != 0)
                 throw new ArgumentException("SSL 2.0 and SSL 3.0 are not permitted.", nameof(options));
-            var normalizedThumbprint = NormalizeThumbprint(options.TrustedCertificateThumbprint);
+            var normalizedThumbprint = FtpCertificateValidator.NormalizeThumbprint(options.TrustedCertificateThumbprint);
             if (!string.IsNullOrWhiteSpace(options.TrustedCertificateThumbprint) &&
                 (normalizedThumbprint == null || (normalizedThumbprint.Length != 40 && normalizedThumbprint.Length != 64)))
                 throw new ArgumentException("TrustedCertificateThumbprint must be a SHA-1 or SHA-256 hexadecimal certificate thumbprint.", nameof(options));
@@ -762,7 +708,7 @@ namespace IndustrialCommSdk.FileTransfer.Ftp
                 DataOperationTimeoutMilliseconds = options.DataOperationTimeoutMilliseconds,
                 RetryAttempts = options.RetryAttempts,
                 ValidateCertificateRevocation = options.ValidateCertificateRevocation,
-                TrustedCertificateThumbprint = options.TrustedCertificateThumbprint,
+                TrustedCertificateThumbprint = normalizedThumbprint,
                 SslProtocols = options.SslProtocols,
                 SocketKeepAlive = options.SocketKeepAlive,
                 AtomicUploadTemporarySuffix = options.AtomicUploadTemporarySuffix,

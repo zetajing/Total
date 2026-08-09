@@ -77,9 +77,10 @@ namespace IndustrialCommSdk.FileTransfer.Ftp
         public bool ValidateCertificateRevocation { get; set; } = true;
 
         /// <summary>
-        /// Optional SHA-1 (40 hex digits) or SHA-256 (64 hex digits) certificate thumbprint pin. A matching
-        /// pin can be used for a private/self-signed FTPS certificate; when omitted, normal operating-system
-        /// certificate validation is required.
+        /// Optional SHA-1 (40 hex digits) or SHA-256 (64 hex digits) certificate thumbprint pin. When configured,
+        /// every server certificate must match this pin, including certificates whose system chain is otherwise
+        /// valid. A matching pin acts as the trust basis and therefore also permits a private/self-signed server
+        /// certificate. When omitted, normal operating-system certificate validation is required.
         /// </summary>
         public string TrustedCertificateThumbprint { get; set; }
 

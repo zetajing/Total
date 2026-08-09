@@ -1,4 +1,7 @@
 using System;
+using System.Net.Security;
+using System.Security.Cryptography;
+using System.Security.Cryptography.X509Certificates;
 using System.Threading;
 using System.Threading.Tasks;
 using IndustrialCommSdk.FileTransfer.Ftp;
@@ -9,6 +12,23 @@ namespace IndustrialCommSdk.Tests
     [TestFixture]
     public sealed class FtpFileClientTests
     {
+        private const string TestCertificateBase64 =
+            "MIICyjCCAbKgAwIBAgIIIZbag1jtGvYwDQYJKoZIhvcNAQELBQAwJTEjMCEGA1UEAxMa" +
+            "SW5kdXN0cmlhbENvbW1TZGsgRlRQIFRlc3QwHhcNMjYwODA4MDM1MzA1WhcNMjgwODA5" +
+            "MDM1MzA1WjAlMSMwIQYDVQQDExpJbmR1c3RyaWFsQ29tbVNkayBGVFAgVGVzdDCCASIw" +
+            "DQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEBAN8gQ3OnRlyPhUbujtNreHkxTJGCAiJ8" +
+            "9lhvwtvRhXXa2v1/kpnfPphn2f5+YFw73nhyzXreDqRr6xA55USUwSNqDMv7Eo+Ujf6" +
+            "FJ1LDQmq4+Sr7MwZXar89S9ogTG4CqFBVDvwt68B/SMb9IkoPX8W1mY1sHWNqfYdu6" +
+            "HowO9DfYFhC9qm/d4KK6LvJiLHWJtzHm3ZOmqBj8HOscAP6cy76qVLNA7DmEbPXMme" +
+            "LwIk32EpW6XgVPzKwN3IRBpkkxNov/Kq2kz6xKrdmeFZL6p6QiRQFC96r3NDZQvPi/s" +
+            "1zuoPSwsx4N59KQ4ffQsqOOMA7d3FqKs0WaW36wWTsUOECAwEAATANBgkqhkiG9w0B" +
+            "AQsFAAOCAQEAUWWpuMhse1Q+TyNNqOipgNbs7G/TwY/SO5zNf6Oih2e/+igGKElaVVO" +
+            "81aYXztGXjusfKvmJcpEHLAkr3ujn29SkOGI4T64+EX9TvdHYWKpcw4VFtl97uFEpmQI" +
+            "VKgfMfOL5hlJtyy/eV8u54Ai/TZ7rEDK/0IY+Pbhyh4tl6tU2Gsl3o1NnoUjHyEwZCT" +
+            "H+k7Km655+8IUj8lgBtYX3VOfWJvBux1sX/vZa0GH8U0NSM8qbPgycSnaKXnrNxcZU" +
+            "C9bV9jBqfHZOyFDaZF/jwgAV+FE4GKyAbLsoDJlnITvnqUQL6FIuMO4qxXLj2FvS+g" +
+            "9TNsAChK1/RuEUjn3G6w==";
+
         [Test]
         public void DefaultsRequireExplicitFtpsAndPassiveDataConnections()
         {
@@ -43,6 +63,73 @@ namespace IndustrialCommSdk.Tests
             options.AllowInsecureFtp = true;
             using (var client = new FtpFileClient(options))
                 Assert.That(client.State, Is.EqualTo(FtpConnectionState.Disconnected));
+        }
+
+        [Test]
+        public void ValidSystemChainCannotBypassWrongConfiguredPin()
+        {
+            using (var certificate = CreateTestCertificate())
+            {
+                var wrongPin = new string('0', 40);
+
+                Assert.That(
+                    FtpCertificateValidator.IsAccepted(certificate, SslPolicyErrors.None, wrongPin),
+                    Is.False);
+            }
+        }
+
+        [Test]
+        public void CorrectSha1PinIsAcceptedEvenForPrivateCertificateChain()
+        {
+            using (var certificate = CreateTestCertificate())
+            {
+                Assert.That(
+                    FtpCertificateValidator.IsAccepted(
+                        certificate,
+                        SslPolicyErrors.RemoteCertificateChainErrors,
+                        certificate.GetCertHashString()),
+                    Is.True);
+            }
+        }
+
+        [Test]
+        public void CorrectSha256PinIsAcceptedEvenWhenSystemNameCheckFails()
+        {
+            using (var certificate = CreateTestCertificate())
+            using (var sha256 = SHA256.Create())
+            {
+                var pin = FtpCertificateValidator.ToHex(sha256.ComputeHash(certificate.GetRawCertData()));
+
+                Assert.That(
+                    FtpCertificateValidator.IsAccepted(
+                        certificate,
+                        SslPolicyErrors.RemoteCertificateNameMismatch,
+                        pin),
+                    Is.True);
+            }
+        }
+
+        [Test]
+        public void NoPinAcceptsCertificateWhenSystemPolicyHasNoErrors()
+        {
+            using (var certificate = CreateTestCertificate())
+                Assert.That(FtpCertificateValidator.IsAccepted(certificate, SslPolicyErrors.None, null), Is.True);
+        }
+
+        [Test]
+        public void NoPinRejectsCertificateWhenSystemPolicyReportsErrors()
+        {
+            using (var certificate = CreateTestCertificate())
+                Assert.That(FtpCertificateValidator.IsAccepted(
+                    certificate,
+                    SslPolicyErrors.RemoteCertificateChainErrors,
+                    null), Is.False);
+        }
+
+        [Test]
+        public void NoPinStillRejectsMissingCertificate()
+        {
+            Assert.That(FtpCertificateValidator.IsAccepted(null, SslPolicyErrors.None, null), Is.False);
         }
 
         [TestCase("../secret.txt")]
@@ -210,6 +297,11 @@ namespace IndustrialCommSdk.Tests
                 Host = "network-must-not-be-contacted.invalid",
                 RootPath = "/plant/inbox",
             };
+        }
+
+        private static X509Certificate2 CreateTestCertificate()
+        {
+            return new X509Certificate2(Convert.FromBase64String(TestCertificateBase64));
         }
 
         private static T ReadEnum<T>(string name, T fallback) where T : struct
