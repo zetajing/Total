@@ -7,6 +7,7 @@ using System.Windows.Controls;
 using System.Windows.Media;
 using IndustrialCommDemo.Helpers;
 using IndustrialCommSdk.Abstractions;
+using CpuType = S7.Net.CpuType;
 
 namespace IndustrialCommDemo.Views
 {
@@ -25,7 +26,12 @@ namespace IndustrialCommDemo.Views
             _vm = new ViewModels.SiemensS7ViewModel(ctx);
             _vm.PropertyChanged += OnVmPropertyChanged;
             _vm.RecentAddressChanged += OnRecentAddressChanged;
+
             _vm.RestoreState();
+
+            S7CpuTypeComboBox.ItemsSource = Enum.GetValues(typeof(CpuType));
+            S7CpuTypeComboBox.SelectedItem = _vm.SelectedCpuType;
+
             _vm.RefreshCapabilityText();
             ComboHelper.SelectDataType(S7DataTypeComboBox, _vm.SelectedDataType);
 
@@ -70,6 +76,18 @@ namespace IndustrialCommDemo.Views
                 case nameof(_vm.CapabilityText):
                     CapabilityTextBlock.Text = _vm.CapabilityText;
                     break;
+                case nameof(_vm.SelectedCpuType):
+                    if (!Equals(S7CpuTypeComboBox.SelectedItem, _vm.SelectedCpuType))
+                        S7CpuTypeComboBox.SelectedItem = _vm.SelectedCpuType;
+                    break;
+            }
+        }
+
+        private void CpuTypeComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (_vm != null && S7CpuTypeComboBox.SelectedItem is CpuType cpuType)
+            {
+                _vm.SelectedCpuType = cpuType;
             }
         }
 
@@ -95,11 +113,14 @@ namespace IndustrialCommDemo.Views
 
         private async void ConnectButton_Click(object sender, RoutedEventArgs e)
         {
-            // Sync field values from UI to VM before executing
             _vm.DeviceId = S7DeviceIdTextBox.Text;
             _vm.Host = S7HostTextBox.Text;
             _vm.PortOrRack = S7RackTextBox.Text;
             _vm.SlotOrLength = S7SlotTextBox.Text;
+
+            if (S7CpuTypeComboBox.SelectedItem is CpuType cpuType)
+                _vm.SelectedCpuType = cpuType;
+
             await _vm.ConnectAsync();
         }
 

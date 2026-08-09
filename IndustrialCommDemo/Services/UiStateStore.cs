@@ -108,6 +108,8 @@ namespace IndustrialCommDemo.Services
 
             state.Modbus.RecentAddresses = state.Modbus.RecentAddresses ?? new List<string>();
             state.S7.RecentAddresses = state.S7.RecentAddresses ?? new List<string>();
+            if (string.IsNullOrWhiteSpace(state.S7.CpuType))
+                state.S7.CpuType = "S71200";
             state.Mc.RecentAddresses = state.Mc.RecentAddresses ?? new List<string>();
             state.OpcUa.RecentAddresses = state.OpcUa.RecentAddresses ?? new List<string>();
             return state;
@@ -439,5 +441,8 @@ namespace IndustrialCommDemo.Services
         /// </summary>
         [DataMember(Order = 9)]
         public List<string> RecentAddresses { get; set; } = new List<string>();
+        /// <summary>获取或设置 Siemens S7 CPU 型号。</summary>
+        [DataMember(Order = 10, EmitDefaultValue = false)]
+        public string CpuType { get; set; }
     }
 }
