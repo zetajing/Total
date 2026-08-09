@@ -149,9 +149,10 @@ namespace IndustrialCommSdk.Runtime
                 }
                 catch (Exception ex)
                 {
+                    var error = Options.ExposeRawAddresses ? ex.Message : "Device read failed.";
                     foreach (var work in group)
                     {
-                        results[work.Index] = TagGatewayValue.Failure(work.Device.Device.DeviceName, work.Tag.Name, work.Tag.DataType, ex.Message);
+                        results[work.Index] = TagGatewayValue.Failure(work.Device.Device.DeviceName, work.Tag.Name, work.Tag.DataType, error);
                     }
                 }
             }
@@ -226,9 +227,10 @@ namespace IndustrialCommSdk.Runtime
                 }
                 catch (Exception ex)
                 {
+                    var error = Options.ExposeRawAddresses ? ex.Message : "Device write failed.";
                     foreach (var work in group)
                     {
-                        results[work.Index] = TagGatewayWriteResult.Failure(work.Device.Device.DeviceName, work.Tag.Name, ex.Message);
+                        results[work.Index] = TagGatewayWriteResult.Failure(work.Device.Device.DeviceName, work.Tag.Name, error);
                     }
                 }
             }
@@ -285,12 +287,15 @@ namespace IndustrialCommSdk.Runtime
 
         private void HostOnDeviceStateChanged(object sender, IndustrialDeviceStateChangedEventArgs args)
         {
+            var error = args.ErrorMessage ?? args.Health.LastError;
+            if (!Options.ExposeRawAddresses && !string.IsNullOrWhiteSpace(error))
+                error = "Device communication error.";
             DeviceStateChanged?.Invoke(this, new TagGatewayDeviceStateChangedEventArgs(new TagGatewayDevice(
                 args.DeviceName,
                 args.Health.Status,
                 args.Health.LastSuccessUtc,
                 args.Health.ConsecutiveFailures,
-                args.ErrorMessage ?? args.Health.LastError)));
+                error)));
         }
 
         private TagGatewayValue CreateValue(string deviceName, IndustrialTag tag, DataValue value)
@@ -302,19 +307,24 @@ namespace IndustrialCommSdk.Runtime
                 value.Value,
                 value.Quality,
                 value.Timestamp,
-                value.ErrorMessage,
+                Options.ExposeRawAddresses || string.IsNullOrWhiteSpace(value.ErrorMessage)
+                    ? value.ErrorMessage
+                    : "Device read returned an error.",
                 Options.ExposeRawAddresses ? value.Address : null);
         }
 
-        private static TagGatewayDevice CreateDeviceSnapshot(IndustrialHostedDevice device)
+        private TagGatewayDevice CreateDeviceSnapshot(IndustrialHostedDevice device)
         {
             var health = device.Health;
+            var error = device.LastError ?? health.LastError;
+            if (!Options.ExposeRawAddresses && !string.IsNullOrWhiteSpace(error))
+                error = "Device communication error.";
             return new TagGatewayDevice(
                 device.Device.DeviceName,
                 health.Status,
                 health.LastSuccessUtc,
                 health.ConsecutiveFailures,
-                device.LastError ?? health.LastError);
+                error);
         }
 
         private static object ConvertValue(object value, DataType dataType)

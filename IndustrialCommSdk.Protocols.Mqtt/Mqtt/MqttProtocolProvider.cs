@@ -26,6 +26,8 @@ namespace IndustrialCommSdk.Protocols.Mqtt
         public bool AutoReconnect { get; set; }
         public int ReconnectInitialDelayMilliseconds { get; set; } = 1000;
         public int ReconnectMaxDelayMilliseconds { get; set; } = 30000;
+        public int MaxApplicationMessagePayloadBytes { get; set; } = 1024 * 1024;
+        public int MaxCachedTopics { get; set; } = 10000;
         public string WillTopic { get; set; }
         public string WillPayload { get; set; }
         public int WillQualityOfService { get; set; }
@@ -47,6 +49,8 @@ namespace IndustrialCommSdk.Protocols.Mqtt
                 settings.KeepAliveSeconds <= 0 ? "keepAliveSeconds must be positive." : null,
                 settings.ReconnectInitialDelayMilliseconds <= 0 ? "reconnectInitialDelayMilliseconds must be positive." : null,
                 settings.ReconnectMaxDelayMilliseconds < settings.ReconnectInitialDelayMilliseconds ? "reconnectMaxDelayMilliseconds must be greater than or equal to reconnectInitialDelayMilliseconds." : null,
+                settings.MaxApplicationMessagePayloadBytes <= 0 ? "maxApplicationMessagePayloadBytes must be positive." : null,
+                settings.MaxCachedTopics <= 0 ? "maxCachedTopics must be positive." : null,
                 settings.WillPayload != null && string.IsNullOrWhiteSpace(settings.WillTopic) ? "willTopic is required when willPayload is configured." : null);
         }
 
@@ -74,6 +78,8 @@ namespace IndustrialCommSdk.Protocols.Mqtt
                 AutoReconnect = settings.AutoReconnect,
                 ReconnectInitialDelayMilliseconds = settings.ReconnectInitialDelayMilliseconds,
                 ReconnectMaxDelayMilliseconds = settings.ReconnectMaxDelayMilliseconds,
+                MaxApplicationMessagePayloadBytes = settings.MaxApplicationMessagePayloadBytes,
+                MaxCachedTopics = settings.MaxCachedTopics,
                 WillTopic = settings.WillTopic,
                 WillPayload = settings.WillPayload == null ? null : Encoding.UTF8.GetBytes(settings.WillPayload),
                 WillQualityOfService = settings.WillQualityOfService,

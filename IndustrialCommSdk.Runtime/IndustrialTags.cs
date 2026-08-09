@@ -14,10 +14,10 @@ namespace IndustrialCommSdk.Runtime
             if (string.IsNullOrWhiteSpace(address)) throw new ArgumentException("Address cannot be null or empty.", nameof(address));
             if (length == 0) throw new ArgumentOutOfRangeException(nameof(length), "Length must be greater than zero.");
 
-            Address = address;
+            Address = address.Trim();
             DataType = dataType;
             Length = length;
-            Name = name;
+            Name = string.IsNullOrWhiteSpace(name) ? null : name.Trim();
             Writable = writable;
         }
 

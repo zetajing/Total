@@ -30,6 +30,18 @@ namespace IndustrialCommSdk.Tests
         }
 
         [Test]
+        public void TagTable_RejectsDuplicateNamedTagsAfterTrimming()
+        {
+            var error = Assert.Throws<ArgumentException>(() => TagTable.FromJson(
+                "{\"tags\":[" +
+                "{\"name\":\" Setpoint \",\"address\":\"D1\",\"type\":\"Int16\",\"writable\":true}," +
+                "{\"name\":\"setpoint\",\"address\":\"D2\",\"type\":\"Int16\",\"writable\":false}" +
+                "]}"));
+
+            StringAssert.Contains("duplicated", error.Message);
+        }
+
+        [Test]
         public async Task Gateway_UsesNamedTagsAndEnforcesBothWriteSwitches()
         {
             var directory = CreateDirectory();
@@ -101,6 +113,32 @@ namespace IndustrialCommSdk.Tests
         }
 
         [Test]
+        public async Task Gateway_HidesProtocolAddressesFromExternalErrorsByDefault()
+        {
+            var directory = CreateDirectory();
+            try
+            {
+                File.WriteAllText(Path.Combine(directory, "points.json"),
+                    "{\"tags\":[{\"name\":\"Value\",\"address\":\"DB1.DBD0\",\"type\":\"Int32\"}]}");
+                var fake = new GatewayFakeClient("device") { FailureMessage = "Read DB1.DBD0 failed" };
+                using (var host = CreateHost(directory, fake))
+                using (var gateway = new IndustrialTagGateway(host))
+                {
+                    var hidden = await gateway.ReadAsync(new[] { new TagGatewayReadItem("device", "Value") });
+                    StringAssert.DoesNotContain("DB1.DBD0", hidden[0].ErrorMessage);
+
+                    gateway.Options.ExposeRawAddresses = true;
+                    var exposed = await gateway.ReadAsync(new[] { new TagGatewayReadItem("device", "Value") });
+                    StringAssert.Contains("DB1.DBD0", exposed[0].ErrorMessage);
+                }
+            }
+            finally
+            {
+                Directory.Delete(directory, true);
+            }
+        }
+
+        [Test]
         public void DpapiSecretStore_RoundTripsRemovesAndRejectsCorruptFiles()
         {
             var directory = CreateDirectory();
@@ -119,6 +157,43 @@ namespace IndustrialCommSdk.Tests
                     Assert.IsTrue(store.Remove("web.api-key"));
                     Assert.IsFalse(store.TryGet("web.api-key", out _));
                 }
+            }
+            finally
+            {
+                Directory.Delete(directory, true);
+            }
+        }
+
+        [Test]
+        public void SecretRedactor_HidesConfiguredValuesAndRecognizesAuthenticationFields()
+        {
+            const string apiKey = "api-key-value-4711";
+            const string password = "password-value-8152";
+            var redacted = SecretRedactor.Redact(
+                "X-Industrial-Api-Key=" + apiKey + "; password=" + password,
+                new[] { apiKey, password });
+
+            StringAssert.DoesNotContain(apiKey, redacted);
+            StringAssert.DoesNotContain(password, redacted);
+            StringAssert.Contains("***", redacted);
+            Assert.That(SecretRedactor.IsSensitiveName("Authorization"), Is.True);
+            Assert.That(SecretRedactor.IsSensitiveName("X-Industrial-Api-Key"), Is.True);
+            Assert.That(SecretRedactor.IsSensitiveName("content-type"), Is.False);
+        }
+
+        [Test]
+        public void DpapiSecretStore_DisposeRejectsLaterOperationsCleanly()
+        {
+            var directory = CreateDirectory();
+            try
+            {
+                var store = new DpapiSecretStore(directory);
+                store.Set("test", "value");
+                store.Dispose();
+
+                Assert.Throws<ObjectDisposedException>(() => store.Set("test", "other"));
+                Assert.Throws<ObjectDisposedException>(() => store.TryGet("test", out _));
+                Assert.Throws<ObjectDisposedException>(() => store.Remove("test"));
             }
             finally
             {
@@ -161,6 +236,7 @@ namespace IndustrialCommSdk.Tests
             public bool IsConnected { get; private set; }
             public int LastReadBatchSize { get; private set; }
             public object LastWriteValue { get; private set; }
+            public string FailureMessage { get; set; }
             public Task ConnectAsync(CancellationToken cancellationToken) { IsConnected = true; return Task.CompletedTask; }
             public Task DisconnectAsync(CancellationToken cancellationToken) { IsConnected = false; return Task.CompletedTask; }
             public Task<DataValue> ReadAsync(ReadRequest request, CancellationToken cancellationToken)
@@ -169,6 +245,7 @@ namespace IndustrialCommSdk.Tests
             }
             public Task<BatchReadResult> ReadManyAsync(IReadOnlyCollection<ReadRequest> requests, CancellationToken cancellationToken)
             {
+                if (!string.IsNullOrEmpty(FailureMessage)) throw new InvalidOperationException(FailureMessage);
                 LastReadBatchSize = requests.Count;
                 return Task.FromResult(new BatchReadResult(requests.Select(request => Good(request.Address)).ToList()));
             }

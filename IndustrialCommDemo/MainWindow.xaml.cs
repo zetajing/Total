@@ -18,6 +18,7 @@ namespace IndustrialCommDemo
         private AppLogger _sdkLogger;
         private UiStateStore _uiStateStore;
         private IndustrialApplicationRuntime _runtime;
+        private NetworkServicesRuntime _networkServices;
         private DemoUiState _uiState;
         private bool _closeCleanupStarted;
         private bool _closeCleanupCompleted;
@@ -32,6 +33,7 @@ namespace IndustrialCommDemo
             _runtime = new IndustrialApplicationRuntime(
                 Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Config", "devices.json"),
                 _sdkLogger);
+            _networkServices = new NetworkServicesRuntime(_runtime, _sdkLogger);
 
             // Load persisted UI state
             _uiStateStore = new UiStateStore();
@@ -39,7 +41,7 @@ namespace IndustrialCommDemo
 
             // Create shared app context
             _ctx = new DemoAppContext(
-                Dispatcher, _demoLogger, _sdkLogger, _runtime, _uiStateStore, _uiState,
+                Dispatcher, _demoLogger, _sdkLogger, _runtime, _networkServices, _uiStateStore, _uiState,
                 SetHeaderStatus, () => this);
             _runtime.ValuesReceived += (sender, args) => _ctx.QueueDatabaseValues(args.Client, args.RawValues);
 
@@ -55,6 +57,7 @@ namespace IndustrialCommDemo
             DatabaseControlTag.Initialize(_ctx);
             NetworkControlTag.Initialize(_ctx);
             StorageControlTag.Initialize(_ctx);
+            NetworkServicesControlTag.Initialize(_ctx);
 
             // 网卡页面进入时再刷新，避免程序启动就执行系统管理查询。
             MaintenanceTabControl.SelectionChanged += (s, e) =>
@@ -65,6 +68,7 @@ namespace IndustrialCommDemo
 
             SetHeaderStatus("就绪", Brushes.LightGreen);
             _demoLogger.Info("工业设备运行中心已就绪。");
+            _ = NetworkServicesControlTag.StartAutoServicesAsync();
         }
 
         // ── Window cleanup ──
@@ -86,10 +90,12 @@ namespace IndustrialCommDemo
                 await OpcUaControlTag.ResetClientAsync();
                 await SocketControlTag.ResetAllAsync();
                 await MesControlTag.ResetClientAsync();
+                await NetworkServicesControlTag.ResetAsync();
                 await DatabaseControlTag.StopRecorderAsync();
                 await _runtime.StopAsync();
 
                 if (_ctx.DatabaseRecorder != null) { _ctx.DatabaseRecorder.Dispose(); _ctx.DatabaseRecorder = null; }
+                _networkServices.Dispose();
                 _runtime.Dispose();
             }
             catch (Exception ex)
@@ -114,6 +120,7 @@ namespace IndustrialCommDemo
             SocketControlTag.SaveState();
             MesControlTag.SaveState();
             DatabaseControlTag.SaveState();
+            NetworkServicesControlTag.SaveState();
             _uiStateStore.Save(_uiState);
         }
 

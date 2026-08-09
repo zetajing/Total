@@ -30,8 +30,12 @@ namespace IndustrialCommSdk.Runtime
             {
                 if (tag == null) throw new ArgumentException("Tag table cannot contain null tags.", nameof(tags));
 
-                if (!string.IsNullOrWhiteSpace(tag.Name) && !_nameIndexes.ContainsKey(tag.Name))
+                if (!string.IsNullOrWhiteSpace(tag.Name))
                 {
+                    if (_nameIndexes.ContainsKey(tag.Name))
+                        throw new ArgumentException(
+                            string.Format("Tag name '{0}' is duplicated. Named tags must be unique (case-insensitive).", tag.Name),
+                            nameof(tags));
                     _nameIndexes.Add(tag.Name, tag);
                 }
 

@@ -39,6 +39,7 @@ namespace IndustrialCommSdk.Protocols.Mqtt
         public Func<string, string, string, bool> SubscribeAuthorizer { get; set; }
         public bool EnablePersistentSessions { get; set; } = true;
         public int MaxPendingMessagesPerClient { get; set; } = 1000;
+        public int MaxApplicationMessagePayloadBytes { get; set; } = 1024 * 1024;
         public string ServerClientId { get; set; } = "IndustrialCommSdk.Broker";
     }
 
@@ -126,11 +127,12 @@ namespace IndustrialCommSdk.Protocols.Mqtt
 
         public MqttBrokerService(MqttBrokerOptions options, IIndustrialLogger logger = null)
         {
-            _options = options ?? throw new ArgumentNullException(nameof(options));
+            if (options == null) throw new ArgumentNullException(nameof(options));
+            _options = CloneOptions(options);
             _logger = logger ?? NullIndustrialLogger.Instance;
         }
 
-        public MqttBrokerOptions Options { get { return _options; } }
+        public MqttBrokerOptions Options { get { return CloneOptions(_options); } }
         public bool IsRunning { get { var server = _server; return server != null && server.IsStarted; } }
 
         public event EventHandler Started;
@@ -200,6 +202,8 @@ namespace IndustrialCommSdk.Protocols.Mqtt
             ThrowIfDisposed();
             if (string.IsNullOrWhiteSpace(topic)) throw new ArgumentException("MQTT topic is required.", nameof(topic));
             if (qualityOfService < 0 || qualityOfService > 2) throw new ArgumentOutOfRangeException(nameof(qualityOfService));
+            if (payload != null && payload.Length > _options.MaxApplicationMessagePayloadBytes)
+                throw new ArgumentException("MQTT application message payload exceeds the configured limit.", nameof(payload));
             cancellationToken.ThrowIfCancellationRequested();
             var server = _server;
             if (server == null || !server.IsStarted) throw new InvalidOperationException("MQTT broker is not running.");
@@ -246,10 +250,12 @@ namespace IndustrialCommSdk.Protocols.Mqtt
             if (_options.Port < 1 || _options.Port > 65535) throw new ArgumentOutOfRangeException(nameof(_options.Port));
             if (_options.TlsPort < 1 || _options.TlsPort > 65535) throw new ArgumentOutOfRangeException(nameof(_options.TlsPort));
             if (_options.MaxPendingMessagesPerClient <= 0) throw new ArgumentOutOfRangeException(nameof(_options.MaxPendingMessagesPerClient));
+            if (_options.MaxApplicationMessagePayloadBytes <= 0) throw new ArgumentOutOfRangeException(nameof(_options.MaxApplicationMessagePayloadBytes));
 
             var isLoopback = IPAddress.IsLoopback(bindAddress);
             if (!isLoopback && !_options.UseTls)
                 throw new InvalidOperationException("A non-loopback MQTT broker endpoint requires TLS.");
+            ValidateTlsProtocols(_options.TlsProtocols);
             if (_options.UseTls && (_options.ServerCertificate == null || !_options.ServerCertificate.HasPrivateKey))
                 throw new InvalidOperationException("A TLS MQTT broker endpoint requires a certificate with a private key.");
 
@@ -338,6 +344,17 @@ namespace IndustrialCommSdk.Protocols.Mqtt
         private Task OnInterceptingPublishAsync(InterceptingPublishEventArgs args)
         {
             var message = args.ApplicationMessage;
+            if (message.PayloadSegment.Count > _options.MaxApplicationMessagePayloadBytes)
+            {
+                args.ProcessPublish = false;
+                args.CloseConnection = true;
+                args.Response.ReasonCode = MqttPubAckReasonCode.QuotaExceeded;
+                args.Response.ReasonString = "MQTT application message payload exceeds the configured limit.";
+                _logger.Warn(string.Format("MQTT publication rejected because its payload is too large | Client={0} | Bytes={1} | Limit={2}",
+                    args.ClientId, message.PayloadSegment.Count, _options.MaxApplicationMessagePayloadBytes));
+                return Task.CompletedTask;
+            }
+
             if (!IsInternalPublish(args.SessionItems) && _options.PublishAuthorizer != null)
             {
                 var username = GetSessionUsername(args.ClientId);
@@ -427,6 +444,40 @@ namespace IndustrialCommSdk.Protocols.Mqtt
         {
             if (credentials == null) return new Dictionary<string, string>(StringComparer.Ordinal);
             return new Dictionary<string, string>(credentials, StringComparer.Ordinal);
+        }
+
+        private static MqttBrokerOptions CloneOptions(MqttBrokerOptions source)
+        {
+            return new MqttBrokerOptions
+            {
+                BindAddress = source.BindAddress,
+                Port = source.Port,
+                UseTls = source.UseTls,
+                TlsPort = source.TlsPort,
+                ServerCertificate = source.ServerCertificate == null ? null : new X509Certificate2(source.ServerCertificate),
+                TlsProtocols = source.TlsProtocols,
+                AllowAnonymous = source.AllowAnonymous,
+                Credentials = source.Credentials == null
+                    ? new Dictionary<string, string>(StringComparer.Ordinal)
+                    : new Dictionary<string, string>(source.Credentials, StringComparer.Ordinal),
+                CredentialValidator = source.CredentialValidator,
+                PublishAuthorizer = source.PublishAuthorizer,
+                SubscribeAuthorizer = source.SubscribeAuthorizer,
+                EnablePersistentSessions = source.EnablePersistentSessions,
+                MaxPendingMessagesPerClient = source.MaxPendingMessagesPerClient,
+                MaxApplicationMessagePayloadBytes = source.MaxApplicationMessagePayloadBytes,
+                ServerClientId = source.ServerClientId,
+            };
+        }
+
+        private static void ValidateTlsProtocols(SslProtocols? protocols)
+        {
+            if (!protocols.HasValue) return;
+            var value = protocols.Value;
+            if ((value & (SslProtocols.Ssl2 | SslProtocols.Ssl3)) != 0)
+                throw new ArgumentException("SSL 2.0 and SSL 3.0 are not permitted for the MQTT broker TLS endpoint.", nameof(protocols));
+            if (value != SslProtocols.None && (value & SslProtocols.Tls12) == 0)
+                throw new ArgumentException("The MQTT broker TLS endpoint requires TLS 1.2 or a system-default protocol set.", nameof(protocols));
         }
 
         private static DateTimeOffset ToDateTimeOffset(DateTime value)
@@ -520,6 +571,7 @@ namespace IndustrialCommSdk.Protocols.Mqtt
             {
                 _lifecycleLock.Release();
                 _lifecycleLock.Dispose();
+                if (_options.ServerCertificate != null) _options.ServerCertificate.Dispose();
             }
         }
     }

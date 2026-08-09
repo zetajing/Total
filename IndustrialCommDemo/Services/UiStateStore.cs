@@ -105,6 +105,7 @@ namespace IndustrialCommDemo.Services
                 state.Database.SqlServerTableName = state.Database.TableName;
             state.Mes = state.Mes ?? new MesUiState();
             state.OpcUa = state.OpcUa ?? new OpcUaUiState();
+            state.NetworkServices = state.NetworkServices ?? new NetworkServicesUiState();
 
             state.Modbus.RecentAddresses = state.Modbus.RecentAddresses ?? new List<string>();
             state.S7.RecentAddresses = state.S7.RecentAddresses ?? new List<string>();
@@ -157,6 +158,22 @@ namespace IndustrialCommDemo.Services
         /// <summary>OPC UA 联调页状态；密码不在此状态中保存。</summary>
         [DataMember(Order = 7)]
         public OpcUaUiState OpcUa { get; set; } = new OpcUaUiState();
+
+        /// <summary>网络服务页的非敏感界面草稿；不保存密码或 API Key。</summary>
+        [DataMember(Order = 8)]
+        public NetworkServicesUiState NetworkServices { get; set; } = new NetworkServicesUiState();
+    }
+
+    /// <summary>网络服务调试页的非敏感 UI 状态。</summary>
+    [DataContract]
+    public sealed class NetworkServicesUiState
+    {
+        [DataMember(Order = 1)] public int SelectedTabIndex { get; set; }
+        [DataMember(Order = 2)] public string MqttClientHost { get; set; }
+        [DataMember(Order = 3)] public string MqttClientPort { get; set; }
+        [DataMember(Order = 4)] public string HttpRequestUrl { get; set; }
+        [DataMember(Order = 5)] public string WebSocketUrl { get; set; }
+        [DataMember(Order = 6)] public string FtpRemotePath { get; set; }
     }
 
     /// <summary>MES HTTP JSON 联调页状态。</summary>

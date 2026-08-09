@@ -1,0 +1,31 @@
+{
+  "version": 1,
+  "mqttBroker": {
+    "autoStart": false,
+    "bindAddress": "127.0.0.1",
+    "port": 1883,
+    "useTls": false,
+    "tlsPort": 8883,
+    "username": "industrial",
+    "passwordSecretName": "mqtt.broker.password"
+  },
+  "webGateway": {
+    "autoStart": false,
+    "listenPrefix": "http://127.0.0.1:8088/",
+    "apiKeySecretName": "web.api-key",
+    "enableRemoteWrites": false,
+    "allowRawAddressReads": false,
+    "exposeRawAddresses": false,
+    "allowedOrigins": []
+  },
+  "ftp": {
+    "host": "127.0.0.1",
+    "port": 21,
+    "username": "industrial",
+    "passwordSecretName": "ftp.password",
+    "useTls": true,
+    "allowInsecureFtp": false,
+    "passiveMode": true,
+    "remoteRoot": "/"
+  }
+}

@@ -35,13 +35,13 @@ namespace IndustrialCommSdk.Runtime.Security
 
         public void Set(string name, string value)
         {
-            ThrowIfDisposed();
             ValidateName(name);
             if (value == null) throw new ArgumentNullException(nameof(value));
 
             _gate.Wait();
             try
             {
+                ThrowIfDisposed();
                 Directory.CreateDirectory(_directory);
                 var plain = Encoding.UTF8.GetBytes(value);
                 byte[] protectedBytes = null;
@@ -74,13 +74,13 @@ namespace IndustrialCommSdk.Runtime.Security
 
         public bool TryGet(string name, out string value)
         {
-            ThrowIfDisposed();
             ValidateName(name);
             value = null;
 
             _gate.Wait();
             try
             {
+                ThrowIfDisposed();
                 var path = GetPath(name);
                 if (!File.Exists(path)) return false;
                 var payload = File.ReadAllBytes(path);
@@ -113,11 +113,11 @@ namespace IndustrialCommSdk.Runtime.Security
 
         public bool Remove(string name)
         {
-            ThrowIfDisposed();
             ValidateName(name);
             _gate.Wait();
             try
             {
+                ThrowIfDisposed();
                 var path = GetPath(name);
                 if (!File.Exists(path)) return false;
                 File.Delete(path);
@@ -132,8 +132,18 @@ namespace IndustrialCommSdk.Runtime.Security
         public void Dispose()
         {
             if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
-            _gate.Dispose();
-            if (_optionalEntropy != null) Array.Clear(_optionalEntropy, 0, _optionalEntropy.Length);
+            // Do not dispose the SemaphoreSlim: an operation may already be queued when Dispose
+            // starts. Keeping the lightweight gate alive lets that operation enter, observe the
+            // disposed flag and fail cleanly instead of throwing while releasing a disposed gate.
+            _gate.Wait();
+            try
+            {
+                if (_optionalEntropy != null) Array.Clear(_optionalEntropy, 0, _optionalEntropy.Length);
+            }
+            finally
+            {
+                _gate.Release();
+            }
         }
 
         private string GetPath(string name)
