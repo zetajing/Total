@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.IO;
 using System.Linq;
 using System.Windows.Controls;
 using System.Windows.Media;
@@ -12,6 +13,8 @@ namespace IndustrialCommDemo.Views
 {
     public partial class ModbusTab
     {
+        private bool _externalProfilesLoadAttempted;
+
         private void ModelComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             if (!IsLoaded) return;
@@ -21,10 +24,13 @@ namespace IndustrialCommDemo.Views
 
         private void ApplyProfile()
         {
+            var previousProfile = _profile;
             _profile = GetSelectedProfile();
             _addressParser = new ModbusAddressParser(_profile);
             ExampleAddressTextBlock.Text = _profile.ExampleAddresses;
-            if (string.IsNullOrWhiteSpace(AddressTextBox.Text))
+            var currentAddress = AddressTextBox.Text == null ? string.Empty : AddressTextBox.Text.Trim();
+            if (string.IsNullOrWhiteSpace(currentAddress) ||
+                (previousProfile != null && string.Equals(currentAddress, previousProfile.DefaultAddress, StringComparison.OrdinalIgnoreCase)))
                 AddressTextBox.Text = _profile.DefaultAddress;
         }
 
@@ -39,6 +45,7 @@ namespace IndustrialCommDemo.Views
         private void RefreshProfileOptions()
         {
             if (ModelComboBox == null) return;
+            EnsureExternalProfilesLoaded();
             var selectedKey = (ModelComboBox.SelectedItem as ComboBoxItem)?.Tag as string;
             var isRtu = ConnectionTypeComboBox.SelectedIndex == 1;
             ModelComboBox.Items.Clear();
@@ -48,10 +55,38 @@ namespace IndustrialCommDemo.Views
             }
             else
             {
-                ModelComboBox.Items.Add(new ComboBoxItem { Content = "汇川 EasyPLC", Tag = ModbusDeviceProfiles.InovanceEasyPlc.Key });
-                ModelComboBox.Items.Add(new ComboBoxItem { Content = "三菱 Modbus TCP", Tag = ModbusDeviceProfiles.MitsubishiModbusTcp.Key });
+                foreach (var profile in ModbusDeviceProfiles.All
+                    .GroupBy(item => item.Key, StringComparer.OrdinalIgnoreCase)
+                    .Select(group => group.First()))
+                {
+                    ModelComboBox.Items.Add(new ComboBoxItem
+                    {
+                        Content = string.IsNullOrWhiteSpace(profile.DisplayName) ? profile.Key : profile.DisplayName,
+                        Tag = profile.Key,
+                        ToolTip = "Profile: " + profile.Key,
+                    });
+                }
             }
             SelectModel(selectedKey);
+        }
+
+        private void EnsureExternalProfilesLoaded()
+        {
+            if (_externalProfilesLoadAttempted) return;
+            _externalProfilesLoadAttempted = true;
+
+            var path = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Config", "modbus-profiles.json");
+            if (!File.Exists(path)) return;
+
+            try
+            {
+                ModbusDeviceProfiles.LoadJsonProfiles(path);
+            }
+            catch (Exception ex)
+            {
+                if (_ctx != null)
+                    _ctx.DemoLogger.Error("Modbus 自定义 Profile 加载失败：" + path, ex);
+            }
         }
 
         private void SelectModel(string modelKey)
@@ -209,14 +244,23 @@ namespace IndustrialCommDemo.Views
             return addressCount > 1 && ParseHelper.SplitBatchWriteValues(WriteValueTextBox.Text).Count <= 1;
         }
 
-        private static bool IsModbusBitAddress(string address)
+        private bool IsModbusBitAddress(string address)
         {
-            if (string.IsNullOrWhiteSpace(address)) return false;
-            switch (char.ToUpperInvariant(address.Trim()[0]))
+            var addresses = ParseHelper.SplitAddresses(address);
+            if (addresses.Count == 0) return false;
+
+            return addresses.All(item =>
             {
-                case 'X': case 'Y': case 'M': case 'S': case 'B': return true;
-                default: return false;
-            }
+                try
+                {
+                    var parsed = (ModbusAddress)_addressParser.Parse(item);
+                    return parsed.Area == ModbusArea.Coil || parsed.Area == ModbusArea.DiscreteInput;
+                }
+                catch
+                {
+                    return false;
+                }
+            });
         }
 
         private List<string> ValidateAndGetAddresses()

@@ -121,7 +121,7 @@
                         <Button Margin="0,0,0,8" Padding="10" Background="#9F1239" Foreground="White" BorderThickness="0" Click="UnsubscribeButton_Click" Content="停止" />
                     </UniformGrid>
                     <TextBlock Grid.Row="6" Grid.ColumnSpan="2" Margin="0,4,0,0" TextWrapping="Wrap" Foreground="#64748B"
-                               Text="X/Y/M/S/B 强制为 Bool 类型。D/R 使用寄存器类型并自动根据 16位、32位、字符串和字节数组建议长度。地址框支持逗号、分号、换行，多地址点击「读取」会自动走批量读取。" />
+                               Text="地址会按当前 Profile 解析。通用 Modbus 支持 HR0、IR0、C0、DI0 以及 40001、30001、00001、10001 等写法；位地址只能选择 Bool，寄存器地址可选择 16/32 位、浮点、字符串和字节数组。地址框支持逗号、分号、换行，多地址点击「读取」会自动走批量读取。" />
                     <Border Grid.Row="7" Grid.ColumnSpan="2" Margin="0,12,0,0" Padding="12" CornerRadius="12" Background="#F8FAFC" BorderBrush="#D8E2EE" BorderThickness="1">
                         <StackPanel>
                             <TextBlock FontWeight="SemiBold" Foreground="#17324D" Text="结果" />

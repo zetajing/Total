@@ -1,3 +1,5 @@
+using System;
+using System.IO;
 using IndustrialCommSdk;
 using IndustrialCommSdk.Runtime.Configuration;
 using IndustrialCommSdk.Protocols.Modbus;
@@ -42,6 +44,47 @@ namespace IndustrialCommSdk.Tests
             {
                 Assert.AreEqual("mitsubishi-modbus-tcp", client.Profile.Key);
                 Assert.AreEqual(ModbusArea.HoldingRegister, client.Profile.ParseAddress("D100").Area);
+            }
+        }
+
+        [Test]
+        public void GenericProfile_ParsesStandardModbusAreas()
+        {
+            var holding = ModbusDeviceProfiles.Generic.ParseAddress("40001");
+            var input = ModbusDeviceProfiles.Generic.ParseAddress("IR3");
+            var coil = ModbusDeviceProfiles.Generic.ParseAddress("00005");
+            var discreteInput = ModbusDeviceProfiles.Generic.ParseAddress("DI7");
+
+            Assert.AreEqual(ModbusArea.HoldingRegister, holding.Area);
+            Assert.AreEqual((ushort)0, holding.ZeroBasedAddress);
+            Assert.AreEqual(ModbusArea.InputRegister, input.Area);
+            Assert.AreEqual((ushort)3, input.ZeroBasedAddress);
+            Assert.AreEqual(ModbusArea.Coil, coil.Area);
+            Assert.AreEqual((ushort)4, coil.ZeroBasedAddress);
+            Assert.AreEqual(ModbusArea.DiscreteInput, discreteInput.Area);
+            Assert.AreEqual((ushort)7, discreteInput.ZeroBasedAddress);
+        }
+
+        [Test]
+        public void JsonProfile_CanBeLoadedAndSelected()
+        {
+            var key = "test-custom-profile-" + Guid.NewGuid().ToString("N");
+            var path = Path.Combine(TestContext.CurrentContext.TestDirectory, key + ".json");
+            File.WriteAllText(path, "{\"profiles\":[{\"key\":\"" + key + "\",\"displayName\":\"测试自定义 PLC\",\"defaultAddress\":\"D0\",\"exampleAddresses\":\"D0, M0\",\"addressPattern\":\"^([A-Z]+)(\\\\d+)$\",\"lowWordFirst\":false,\"mappings\":[{\"prefix\":\"D\",\"area\":\"HoldingRegister\",\"base\":100,\"max\":10,\"radix\":\"decimal\"},{\"prefix\":\"M\",\"area\":\"Coil\",\"base\":20,\"max\":10,\"radix\":\"decimal\"}]}]}");
+            try
+            {
+                ModbusDeviceProfiles.LoadJsonProfiles(path);
+                var profile = ModbusDeviceProfiles.GetRequired(key);
+
+                Assert.AreEqual("测试自定义 PLC", profile.DisplayName);
+                Assert.AreEqual(ModbusArea.HoldingRegister, profile.ParseAddress("D3").Area);
+                Assert.AreEqual((ushort)103, profile.ParseAddress("D3").ZeroBasedAddress);
+                Assert.AreEqual(ModbusArea.Coil, profile.ParseAddress("M2").Area);
+                Assert.AreEqual((ushort)22, profile.ParseAddress("M2").ZeroBasedAddress);
+            }
+            finally
+            {
+                if (File.Exists(path)) File.Delete(path);
             }
         }
 
