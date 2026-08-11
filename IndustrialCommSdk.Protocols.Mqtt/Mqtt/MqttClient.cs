@@ -253,8 +253,12 @@ namespace IndustrialCommSdk.Protocols.Mqtt
         protected override async Task WriteCoreAsync(WriteRequest request, CancellationToken cancellationToken)
         {
             EnsureConnected();
+            var payload = TextValueCodec.Encode(request.DataType, request.Value);
+            if (payload != null && payload.Length > _options.MaxApplicationMessagePayloadBytes)
+                throw new ArgumentException("MQTT application message payload exceeds the configured limit.", nameof(request));
+
             var message = new MqttApplicationMessageBuilder().WithTopic(request.Address)
-                .WithPayload(TextValueCodec.Encode(request.DataType, request.Value)).WithQualityOfServiceLevel(ToQos())
+                .WithPayload(payload).WithQualityOfServiceLevel(ToQos())
                 .WithRetainFlag(_options.Retain).Build();
             var result = await _client.PublishAsync(message, cancellationToken).ConfigureAwait(false);
             if (result.ReasonCode >= MqttClientPublishReasonCode.UnspecifiedError)

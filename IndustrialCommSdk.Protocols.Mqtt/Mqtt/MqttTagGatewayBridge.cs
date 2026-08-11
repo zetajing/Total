@@ -45,6 +45,8 @@ namespace IndustrialCommSdk.Protocols.Mqtt
         private readonly SemaphoreSlim _lifecycleGate = new SemaphoreSlim(1, 1);
         private readonly ConcurrentDictionary<string, string> _valueSignatures =
             new ConcurrentDictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        private readonly ConcurrentDictionary<string, SemaphoreSlim> _valuePublishGates =
+            new ConcurrentDictionary<string, SemaphoreSlim>(StringComparer.OrdinalIgnoreCase);
         private readonly JsonSerializerSettings _jsonSettings;
         private WorkRun _run;
         private Task _heartbeatTask;
@@ -191,7 +193,11 @@ namespace IndustrialCommSdk.Protocols.Mqtt
             {
                 var batch = requests.Skip(offset).Take(_options.MaxCommandItems).ToList();
                 var values = await _gateway.ReadAsync(batch, cancellationToken).ConfigureAwait(false);
-                foreach (var value in values) await PublishValueAsync(value, true, cancellationToken).ConfigureAwait(false);
+                foreach (var value in values)
+                {
+                    await PublishValueAsync(value, true, cancellationToken).ConfigureAwait(false);
+                    RememberPublishedValue(value);
+                }
             }
         }
 
@@ -292,11 +298,28 @@ namespace IndustrialCommSdk.Protocols.Mqtt
                 {
                     if (value == null || string.IsNullOrWhiteSpace(value.TagName)) continue;
                     var key = value.DeviceName + "\u001f" + value.TagName;
-                    var signature = JsonConvert.SerializeObject(new { value.DataType, value.Value, value.Quality, value.ErrorMessage }, _jsonSettings);
-                    string previous;
-                    if (_valueSignatures.TryGetValue(key, out previous) && string.Equals(previous, signature, StringComparison.Ordinal)) continue;
-                    _valueSignatures[key] = signature;
-                    await PublishValueAsync(value, false, token).ConfigureAwait(false);
+                    var publishGate = _valuePublishGates.GetOrAdd(key, ignored => new SemaphoreSlim(1, 1));
+                    await publishGate.WaitAsync(token).ConfigureAwait(false);
+                    try
+                    {
+                        var signature = JsonConvert.SerializeObject(new { value.DataType, value.Value, value.Quality, value.ErrorMessage }, _jsonSettings);
+                        string previous;
+                        if (_valueSignatures.TryGetValue(key, out previous) && string.Equals(previous, signature, StringComparison.Ordinal)) continue;
+                        _valueSignatures[key] = signature;
+                        try
+                        {
+                            await PublishValueAsync(value, false, token).ConfigureAwait(false);
+                        }
+                        catch
+                        {
+                            RestoreValueSignature(key, signature, previous);
+                            throw;
+                        }
+                    }
+                    finally
+                    {
+                        publishGate.Release();
+                    }
                 }
             })) _logger.Warn("MQTT Tag gateway value change was dropped because the work queue is full.");
         }
@@ -314,14 +337,33 @@ namespace IndustrialCommSdk.Protocols.Mqtt
         private Task PublishValueAsync(TagGatewayValue value, bool snapshot, CancellationToken cancellationToken)
         {
             if (value == null || string.IsNullOrWhiteSpace(value.DeviceName) || string.IsNullOrWhiteSpace(value.TagName)) return Task.CompletedTask;
-            var key = value.DeviceName + "\u001f" + value.TagName;
-            _valueSignatures[key] = JsonConvert.SerializeObject(new { value.DataType, value.Value, value.Quality, value.ErrorMessage }, _jsonSettings);
             return PublishJsonAsync(
                 ValueTopic(value.DeviceName, value.TagName),
                 new { type = snapshot ? "snapshot" : "change", item = value, timestampUtc = DateTimeOffset.UtcNow },
                 _options.QualityOfService,
                 _options.RetainTelemetry,
                 cancellationToken);
+        }
+
+        private void RememberPublishedValue(TagGatewayValue value)
+        {
+            if (value == null || string.IsNullOrWhiteSpace(value.DeviceName) || string.IsNullOrWhiteSpace(value.TagName)) return;
+            var key = value.DeviceName + "\u001f" + value.TagName;
+            var signature = JsonConvert.SerializeObject(new { value.DataType, value.Value, value.Quality, value.ErrorMessage }, _jsonSettings);
+            _valueSignatures.TryAdd(key, signature);
+        }
+
+        private void RestoreValueSignature(string key, string attemptedSignature, string previousSignature)
+        {
+            if (previousSignature == null)
+            {
+                ((ICollection<KeyValuePair<string, string>>)_valueSignatures).Remove(
+                    new KeyValuePair<string, string>(key, attemptedSignature));
+            }
+            else
+            {
+                _valueSignatures.TryUpdate(key, previousSignature, attemptedSignature);
+            }
         }
 
         private async Task HeartbeatLoopAsync(CancellationToken cancellationToken)

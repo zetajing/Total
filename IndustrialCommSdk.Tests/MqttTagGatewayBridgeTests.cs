@@ -86,6 +86,28 @@ namespace IndustrialCommSdk.Tests
         }
 
         [Test]
+        public async Task FailedValuePublicationDoesNotSuppressRetryForSameValue()
+        {
+            var broker = new FakeBroker();
+            var gateway = new FakeTagGateway();
+            using (var bridge = new MqttTagGatewayBridge(broker, gateway, new MqttTagGatewayOptions
+            {
+                HeartbeatInterval = TimeSpan.FromHours(1),
+            }))
+            {
+                await bridge.StartAsync(CancellationToken.None);
+                broker.FailNextPublication();
+                gateway.RaiseValue(8);
+                await WaitUntilAsync(() => broker.FailedPublicationCount >= 1);
+
+                gateway.RaiseValue(8);
+                await WaitUntilAsync(() => broker.Publications.Count(item => item.Topic.EndsWith("/tags/Value", StringComparison.Ordinal)) >= 2);
+                Assert.GreaterOrEqual(broker.Publications.Count(item => item.Topic.EndsWith("/tags/Value", StringComparison.Ordinal)), 2);
+                await bridge.StopAsync(CancellationToken.None);
+            }
+        }
+
+        [Test]
         public async Task CommandTopicClientMustMatchConnectedClientEvenWithoutBrokerAcl()
         {
             var broker = new FakeBroker();
@@ -207,9 +229,13 @@ namespace IndustrialCommSdk.Tests
 
         private sealed class FakeBroker : IMqttBrokerService
         {
+            private int _failNextPublication;
+            private int _failedPublicationCount;
+
             public MqttBrokerOptions Options { get; } = new MqttBrokerOptions();
             public bool IsRunning { get; private set; } = true;
             public ConcurrentBag<Publication> Publications { get; } = new ConcurrentBag<Publication>();
+            public int FailedPublicationCount { get { return Volatile.Read(ref _failedPublicationCount); } }
             public event EventHandler Started;
             public event EventHandler Stopped;
             public event EventHandler<MqttBrokerClientEventArgs> ClientConnected;
@@ -219,8 +245,18 @@ namespace IndustrialCommSdk.Tests
             public Task StopAsync(CancellationToken cancellationToken) { IsRunning = false; Stopped?.Invoke(this, EventArgs.Empty); return Task.CompletedTask; }
             public Task PublishAsync(string topic, byte[] payload, int qualityOfService, bool retain, CancellationToken cancellationToken)
             {
+                if (Interlocked.Exchange(ref _failNextPublication, 0) != 0)
+                {
+                    Interlocked.Increment(ref _failedPublicationCount);
+                    return Task.FromException(new InvalidOperationException("Simulated MQTT publish failure."));
+                }
                 Publications.Add(new Publication(topic, payload, retain));
                 return Task.CompletedTask;
+            }
+
+            public void FailNextPublication()
+            {
+                Interlocked.Exchange(ref _failNextPublication, 1);
             }
             public Task<IReadOnlyList<MqttBrokerClientSession>> GetClientsAsync(CancellationToken cancellationToken)
             {

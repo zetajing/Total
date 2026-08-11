@@ -362,6 +362,47 @@ namespace IndustrialCommSdk.Tests
 
         [Test]
         [Timeout(15000)]
+        public async Task Client_RejectsOversizedOutboundMessagesBeforePublish()
+        {
+            var port = GetFreeTcpPort();
+            using (var broker = new MqttBrokerService(new MqttBrokerOptions
+            {
+                Port = port,
+                MaxApplicationMessagePayloadBytes = 1024,
+                Credentials = new Dictionary<string, string>(StringComparer.Ordinal)
+                {
+                    ["outbound-limit-user"] = "outbound-limit-password",
+                },
+            }))
+            using (var client = new MqttClient(new MqttClientOptions
+            {
+                DeviceId = "mqtt-outbound-limit",
+                Host = IPAddress.Loopback.ToString(),
+                Port = port,
+                Username = "outbound-limit-user",
+                Password = "outbound-limit-password",
+                MaxApplicationMessagePayloadBytes = 4,
+                ConnectTimeoutMilliseconds = 3000,
+            }))
+            {
+                var messageWasProcessed = false;
+                broker.MessageReceived += (sender, args) => messageWasProcessed = true;
+                await broker.StartAsync(CancellationToken.None);
+                await client.ConnectAsync(CancellationToken.None);
+
+                Assert.ThrowsAsync<ArgumentException>(async () => await client.WriteAsync(
+                    new WriteRequest("mqtt-outbound-limit", "payload/outbound-too-large", DataType.String, "12345"),
+                    CancellationToken.None));
+                await Task.Delay(100);
+                Assert.IsFalse(messageWasProcessed);
+
+                await client.DisconnectAsync(CancellationToken.None);
+                await broker.StopAsync(CancellationToken.None);
+            }
+        }
+
+        [Test]
+        [Timeout(15000)]
         public async Task Client_OptionsAndWillPayloadAreFrozenAtConstruction()
         {
             var port = GetFreeTcpPort();
