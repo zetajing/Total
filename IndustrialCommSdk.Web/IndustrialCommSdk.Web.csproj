@@ -2,16 +2,17 @@
   <PropertyGroup>
     <TargetFramework>net472</TargetFramework>
     <LangVersion>latest</LangVersion>
-    <RootNamespace>IndustrialCommSdk.Runtime</RootNamespace>
-    <AssemblyName>IndustrialCommSdk.Runtime</AssemblyName>
+    <RootNamespace>IndustrialCommSdk.Web</RootNamespace>
+    <AssemblyName>IndustrialCommSdk.Web</AssemblyName>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\IndustrialCommSdk.Abstractions\IndustrialCommSdk.Abstractions.csproj" />
-  </ItemGroup>
-  <ItemGroup>
-    <Reference Include="System.Security" />
+    <ProjectReference Include="..\IndustrialCommSdk.Runtime\IndustrialCommSdk.Runtime.csproj" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+  </ItemGroup>
+  <ItemGroup>
+    <Reference Include="System.Net.Http" />
   </ItemGroup>
 </Project>

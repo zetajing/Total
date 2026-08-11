@@ -106,6 +106,7 @@
                                 <DataGridTextColumn Width="1.2*" Header="地址" Binding="{Binding Address}" />
                                 <DataGridComboBoxColumn x:Name="PointTypeColumn" Width="1*" Header="类型" SelectedItemBinding="{Binding Type}" />
                                 <DataGridTextColumn Width="0.7*" Header="长度" Binding="{Binding Length}" />
+                                <DataGridCheckBoxColumn Width="0.7*" Header="允许远程写" Binding="{Binding Writable}" />
                             </DataGrid.Columns>
                         </DataGrid>
                     </TabItem>

@@ -17,6 +17,8 @@
 | `IndustrialCommSdk.Protocols.Mqtt` | MQTT（MQTTnet） |
 | `IndustrialCommSdk.Protocols.Redis` | Redis（StackExchange.Redis） |
 | `IndustrialCommSdk.Mes.Http` | 开放式 MES HTTP JSON 发送和接收 |
+| `IndustrialCommSdk.Web` | HTTP/HTTPS 客户端、工业 WebAPI 与 WebSocket 客户端/服务端 |
+| `IndustrialCommSdk.FileTransfer.Ftp` | FTP/FTPS 文件客户端（FluentFTP） |
 | `IndustrialCommSdk.Storage` | 历史存储契约、SQL Server、缓冲记录器和 CSV |
 | `IndustrialCommSdk.Storage.MySql` | MySQL 8.0+ 历史存储（MySqlConnector） |
 | `IndustrialCommSdk` | 引用全部内置模块并提供默认注册表 |
@@ -91,6 +93,7 @@ using (var client = new ModbusTcpClient(new ModbusTcpClientOptions
 - [OPC UA](docs/protocols/opc-ua.md)
 - [MQTT](docs/protocols/mqtt.md)
 - [Redis](docs/protocols/redis.md)
+- [网络服务、WebAPI、WebSocket 与 FTP/FTPS](docs/network-services.md)
 
 ## 聚合入口与配置
 

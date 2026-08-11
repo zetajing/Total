@@ -27,6 +27,7 @@ namespace IndustrialCommDemo.Services
         private readonly IIndustrialLogger _logger;
         private readonly SemaphoreSlim _lifecycleGate = new SemaphoreSlim(1, 1);
         private IndustrialDeviceHost _host;
+        private IndustrialTagGateway _tagGateway;
         private int _disposed;
 
         public IndustrialApplicationRuntime(string configFilePath, IIndustrialLogger logger)
@@ -43,10 +44,26 @@ namespace IndustrialCommDemo.Services
         public IndustrialSdk Sdk { get; }
         public bool IsLoaded { get { return _host != null; } }
         public bool IsRunning { get; private set; }
+        public IIndustrialTagGateway TagGateway { get { return _tagGateway; } }
 
         public event EventHandler<RuntimeDevicesChangedEventArgs> DevicesChanged;
         public event EventHandler<RuntimeDeviceStateEventArgs> DeviceStateChanged;
         public event EventHandler<RuntimeValuesEventArgs> ValuesReceived;
+        public event EventHandler<EventArgs> TagGatewayChanged;
+
+        public async Task EnsureLoadedAsync(CancellationToken cancellationToken = default)
+        {
+            ThrowIfDisposed();
+            await _lifecycleGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+            try
+            {
+                if (_host == null) CreateHost();
+            }
+            finally
+            {
+                _lifecycleGate.Release();
+            }
+        }
 
         public async Task ReloadAsync(CancellationToken cancellationToken = default)
         {
@@ -103,7 +120,14 @@ namespace IndustrialCommDemo.Services
         {
             var host = _host;
             _host = null;
+            var gateway = _tagGateway;
+            _tagGateway = null;
             IsRunning = false;
+            if (gateway != null)
+            {
+                gateway.Dispose();
+                RaiseSafely(TagGatewayChanged, EventArgs.Empty, "点位网关状态处理失败");
+            }
             if (host == null) return;
 
             host.DeviceStateChanged -= Host_DeviceStateChanged;
@@ -156,6 +180,8 @@ namespace IndustrialCommDemo.Services
             host.DeviceStateChanged += Host_DeviceStateChanged;
             host.ValuesReceived += Host_ValuesReceived;
             _host = host;
+            _tagGateway = new IndustrialTagGateway(host);
+            RaiseSafely(TagGatewayChanged, EventArgs.Empty, "点位网关状态处理失败");
 
             RaiseDevicesChanged(host.Devices.Values.Select(device => new RuntimeDeviceInfo
             {

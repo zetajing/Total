@@ -1,7 +1,5 @@
 using System;
-using System.Threading;
 using IndustrialCommDemo.Helpers;
-using IndustrialCommSdk;
 using IndustrialCommSdk.Abstractions;
 using IndustrialCommSdk.Protocols.S7;
 using CpuType = S7.Net.CpuType;
@@ -15,6 +13,14 @@ namespace IndustrialCommDemo.ViewModels
     /// </summary>
     internal sealed class SiemensS7ViewModel : ProtocolTabViewModel
     {
+        private CpuType _selectedCpuType = CpuType.S71200;
+
+        public CpuType SelectedCpuType
+        {
+            get => _selectedCpuType;
+            set => SetProperty(ref _selectedCpuType, value);
+        }
+
         public SiemensS7ViewModel(DemoAppContext ctx) : base(ctx) { }
 
         protected override string ProtocolTag => "S7";
@@ -28,7 +34,7 @@ namespace IndustrialCommDemo.ViewModels
                     Host = ParseHelper.RequireText(Host, "S7 主机"),
                     Rack = ParseHelper.ParseShortValue(PortOrRack, "S7 机架"),
                     Slot = ParseHelper.ParseShortValue(SlotOrLength, "S7 槽位"),
-                    CpuType = CpuType.S71200,
+                    CpuType = SelectedCpuType,
                 },
                 Ctx.SdkLogger);
         }
@@ -83,6 +89,7 @@ namespace IndustrialCommDemo.ViewModels
             Ctx.UiState.S7.DataType = SelectedDataType.ToString();
             Ctx.UiState.S7.Length = Length;
             Ctx.UiState.S7.WriteValue = WriteValue;
+            Ctx.UiState.S7.CpuType = SelectedCpuType.ToString();
         }
 
         public override void RestoreState()
@@ -97,6 +104,11 @@ namespace IndustrialCommDemo.ViewModels
             if (Enum.TryParse(s.DataType, out DataType selectedDataType)) SelectedDataType = selectedDataType;
             if (!string.IsNullOrWhiteSpace(s.Length)) Length = s.Length;
             if (!string.IsNullOrWhiteSpace(s.WriteValue)) WriteValue = s.WriteValue;
+            if (Enum.TryParse(s.CpuType, true, out CpuType selectedCpuType) &&
+                Enum.IsDefined(typeof(CpuType), selectedCpuType))
+            {
+                SelectedCpuType = selectedCpuType;
+            }
         }
 
         // ── Data type resolution ──

@@ -46,6 +46,9 @@
                 <TabItem Header="历史数据">
                     <views:DatabaseTab x:Name="DatabaseControlTag" />
                 </TabItem>
+                <TabItem Header="网络服务">
+                    <views:NetworkServicesTab x:Name="NetworkServicesControlTag" />
+                </TabItem>
                 <TabItem Header="调试与维护">
                     <Grid Margin="4,8,4,4">
                         <Grid.RowDefinitions>
