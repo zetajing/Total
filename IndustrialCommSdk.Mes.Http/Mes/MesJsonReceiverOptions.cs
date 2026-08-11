@@ -19,6 +19,12 @@ namespace IndustrialCommSdk.Mes
         public int MaxRequestContentBytes { get; set; } = 1024 * 1024;
 
         /// <summary>
+        /// 接收完整请求正文的总超时，单位毫秒。默认 5000。
+        /// 该时限覆盖整个正文读取过程，不会在每次成功读取后重新计时。
+        /// </summary>
+        public int RequestBodyTimeoutMilliseconds { get; set; } = 5000;
+
+        /// <summary>
         /// 业务处理器超时，单位毫秒。默认 5000。
         /// 停止接收器时也使用该时限等待不响应取消的处理器；超时后处理器继续受跟踪并占用并发容量。
         /// </summary>

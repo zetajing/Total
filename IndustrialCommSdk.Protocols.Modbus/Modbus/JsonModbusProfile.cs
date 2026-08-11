@@ -50,33 +50,69 @@ namespace IndustrialCommSdk.Protocols.Modbus
         {
             _definition = definition ?? throw new ArgumentNullException(nameof(definition));
 
+            if (string.IsNullOrWhiteSpace(definition.Key))
+                throw new ArgumentException("key is required.", nameof(definition));
+
             // 编译地址正则
             if (string.IsNullOrWhiteSpace(definition.AddressPattern))
-                throw new ArgumentException("addressPattern is required.");
+                throw new ArgumentException("addressPattern is required.", nameof(definition));
             _pattern = new Regex(definition.AddressPattern, RegexOptions.Compiled | RegexOptions.IgnoreCase);
+            var groupNumbers = _pattern.GetGroupNumbers();
+            if (Array.IndexOf(groupNumbers, 1) < 0 || Array.IndexOf(groupNumbers, 2) < 0)
+            {
+                throw new ArgumentException(
+                    "addressPattern must contain capture group 1 (prefix) and capture group 2 (index).",
+                    nameof(definition));
+            }
 
             // 构建映射表
             _mappings = new Dictionary<string, MappingRule>(StringComparer.OrdinalIgnoreCase);
-            if (definition.Mappings != null)
+            if (definition.Mappings == null || definition.Mappings.Count == 0)
+                throw new ArgumentException("At least one mapping is required.", nameof(definition));
+
+            foreach (var mapping in definition.Mappings)
             {
-                foreach (var mapping in definition.Mappings)
+                if (mapping == null)
+                    throw new ArgumentException("Mapping cannot be null.", nameof(definition));
+                if (string.IsNullOrWhiteSpace(mapping.Prefix))
+                    throw new ArgumentException("Mapping prefix is required.", nameof(definition));
+
+                var prefix = mapping.Prefix.Trim();
+                if (_mappings.ContainsKey(prefix))
                 {
-                    if (string.IsNullOrWhiteSpace(mapping.Prefix))
-                        continue;
-
-                    var area = ParseArea(mapping.Area);
-                    bool isHex = string.Equals(mapping.Radix, "hex", StringComparison.OrdinalIgnoreCase);
-                    bool isOctal = string.Equals(mapping.Radix, "octal", StringComparison.OrdinalIgnoreCase);
-
-                    _mappings[mapping.Prefix] = new MappingRule
-                    {
-                        Area = area,
-                        Base = mapping.Base,
-                        Max = mapping.Max,
-                        IsHex = isHex,
-                        IsOctal = isOctal,
-                    };
+                    throw new ArgumentException(
+                        string.Format("Duplicate mapping prefix: {0}.", prefix),
+                        nameof(definition));
                 }
+
+                var area = ParseArea(mapping.Area);
+                bool isHex;
+                bool isOctal;
+                ParseRadix(mapping.Radix, out isHex, out isOctal);
+
+                if (mapping.Max <= 0)
+                {
+                    throw new ArgumentOutOfRangeException(
+                        nameof(definition),
+                        string.Format("Mapping max must be greater than zero for prefix {0}.", prefix));
+                }
+
+                var lastAddress = (long)mapping.Base + mapping.Max - 1L;
+                if (lastAddress > ushort.MaxValue)
+                {
+                    throw new ArgumentOutOfRangeException(
+                        nameof(definition),
+                        string.Format("Mapping range exceeds address 65535 for prefix {0}.", prefix));
+                }
+
+                _mappings.Add(prefix, new MappingRule
+                {
+                    Area = area,
+                    Base = mapping.Base,
+                    Max = mapping.Max,
+                    IsHex = isHex,
+                    IsOctal = isOctal,
+                });
             }
         }
 
@@ -134,7 +170,7 @@ namespace IndustrialCommSdk.Protocols.Modbus
                 throw new IndustrialAddressParseException(
                     string.Format("{0} variable index out of range.", DisplayName));
 
-            return new ModbusAddress(rule.Area, (ushort)(rule.Base + index));
+            return new ModbusAddress(rule.Area, checked((ushort)(rule.Base + index)));
         }
 
         /// <summary>
@@ -160,7 +196,7 @@ namespace IndustrialCommSdk.Protocols.Modbus
         private static ModbusArea ParseArea(string area)
         {
             if (string.IsNullOrWhiteSpace(area))
-                return ModbusArea.HoldingRegister;
+                throw new ArgumentException("Mapping area is required.", nameof(area));
 
             switch (area.Trim().ToLowerInvariant())
             {
@@ -168,7 +204,35 @@ namespace IndustrialCommSdk.Protocols.Modbus
                 case "discreteinput":   return ModbusArea.DiscreteInput;
                 case "inputregister":   return ModbusArea.InputRegister;
                 case "holdingregister": return ModbusArea.HoldingRegister;
-                default:                return ModbusArea.HoldingRegister;
+                default:
+                    throw new ArgumentException(
+                        string.Format("Unsupported Modbus area: {0}.", area),
+                        nameof(area));
+            }
+        }
+
+        private static void ParseRadix(string radix, out bool isHex, out bool isOctal)
+        {
+            isHex = false;
+            isOctal = false;
+
+            if (string.IsNullOrWhiteSpace(radix))
+                throw new ArgumentException("Mapping radix is required.", nameof(radix));
+
+            switch (radix.Trim().ToLowerInvariant())
+            {
+                case "decimal":
+                    return;
+                case "hex":
+                    isHex = true;
+                    return;
+                case "octal":
+                    isOctal = true;
+                    return;
+                default:
+                    throw new ArgumentException(
+                        string.Format("Unsupported mapping radix: {0}.", radix),
+                        nameof(radix));
             }
         }
 

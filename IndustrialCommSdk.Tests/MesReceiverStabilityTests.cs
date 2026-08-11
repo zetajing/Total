@@ -1,5 +1,6 @@
 using System;
 using System.Diagnostics;
+using System.IO;
 using System.Net;
 using System.Net.Http;
 using System.Net.Sockets;
@@ -24,6 +25,168 @@ namespace IndustrialCommSdk.Tests
             Assert.Throws<ArgumentOutOfRangeException>(() => new MesJsonReceiver(
                 options,
                 (request, token) => Task.FromResult(new MesJsonReceiveResponse())));
+        }
+
+        [Test]
+        public void RequestBodyTimeoutMustBePositive()
+        {
+            var options = CreateOptions();
+            options.RequestBodyTimeoutMilliseconds = 0;
+
+            Assert.Throws<ArgumentOutOfRangeException>(() => new MesJsonReceiver(
+                options,
+                (request, token) => Task.FromResult(new MesJsonReceiveResponse())));
+        }
+
+        [Test]
+        public void DemoReceiverConfigurationDefaultsLegacyBodyTimeoutToFiveSeconds()
+        {
+            var demoJsonType = Type.GetType(
+                "IndustrialCommDemo.Helpers.MesDemoJson, IndustrialCommDemo",
+                true);
+            var createDefault = demoJsonType.GetMethod(
+                "CreateDefaultReceiverConfiguration",
+                BindingFlags.Static | BindingFlags.Public);
+            var parse = demoJsonType.GetMethod(
+                "ParseReceiverConfiguration",
+                BindingFlags.Static | BindingFlags.Public);
+            Assert.That(createDefault, Is.Not.Null);
+            Assert.That(parse, Is.Not.Null);
+
+            var template = (string)createDefault.Invoke(null, null);
+            Assert.That(template, Does.Contain("\"requestBodyTimeoutMilliseconds\": 5000"));
+
+            const string legacyConfiguration =
+                "{\"listenPrefix\":\"http://127.0.0.1:8081/mes/\"," +
+                "\"maxConcurrentRequests\":1,\"maxRequestContentBytes\":1024," +
+                "\"handlerTimeoutMilliseconds\":1000,\"responseStatusCode\":200," +
+                "\"responseJson\":{}}";
+            var parsed = parse.Invoke(null, new object[] { legacyConfiguration });
+            var optionsProperty = parsed.GetType().GetProperty("Options");
+            Assert.That(optionsProperty, Is.Not.Null);
+            var parsedOptions = (MesJsonReceiverOptions)optionsProperty.GetValue(parsed, null);
+            Assert.That(parsedOptions.RequestBodyTimeoutMilliseconds, Is.EqualTo(5000));
+        }
+
+        [Test]
+        public async Task SlowRequestBodyTimesOutAndReleasesItsRequestCapacity()
+        {
+            var options = CreateOptions();
+            options.MaxConcurrentRequests = 1;
+            options.RequestBodyTimeoutMilliseconds = 250;
+            var handlerCalls = 0;
+
+            using (var receiver = new MesJsonReceiver(options, (request, token) =>
+            {
+                Interlocked.Increment(ref handlerCalls);
+                return Task.FromResult(new MesJsonReceiveResponse());
+            }))
+            {
+                await receiver.StartAsync(CancellationToken.None);
+                var prefix = new Uri(options.ListenPrefix);
+
+                using (var client = new TcpClient())
+                {
+                    await CompleteWithinAsync(client.ConnectAsync(IPAddress.Loopback, prefix.Port), 3000);
+                    var stream = client.GetStream();
+                    var rawRequest = string.Format(
+                        "POST {0}slow-body HTTP/1.1\r\n" +
+                        "Host: 127.0.0.1:{1}\r\n" +
+                        "Content-Type: application/json\r\n" +
+                        "Content-Length: 64\r\n" +
+                        "Connection: close\r\n\r\n" +
+                        "{{\"partial\":",
+                        prefix.AbsolutePath,
+                        prefix.Port);
+                    var requestBytes = Encoding.ASCII.GetBytes(rawRequest);
+                    await stream.WriteAsync(requestBytes, 0, requestBytes.Length);
+                    await stream.FlushAsync();
+
+                    var trickleTask = Task.Run(async () =>
+                    {
+                        try
+                        {
+                            var oneByte = new[] { (byte)' ' };
+                            for (var index = 0; index < 10; index++)
+                            {
+                                await Task.Delay(100).ConfigureAwait(false);
+                                await stream.WriteAsync(oneByte, 0, oneByte.Length).ConfigureAwait(false);
+                            }
+                        }
+                        catch (Exception ex) when (
+                            ex is IOException || ex is ObjectDisposedException || ex is SocketException)
+                        {
+                        }
+                    });
+                    var stopwatch = Stopwatch.StartNew();
+                    var rawResponse = await ReadUntilAsync(
+                        stream,
+                        "request_body_timeout",
+                        3000);
+                    stopwatch.Stop();
+                    Assert.That(rawResponse, Does.StartWith("HTTP/1.1 408"));
+                    Assert.That(rawResponse, Does.Contain("request_body_timeout"));
+                    Assert.That(
+                        stopwatch.Elapsed,
+                        Is.LessThan(TimeSpan.FromMilliseconds(900)),
+                        "The body timeout was reset by trickled bytes instead of using one absolute deadline.");
+                    await CompleteWithinAsync(trickleTask, 3000);
+                }
+
+                Assert.That(Volatile.Read(ref handlerCalls), Is.Zero);
+                using (var response = await CompleteWithinAsync(
+                    PostJsonAsync(options.ListenPrefix + "after-body-timeout"), 3000))
+                {
+                    Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+                }
+
+                Assert.That(Volatile.Read(ref handlerCalls), Is.EqualTo(1));
+                await EventuallyAsync(
+                    () => GetPrivateCollectionCount(receiver, "_activeRequests") == 0,
+                    3000);
+            }
+        }
+
+        [Test]
+        public async Task StopImmediatelyInterruptsAnIncompleteRequestBody()
+        {
+            var options = CreateOptions();
+            options.RequestBodyTimeoutMilliseconds = 15000;
+            options.HandlerTimeoutMilliseconds = 5000;
+            var handlerCalls = 0;
+
+            using (var receiver = new MesJsonReceiver(options, (request, token) =>
+            {
+                Interlocked.Increment(ref handlerCalls);
+                return Task.FromResult(new MesJsonReceiveResponse());
+            }))
+            {
+                await receiver.StartAsync(CancellationToken.None);
+                var prefix = new Uri(options.ListenPrefix);
+                using (var client = new TcpClient())
+                {
+                    await CompleteWithinAsync(client.ConnectAsync(IPAddress.Loopback, prefix.Port), 3000);
+                    var rawRequest =
+                        "POST " + prefix.AbsolutePath + "stop-body HTTP/1.1\r\n" +
+                        "Host: 127.0.0.1:" + prefix.Port + "\r\n" +
+                        "Content-Type: application/json\r\n" +
+                        "Content-Length: 64\r\n\r\n" +
+                        "{\"partial\":";
+                    var requestBytes = Encoding.ASCII.GetBytes(rawRequest);
+                    await client.GetStream().WriteAsync(requestBytes, 0, requestBytes.Length);
+                    await EventuallyAsync(
+                        () => GetPrivateCollectionCount(receiver, "_activeRequests") == 1,
+                        3000);
+
+                    var stopwatch = Stopwatch.StartNew();
+                    await CompleteWithinAsync(receiver.StopAsync(CancellationToken.None), 2000);
+                    stopwatch.Stop();
+                    Assert.That(stopwatch.Elapsed, Is.LessThan(TimeSpan.FromSeconds(1)));
+                    Assert.That(receiver.IsRunning, Is.False);
+                    Assert.That(GetPrivateCollectionCount(receiver, "_activeRequests"), Is.Zero);
+                    Assert.That(Volatile.Read(ref handlerCalls), Is.Zero);
+                }
+            }
         }
 
         [Test]
@@ -218,6 +381,31 @@ namespace IndustrialCommSdk.Tests
             using (var client = new HttpClient { Timeout = TimeSpan.FromSeconds(5) })
             using (var content = new StringContent("{}", Encoding.UTF8, "application/json"))
                 return await client.PostAsync(url, content).ConfigureAwait(false);
+        }
+
+        private static async Task<string> ReadUntilAsync(
+            NetworkStream stream,
+            string expectedText,
+            int timeoutMilliseconds)
+        {
+            var result = new StringBuilder();
+            var stopwatch = Stopwatch.StartNew();
+            var buffer = new byte[1024];
+            while (result.ToString().IndexOf(expectedText, StringComparison.Ordinal) < 0)
+            {
+                var remaining = timeoutMilliseconds - checked((int)stopwatch.ElapsedMilliseconds);
+                Assert.That(remaining, Is.GreaterThan(0), "Response did not arrive before the deadline.");
+                var readTask = stream.ReadAsync(buffer, 0, buffer.Length);
+                var deadlineTask = Task.Delay(remaining);
+                Assert.That(
+                    await Task.WhenAny(readTask, deadlineTask),
+                    Is.SameAs(readTask),
+                    "Response did not arrive before the deadline.");
+                var read = await readTask.ConfigureAwait(false);
+                if (read == 0) break;
+                result.Append(Encoding.ASCII.GetString(buffer, 0, read));
+            }
+            return result.ToString();
         }
 
         private static async Task ObserveCompletionAsync(Task task, int timeoutMilliseconds)

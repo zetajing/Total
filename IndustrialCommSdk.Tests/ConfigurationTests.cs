@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Linq;
 using IndustrialCommSdk;
 using IndustrialCommSdk.Runtime.Configuration;
 using IndustrialCommSdk.Protocols.Modbus;
@@ -89,9 +90,204 @@ namespace IndustrialCommSdk.Tests
         }
 
         [Test]
+        public void JsonProfile_RejectsInvalidCoreDefinitions()
+        {
+            var missingKey = CreateProfileDefinition("valid-key");
+            missingKey.Key = " ";
+            Assert.Catch<ArgumentException>(() => new JsonModbusProfile(missingKey));
+
+            var missingPattern = CreateProfileDefinition("missing-pattern");
+            missingPattern.AddressPattern = null;
+            Assert.Catch<ArgumentException>(() => new JsonModbusProfile(missingPattern));
+
+            var insufficientGroups = CreateProfileDefinition("insufficient-groups");
+            insufficientGroups.AddressPattern = "^([A-Z]+)\\d+$";
+            Assert.Catch<ArgumentException>(() => new JsonModbusProfile(insufficientGroups));
+
+            var missingMappings = CreateProfileDefinition("missing-mappings");
+            missingMappings.Mappings.Clear();
+            Assert.Catch<ArgumentException>(() => new JsonModbusProfile(missingMappings));
+
+            var duplicatePrefix = CreateProfileDefinition("duplicate-prefix");
+            duplicatePrefix.Mappings.Add(new ModbusProfileMapping
+            {
+                Prefix = "d",
+                Area = "Coil",
+                Base = 20,
+                Max = 10,
+                Radix = "decimal",
+            });
+            Assert.Catch<ArgumentException>(() => new JsonModbusProfile(duplicatePrefix));
+        }
+
+        [Test]
+        public void JsonProfile_RejectsInvalidAreaRadixAndAddressRange()
+        {
+            Assert.Catch<ArgumentException>(() => new JsonModbusProfile(
+                CreateProfileDefinition("invalid-area", "UnknownArea", "decimal", 0, 10)));
+            Assert.Catch<ArgumentException>(() => new JsonModbusProfile(
+                CreateProfileDefinition("invalid-radix", "HoldingRegister", "binary", 0, 10)));
+            Assert.Catch<ArgumentException>(() => new JsonModbusProfile(
+                CreateProfileDefinition("invalid-max", "HoldingRegister", "decimal", 0, 0)));
+            Assert.Catch<ArgumentException>(() => new JsonModbusProfile(
+                CreateProfileDefinition("overflow", "HoldingRegister", "decimal", 65530, 7)));
+
+            var boundary = new JsonModbusProfile(
+                CreateProfileDefinition("boundary", "HoldingRegister", "decimal", 65535, 1));
+            Assert.AreEqual((ushort)65535, boundary.ParseAddress("D0").ZeroBasedAddress);
+        }
+
+        [Test]
+        public void LoadJsonProfiles_InvalidEntryDoesNotPartiallyRegisterFile()
+        {
+            var validKey = "atomic-valid-" + Guid.NewGuid().ToString("N");
+            var invalidKey = "atomic-invalid-" + Guid.NewGuid().ToString("N");
+            var path = Path.Combine(TestContext.CurrentContext.TestDirectory, validKey + ".json");
+            File.WriteAllText(path,
+                "{\"profiles\":[" +
+                CreateProfileJson(validKey, "Atomic Valid") + "," +
+                CreateProfileJson(invalidKey, "Atomic Invalid", "UnknownArea") +
+                "]}");
+
+            try
+            {
+                Assert.Catch<ArgumentException>(() => ModbusDeviceProfiles.LoadJsonProfiles(path));
+                Assert.IsNull(ModbusDeviceProfiles.Find(validKey));
+            }
+            finally
+            {
+                if (File.Exists(path)) File.Delete(path);
+            }
+        }
+
+        [Test]
+        public void LoadJsonProfiles_SameKeyOverridesLookupButNotStaticProfile()
+        {
+            // 先完成可选默认文件加载，避免它在本测试的显式覆盖之后再次写入注册表。
+            var ignored = ModbusDeviceProfiles.All;
+            var builtIn = ModbusDeviceProfiles.MitsubishiModbusTcp;
+            var displayName = "JSON Mitsubishi Override " + Guid.NewGuid().ToString("N");
+            var path = Path.Combine(TestContext.CurrentContext.TestDirectory, displayName + ".json");
+            File.WriteAllText(path,
+                "{\"profiles\":[" +
+                CreateProfileJson(builtIn.Key, displayName, "HoldingRegister", "decimal", 321, 10) +
+                "]}");
+
+            try
+            {
+                ModbusDeviceProfiles.LoadJsonProfiles(path);
+                var selected = ModbusDeviceProfiles.GetRequired(builtIn.Key);
+                var allMatches = ModbusDeviceProfiles.All
+                    .Where(profile => string.Equals(profile.Key, builtIn.Key, StringComparison.OrdinalIgnoreCase))
+                    .ToArray();
+
+                Assert.IsInstanceOf<JsonModbusProfile>(selected);
+                Assert.AreEqual(displayName, selected.DisplayName);
+                Assert.AreEqual((ushort)321, selected.ParseAddress("D0").ZeroBasedAddress);
+                Assert.AreSame(builtIn, ModbusDeviceProfiles.MitsubishiModbusTcp);
+                Assert.AreEqual((ushort)0, builtIn.ParseAddress("D0").ZeroBasedAddress);
+                Assert.AreEqual(1, allMatches.Length);
+                Assert.AreSame(selected, allMatches[0]);
+            }
+            finally
+            {
+                if (File.Exists(path)) File.Delete(path);
+            }
+        }
+
+        [Test]
+        public void All_ReturnsUniqueStableSnapshots()
+        {
+            var suffix = Guid.NewGuid().ToString("N");
+            var firstKey = "aaa-snapshot-" + suffix;
+            var lastKey = "zzz-snapshot-" + suffix;
+            var laterKey = "later-snapshot-" + suffix;
+            var path = Path.Combine(TestContext.CurrentContext.TestDirectory, suffix + ".json");
+
+            try
+            {
+                File.WriteAllText(path,
+                    "{\"profiles\":[" +
+                    CreateProfileJson(lastKey, "Last Snapshot") + "," +
+                    CreateProfileJson(firstKey, "First Snapshot") +
+                    "]}");
+                ModbusDeviceProfiles.LoadJsonProfiles(path);
+                var snapshot = ModbusDeviceProfiles.All;
+
+                File.WriteAllText(path,
+                    "{\"profiles\":[" + CreateProfileJson(laterKey, "Later Snapshot") + "]}");
+                ModbusDeviceProfiles.LoadJsonProfiles(path);
+                var updated = ModbusDeviceProfiles.All;
+                var repeated = ModbusDeviceProfiles.All;
+                var updatedKeys = updated.Select(profile => profile.Key).ToArray();
+
+                Assert.IsFalse(snapshot.Any(profile => profile.Key == laterKey));
+                Assert.IsTrue(updated.Any(profile => profile.Key == laterKey));
+                Assert.Less(
+                    Array.FindIndex(updatedKeys, key => key == firstKey),
+                    Array.FindIndex(updatedKeys, key => key == lastKey));
+                Assert.AreEqual(
+                    updatedKeys.Length,
+                    updatedKeys.Distinct(StringComparer.OrdinalIgnoreCase).Count());
+                CollectionAssert.AreEqual(
+                    updatedKeys,
+                    repeated.Select(profile => profile.Key).ToArray());
+            }
+            finally
+            {
+                if (File.Exists(path)) File.Delete(path);
+            }
+        }
+
+        [Test]
         public void GetRequired_RejectsUnknownProfile()
         {
             Assert.Throws<System.Collections.Generic.KeyNotFoundException>(() => ModbusDeviceProfiles.GetRequired("unknown-device"));
+        }
+
+        private static ModbusProfileDefinition CreateProfileDefinition(
+            string key,
+            string area = "HoldingRegister",
+            string radix = "decimal",
+            ushort baseAddress = 0,
+            int max = 10)
+        {
+            var definition = new ModbusProfileDefinition
+            {
+                Key = key,
+                DisplayName = key,
+                DefaultAddress = "D0",
+                ExampleAddresses = "D0",
+                AddressPattern = "^([A-Z]+)(\\d+)$",
+                LowWordFirst = false,
+            };
+            definition.Mappings.Add(new ModbusProfileMapping
+            {
+                Prefix = "D",
+                Area = area,
+                Base = baseAddress,
+                Max = max,
+                Radix = radix,
+            });
+            return definition;
+        }
+
+        private static string CreateProfileJson(
+            string key,
+            string displayName,
+            string area = "HoldingRegister",
+            string radix = "decimal",
+            int baseAddress = 0,
+            int max = 10)
+        {
+            return "{\"key\":\"" + key +
+                   "\",\"displayName\":\"" + displayName +
+                   "\",\"defaultAddress\":\"D0\",\"exampleAddresses\":\"D0\"," +
+                   "\"addressPattern\":\"^([A-Z]+)(\\\\d+)$\",\"lowWordFirst\":false," +
+                   "\"mappings\":[{\"prefix\":\"D\",\"area\":\"" + area +
+                   "\",\"base\":" + baseAddress +
+                   ",\"max\":" + max +
+                   ",\"radix\":\"" + radix + "\"}]}";
         }
     }
 }

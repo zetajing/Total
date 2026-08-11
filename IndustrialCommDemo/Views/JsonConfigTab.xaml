@@ -155,6 +155,9 @@
                         <Button Width="100" Margin="0,0,8,8" Click="ReloadConfigButton_Click" Content="重新加载" />
                         <Button Width="100" Margin="0,0,8,8" Click="SaveConfigButton_Click" Content="保存配置" />
                         <Button Width="100" Margin="0,0,8,8" Click="ValidateConfigButton_Click" Content="校验配置" />
+                        <Button Width="100" Margin="0,0,8,8" Click="ValidateAllConfigButton_Click" Content="校验全部" />
+                        <Button Width="100" Margin="0,0,8,8" Click="LoadDeviceTemplateButton_Click" Content="设备模板" />
+                        <Button Width="100" Margin="0,0,8,8" Click="LoadPointTemplateButton_Click" Content="点位模板" />
                         <Button Width="100" Margin="0,0,8,8" Background="#2563EB" Foreground="White" BorderThickness="0" Click="TestConnectionButton_Click" Content="测试连接" />
                         <Button Width="100" Margin="0,0,8,8" Background="#0F766E" Foreground="White" BorderThickness="0" Click="ReadPointsButton_Click" Content="批量读取" />
                     </WrapPanel>

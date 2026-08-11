@@ -11,7 +11,7 @@ namespace IndustrialCommSdk.Protocols.OpcUa
         public string Username { get; set; }
         public string Password { get; set; }
         public bool UseSecurity { get; set; }
-        public bool AutoAcceptUntrustedCertificates { get; set; } = true;
+        public bool AutoAcceptUntrustedCertificates { get; set; }
         public int ConnectTimeoutMilliseconds { get; set; } = 10000;
         public int SessionTimeoutMilliseconds { get; set; } = 60000;
     }

@@ -452,6 +452,8 @@ namespace IndustrialCommSdk.Mes
                 throw new ArgumentOutOfRangeException(nameof(options.MaxConcurrentRequests));
             if (options.MaxRequestContentBytes <= 0)
                 throw new ArgumentOutOfRangeException(nameof(options.MaxRequestContentBytes));
+            if (options.RequestBodyTimeoutMilliseconds <= 0)
+                throw new ArgumentOutOfRangeException(nameof(options.RequestBodyTimeoutMilliseconds));
             if (options.HandlerTimeoutMilliseconds <= 0)
                 throw new ArgumentOutOfRangeException(nameof(options.HandlerTimeoutMilliseconds));
         }

@@ -1,0 +1,24 @@
+{
+  "devices": [
+    {
+      "name": "plc-template",
+      "protocol": "modbus-tcp",
+      "deviceId": "plc-template",
+      "pointsFile": "points/template.json",
+      "enabled": false,
+      "runtime": {
+        "pollingIntervalMilliseconds": 1000,
+        "reconnectDelayMilliseconds": 3000,
+        "operationTimeoutMilliseconds": 5000,
+        "reportOnChangeOnly": false
+      },
+      "settings": {
+        "host": "127.0.0.1",
+        "port": 502,
+        "slaveId": 1,
+        "deviceProfile": "inovance-easyplc",
+        "connectTimeoutMilliseconds": 3000
+      }
+    }
+  ]
+}

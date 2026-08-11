@@ -66,5 +66,26 @@ namespace IndustrialCommSdk.Tests
             byte[] frame;
             Assert.Throws<IndustrialProtocolException>(() => framer.TryExtractFrame(buffer, out frame));
         }
+
+        [Test]
+        public void LengthPrefix_ExtractsLargeFrameAndPreservesTrailingFrame()
+        {
+            const int payloadLength = 256 * 1024;
+            var payload = new byte[payloadLength];
+            for (var index = 0; index < payload.Length; index++) payload[index] = (byte)(index % 251);
+
+            var framer = new LengthPrefixMessageFramer(4, payloadLength);
+            var trailing = new byte[] { 7, 8, 9 };
+            var buffer = new List<byte>(payloadLength + 16);
+            buffer.AddRange(framer.Encode(payload));
+            buffer.AddRange(framer.Encode(trailing));
+
+            byte[] extracted;
+            Assert.True(framer.TryExtractFrame(buffer, out extracted));
+            CollectionAssert.AreEqual(payload, extracted);
+            Assert.True(framer.TryExtractFrame(buffer, out extracted));
+            CollectionAssert.AreEqual(trailing, extracted);
+            Assert.That(buffer, Is.Empty);
+        }
     }
 }

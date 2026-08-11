@@ -1,0 +1,21 @@
+{
+  "profiles": [
+    {
+      "key": "custom-modbus",
+      "displayName": "Custom Modbus",
+      "defaultAddress": "D0",
+      "exampleAddresses": "D0",
+      "addressPattern": "^([A-Z])(\\d+)$",
+      "lowWordFirst": false,
+      "mappings": [
+        {
+          "prefix": "D",
+          "area": "HoldingRegister",
+          "base": 0,
+          "max": 1000,
+          "radix": "decimal"
+        }
+      ]
+    }
+  ]
+}

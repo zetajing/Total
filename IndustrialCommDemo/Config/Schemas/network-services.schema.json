@@ -1,0 +1,54 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Industrial network services",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [ "version", "mqttBroker", "webGateway", "ftp" ],
+  "properties": {
+    "version": { "type": "integer", "minimum": 1 },
+    "mqttBroker": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [ "autoStart", "bindAddress", "port", "useTls", "tlsPort", "username", "passwordSecretName" ],
+      "properties": {
+        "autoStart": { "type": "boolean" },
+        "bindAddress": { "type": "string", "minLength": 1 },
+        "port": { "type": "integer", "minimum": 1, "maximum": 65535 },
+        "useTls": { "type": "boolean" },
+        "tlsPort": { "type": "integer", "minimum": 1, "maximum": 65535 },
+        "certificateThumbprint": { "type": "string" },
+        "username": { "type": "string", "minLength": 1 },
+        "passwordSecretName": { "type": "string", "minLength": 1 }
+      }
+    },
+    "webGateway": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [ "autoStart", "listenPrefix", "apiKeySecretName", "enableRemoteWrites", "allowRawAddressReads", "exposeRawAddresses", "allowedOrigins" ],
+      "properties": {
+        "autoStart": { "type": "boolean" },
+        "listenPrefix": { "type": "string", "minLength": 1 },
+        "apiKeySecretName": { "type": "string", "minLength": 1 },
+        "enableRemoteWrites": { "type": "boolean" },
+        "allowRawAddressReads": { "type": "boolean" },
+        "exposeRawAddresses": { "type": "boolean" },
+        "allowedOrigins": { "type": "array", "items": { "type": "string", "minLength": 1 } }
+      }
+    },
+    "ftp": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [ "host", "port", "username", "passwordSecretName", "useTls", "allowInsecureFtp", "passiveMode", "remoteRoot" ],
+      "properties": {
+        "host": { "type": "string", "minLength": 1 },
+        "port": { "type": "integer", "minimum": 1, "maximum": 65535 },
+        "username": { "type": "string", "minLength": 1 },
+        "passwordSecretName": { "type": "string", "minLength": 1 },
+        "useTls": { "type": "boolean" },
+        "allowInsecureFtp": { "type": "boolean" },
+        "passiveMode": { "type": "boolean" },
+        "remoteRoot": { "type": "string", "minLength": 1 }
+      }
+    }
+  }
+}

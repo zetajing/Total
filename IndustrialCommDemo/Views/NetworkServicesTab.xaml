@@ -81,6 +81,8 @@
                             </Border>
                             <StackPanel Grid.Row="6" Grid.ColumnSpan="4" Orientation="Horizontal">
                                 <Button Style="{StaticResource ActionButtonStyle}" Click="SaveMqttButton_Click" Content="保存安全配置" />
+                                <Button Margin="0,0,8,0" Click="ValidateNetworkConfigurationButton_Click" Content="校验 JSON" />
+                                <Button Margin="0,0,8,0" Click="RestoreNetworkTemplateButton_Click" Content="恢复模板" />
                                 <Button Margin="0,0,8,0" Click="StartMqttButton_Click" Content="启动 Broker" />
                                 <Button Margin="0,0,8,0" Click="StopMqttButton_Click" Content="停止 Broker" />
                                 <Button Click="RefreshMqttClientsButton_Click" Content="刷新客户端" />

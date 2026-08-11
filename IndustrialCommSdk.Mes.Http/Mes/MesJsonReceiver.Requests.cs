@@ -72,12 +72,18 @@ namespace IndustrialCommSdk.Mes
                         context.Request.InputStream,
                         context.Request.ContentLength64,
                         _options.MaxRequestContentBytes,
+                        _options.RequestBodyTimeoutMilliseconds,
                         stopToken).ConfigureAwait(false);
                     ValidateJsonObject(body);
                 }
                 catch (RequestTooLargeException)
                 {
                     await WriteJsonAsync(response, 413, "{\"error\":\"request_too_large\"}", stopToken).ConfigureAwait(false);
+                    return;
+                }
+                catch (RequestBodyTimeoutException)
+                {
+                    await TryWriteErrorAsync(response, 408, "{\"error\":\"request_body_timeout\"}").ConfigureAwait(false);
                     return;
                 }
                 catch (ArgumentException)
@@ -221,21 +227,66 @@ namespace IndustrialCommSdk.Mes
             Stream input,
             long contentLength,
             int maximumBytes,
+            int timeoutMilliseconds,
             CancellationToken cancellationToken)
         {
             if (contentLength > maximumBytes) throw new RequestTooLargeException();
-            using (var output = new MemoryStream())
+            using (var deadlineCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken))
             {
-                var buffer = new byte[8192];
-                while (true)
+                var deadlineTask = Task.Delay(timeoutMilliseconds, deadlineCancellation.Token);
+                try
                 {
-                    var read = await input.ReadAsync(buffer, 0, buffer.Length, cancellationToken).ConfigureAwait(false);
-                    if (read == 0) break;
-                    if (output.Length + read > maximumBytes) throw new RequestTooLargeException();
-                    output.Write(buffer, 0, read);
+                    using (var output = new MemoryStream())
+                    {
+                        var buffer = new byte[8192];
+                        while (true)
+                        {
+                            cancellationToken.ThrowIfCancellationRequested();
+                            var readTask = input.ReadAsync(buffer, 0, buffer.Length, cancellationToken);
+                            if (await Task.WhenAny(readTask, deadlineTask).ConfigureAwait(false) != readTask)
+                            {
+                                TryCloseInput(input);
+                                ObserveLateRead(readTask);
+                                cancellationToken.ThrowIfCancellationRequested();
+                                throw new RequestBodyTimeoutException();
+                            }
+
+                            var read = await readTask.ConfigureAwait(false);
+                            cancellationToken.ThrowIfCancellationRequested();
+                            if (read == 0) break;
+                            if (output.Length + read > maximumBytes) throw new RequestTooLargeException();
+                            output.Write(buffer, 0, read);
+                        }
+                        return new UTF8Encoding(false, true).GetString(output.GetBuffer(), 0, checked((int)output.Length));
+                    }
                 }
-                return new UTF8Encoding(false, true).GetString(output.GetBuffer(), 0, checked((int)output.Length));
+                catch (Exception) when (cancellationToken.IsCancellationRequested)
+                {
+                    TryCloseInput(input);
+                    throw new OperationCanceledException(cancellationToken);
+                }
+                finally
+                {
+                    deadlineCancellation.Cancel();
+                }
             }
+        }
+
+        private static void ObserveLateRead(Task readTask)
+        {
+            _ = readTask.ContinueWith(
+                completed =>
+                {
+                    if (completed.IsFaulted) { var ignoredException = completed.Exception; }
+                },
+                CancellationToken.None,
+                TaskContinuationOptions.ExecuteSynchronously,
+                TaskScheduler.Default);
+        }
+
+        private static void TryCloseInput(Stream input)
+        {
+            try { input.Close(); } catch { }
         }
 
         private static void ValidateJsonObject(string json)
@@ -301,6 +352,7 @@ namespace IndustrialCommSdk.Mes
         }
 
         private sealed class RequestTooLargeException : Exception { }
+        private sealed class RequestBodyTimeoutException : Exception { }
         private sealed class HandlerTimeoutException : Exception { }
     }
 }

@@ -27,7 +27,7 @@ namespace IndustrialCommSdk.Protocols.OpcUa
         public string Username { get; set; }
         public string Password { get; set; }
         public bool UseSecurity { get; set; }
-        public bool AutoAcceptUntrustedCertificates { get; set; } = true;
+        public bool AutoAcceptUntrustedCertificates { get; set; }
         public int ConnectTimeoutMilliseconds { get; set; } = 10000;
         public int OperationTimeoutMilliseconds { get; set; } = 5000;
         public int SessionTimeoutMilliseconds { get; set; } = 60000;
@@ -40,7 +40,7 @@ namespace IndustrialCommSdk.Protocols.OpcUa
     public sealed class OpcUaClient : IndustrialClientBase
     {
         private readonly OpcUaClientOptions _options;
-        private Session _session;
+        private ISession _session;
 
         public OpcUaClient(OpcUaClientOptions options, IIndustrialLogger logger = null,
             IPollingScheduler pollingScheduler = null)
@@ -66,59 +66,87 @@ namespace IndustrialCommSdk.Protocols.OpcUa
             return options.DeviceId;
         }
 
-        public override bool IsConnected { get { return _session != null && _session.Connected; } }
+        public override bool IsConnected
+        {
+            get
+            {
+                var session = Volatile.Read(ref _session);
+                return session != null && session.Connected;
+            }
+        }
 
         protected override async Task ConnectCoreAsync(CancellationToken cancellationToken)
         {
-            CloseSession();
+            await CloseSessionAsync(cancellationToken).ConfigureAwait(false);
             try
             {
-                var configuration = await CreateConfigurationAsync().ConfigureAwait(false);
-                var selected = CoreClientUtils.SelectEndpoint(configuration, _options.EndpointUrl,
-                    _options.UseSecurity, _options.ConnectTimeoutMilliseconds);
+                var configuration = await CreateConfigurationAsync(cancellationToken).ConfigureAwait(false);
+                var selected = await CoreClientUtils.SelectEndpointAsync(
+                    configuration,
+                    _options.EndpointUrl,
+                    _options.UseSecurity,
+                    _options.ConnectTimeoutMilliseconds,
+                    null,
+                    cancellationToken).ConfigureAwait(false);
                 var endpoint = new ConfiguredEndpoint(null, selected, EndpointConfiguration.Create(configuration));
                 IUserIdentity identity = string.IsNullOrWhiteSpace(_options.Username)
                     ? (IUserIdentity)new UserIdentity(new AnonymousIdentityToken())
                     : new UserIdentity(_options.Username, Encoding.UTF8.GetBytes(_options.Password ?? string.Empty));
-                _session = await Session.Create(configuration, endpoint, false, false,
+                _session = await new DefaultSessionFactory(null).CreateAsync(configuration, endpoint, false, false,
                     "IndustrialCommSdk-" + DeviceId, (uint)_options.SessionTimeoutMilliseconds,
                     identity, null, cancellationToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException) { throw; }
-            catch (Exception ex) { CloseSession(); throw new IndustrialConnectionException("Failed to connect OPC UA endpoint.", ex); }
+            catch (Exception ex)
+            {
+                await CloseSessionAsync(CancellationToken.None).ConfigureAwait(false);
+                throw new IndustrialConnectionException("Failed to connect OPC UA endpoint.", ex);
+            }
         }
 
-        protected override Task DisconnectCoreAsync(CancellationToken cancellationToken)
+        protected override async Task DisconnectCoreAsync(CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            CloseSession();
-            return Task.CompletedTask;
+            try
+            {
+                await CloseSessionAsync(cancellationToken).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                // The session has already been detached and disposed. Treat the committed
+                // disconnect as complete so the base class can publish Disconnected state.
+            }
         }
 
-        protected override Task<DataValue> ReadCoreAsync(ReadRequest request, CancellationToken cancellationToken)
+        protected override async Task<DataValue> ReadCoreAsync(ReadRequest request, CancellationToken cancellationToken)
         {
-            return ReadManyCoreAsync(new[] { request }, cancellationToken).ContinueWith(
-                task => task.GetAwaiter().GetResult().Values[0], cancellationToken,
-                TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
+            var result = await ReadManyCoreAsync(new[] { request }, cancellationToken).ConfigureAwait(false);
+            return result.Values[0];
         }
 
-        protected override Task<BatchReadResult> ReadManyCoreAsync(IReadOnlyCollection<ReadRequest> requests, CancellationToken cancellationToken)
+        protected override async Task<BatchReadResult> ReadManyCoreAsync(
+            IReadOnlyCollection<ReadRequest> requests,
+            CancellationToken cancellationToken)
         {
-            EnsureConnected();
-            cancellationToken.ThrowIfCancellationRequested();
+            var session = GetConnectedSession();
             var list = requests.ToList();
             var nodes = new ReadValueIdCollection(list.Select(x => new ReadValueId
             {
                 NodeId = ParseNodeId(x.Address), AttributeId = Attributes.Value
             }));
-            Opc.Ua.DataValueCollection values;
-            DiagnosticInfoCollection diagnostics;
-            _session.Read(null, 0, TimestampsToReturn.Both, nodes, out values, out diagnostics);
+            var response = await session.ReadAsync(
+                null,
+                0,
+                TimestampsToReturn.Both,
+                nodes,
+                cancellationToken).ConfigureAwait(false);
+            var values = response.Results;
+            var diagnostics = response.DiagnosticInfos;
             ClientBase.ValidateResponse(values, nodes);
             ClientBase.ValidateDiagnosticInfos(diagnostics, nodes);
             var result = new List<DataValue>(list.Count);
             for (var i = 0; i < list.Count; i++) result.Add(ConvertValue(list[i], values[i]));
-            return Task.FromResult(new BatchReadResult(result));
+            return new BatchReadResult(result);
         }
 
         protected override Task WriteCoreAsync(WriteRequest request, CancellationToken cancellationToken)
@@ -126,23 +154,23 @@ namespace IndustrialCommSdk.Protocols.OpcUa
             return WriteManyCoreAsync(new[] { request }, cancellationToken);
         }
 
-        protected override Task WriteManyCoreAsync(IReadOnlyCollection<WriteRequest> requests, CancellationToken cancellationToken)
+        protected override async Task WriteManyCoreAsync(
+            IReadOnlyCollection<WriteRequest> requests,
+            CancellationToken cancellationToken)
         {
-            EnsureConnected();
-            cancellationToken.ThrowIfCancellationRequested();
+            var session = GetConnectedSession();
             var writes = new WriteValueCollection(requests.Select(x => new WriteValue
             {
                 NodeId = ParseNodeId(x.Address), AttributeId = Attributes.Value,
                 Value = new UaDataValue(new Variant(ConvertForWrite(x)))
             }));
-            StatusCodeCollection results;
-            DiagnosticInfoCollection diagnostics;
-            _session.Write(null, writes, out results, out diagnostics);
+            var response = await session.WriteAsync(null, writes, cancellationToken).ConfigureAwait(false);
+            var results = response.Results;
+            var diagnostics = response.DiagnosticInfos;
             ClientBase.ValidateResponse(results, writes);
             ClientBase.ValidateDiagnosticInfos(diagnostics, writes);
             for (var i = 0; i < results.Count; i++)
                 if (StatusCode.IsBad(results[i])) throw new IndustrialProtocolException("OPC UA write failed: " + results[i]);
-            return Task.CompletedTask;
         }
 
         public static NodeId ParseNodeId(string address)
@@ -208,7 +236,7 @@ namespace IndustrialCommSdk.Protocols.OpcUa
             { return new DataValue(request.Address, request.DataType, null, null, QualityStatus.Bad, timestamp, ex.Message); }
         }
 
-        private async Task<ApplicationConfiguration> CreateConfigurationAsync()
+        private async Task<ApplicationConfiguration> CreateConfigurationAsync(CancellationToken cancellationToken)
         {
             var config = new ApplicationConfiguration
             {
@@ -225,26 +253,49 @@ namespace IndustrialCommSdk.Protocols.OpcUa
                 TransportQuotas = new TransportQuotas { OperationTimeout = _options.OperationTimeoutMilliseconds },
                 ClientConfiguration = new ClientConfiguration { DefaultSessionTimeout = _options.SessionTimeoutMilliseconds }
             };
-            await config.Validate(ApplicationType.Client).ConfigureAwait(false);
-            if (_options.AutoAcceptUntrustedCertificates)
-                config.CertificateValidator.CertificateValidation += (sender, args) => { args.Accept = true; };
+            await config.ValidateAsync(ApplicationType.Client, cancellationToken).ConfigureAwait(false);
             return config;
         }
 
-        private void EnsureConnected()
+        private ISession GetConnectedSession()
         {
-            if (!IsConnected) throw new IndustrialConnectionException("OPC UA client is not connected.");
+            var session = Volatile.Read(ref _session);
+            if (session == null || !session.Connected)
+                throw new IndustrialConnectionException("OPC UA client is not connected.");
+            return session;
         }
 
-        protected override void OnOperationTimeout() { CloseSession(); }
-        protected override void DisposeCore() { CloseSession(); }
+        protected override void OnOperationTimeout() { AbortSession(); }
+        protected override void DisposeCore() { AbortSession(); }
 
-        private void CloseSession()
+        private async Task CloseSessionAsync(CancellationToken cancellationToken)
         {
             var session = Interlocked.Exchange(ref _session, null);
             if (session == null) return;
-            try { session.Close(); } catch { }
-            session.Dispose();
+            try
+            {
+                await session.CloseAsync(cancellationToken).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch
+            {
+                // Closing is best effort; Dispose below still releases the transport resources.
+            }
+            finally
+            {
+                try { session.Dispose(); }
+                catch (Exception ex) { Logger.Error("OPC UA session disposal failed.", ex); }
+            }
+        }
+
+        private void AbortSession()
+        {
+            var session = Interlocked.Exchange(ref _session, null);
+            if (session == null) return;
+            try { session.Dispose(); } catch { }
         }
     }
 }

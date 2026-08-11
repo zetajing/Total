@@ -12,6 +12,7 @@
     </PackageReference>
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\IndustrialCommDemo\IndustrialCommDemo.csproj" />
     <ProjectReference Include="..\IndustrialCommSdk\IndustrialCommSdk.csproj" />
     <ProjectReference Include="..\IndustrialCommSdk.Storage.MySql\IndustrialCommSdk.Storage.MySql.csproj" />
   </ItemGroup>

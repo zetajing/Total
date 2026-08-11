@@ -212,9 +212,12 @@ namespace IndustrialCommSdk.Protocols.Mc
             capabilities = capabilities ?? Capabilities;
 
             var planned = requests
-                .Select(request => new PlannedMcRead(request, _parser.ParseTyped(request.Address), EstimateEndOffset(_parser.ParseTyped(request.Address), request)))
+                .Select(request =>
+                {
+                    var address = _parser.ParseTyped(request.Address);
+                    return new PlannedMcRead(request, address, EstimateEndOffset(address, request));
+                })
                 .OrderBy(item => item.Address.DeviceType)
-                .ThenBy(item => item.Request.DataType)
                 .ThenBy(item => item.Address.Index)
                 .ToList();
 
@@ -255,19 +258,75 @@ namespace IndustrialCommSdk.Protocols.Mc
         {
             EnsureConnected();
             var address = _parser.ParseTyped(request.Address);
-            var frame = address.IsBitDevice
-                ? McFrame3E.BuildReadBitsRequest(address, request.Length)
-                : McFrame3E.BuildReadWordsRequest(address, request.Length);
-
-            await _transport.SendAsync(frame, cancellationToken).ConfigureAwait(false);
-            var header = await _transport.ReceiveExactAsync(11, cancellationToken).ConfigureAwait(false);
-            var remainingLength = McFrame3E.GetRemainingResponseLength(header);
-            var body = await _transport.ReceiveExactAsync(remainingLength, cancellationToken).ConfigureAwait(false);
-            var payload = McFrame3E.ParseResponse(McFrame3E.Combine(header, body));
+            var effectiveLength = GetEffectiveReadLength(address, request);
+            var payload = await ReadPayloadAsync(address, address.Index, effectiveLength, cancellationToken)
+                .ConfigureAwait(false);
 
             return address.IsBitDevice
-                ? RegisterValueCodec.ToDataValue(request, McFrame3E.UnpackBits(payload, request.Length))
+                ? RegisterValueCodec.ToDataValue(request, McFrame3E.UnpackBits(payload, effectiveLength))
                 : RegisterValueCodec.ToDataValue(request, McFrame3E.ToRegisters(payload));
+        }
+
+        protected override async Task<BatchReadResult> ReadManyCoreAsync(
+            IReadOnlyCollection<ReadRequest> requests,
+            CancellationToken cancellationToken)
+        {
+            var plan = PlanRead(requests, BatchReadOptions.Default, Capabilities);
+            var values = new Dictionary<ReadRequest, DataValue>();
+
+            foreach (var group in plan.Groups)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var firstAddress = _parser.ParseTyped(group.ReadRequests[0].Address);
+                var startIndex = group.StartOffset.Value;
+                var count = group.EndOffset.Value - startIndex + 1;
+
+                try
+                {
+                    var payload = await ReadPayloadAsync(firstAddress, startIndex, count, cancellationToken)
+                        .ConfigureAwait(false);
+                    var wordValues = firstAddress.IsBitDevice ? null : McFrame3E.ToRegisters(payload);
+                    var bitValues = firstAddress.IsBitDevice
+                        ? McFrame3E.UnpackBits(payload, checked((ushort)count))
+                        : null;
+
+                    foreach (var request in group.ReadRequests)
+                    {
+                        try
+                        {
+                            var address = _parser.ParseTyped(request.Address);
+                            var offset = address.Index - startIndex;
+                            var requestLength = GetEffectiveReadLength(address, request);
+
+                            if (firstAddress.IsBitDevice)
+                            {
+                                var selected = new bool[requestLength];
+                                Array.Copy(bitValues, offset, selected, 0, requestLength);
+                                values[request] = RegisterValueCodec.ToDataValue(request, selected);
+                            }
+                            else
+                            {
+                                var selected = new ushort[requestLength];
+                                Array.Copy(wordValues, offset, selected, 0, requestLength);
+                                values[request] = RegisterValueCodec.ToDataValue(request, selected);
+                            }
+                        }
+                        catch (OperationCanceledException) { throw; }
+                        catch (Exception ex)
+                        {
+                            values[request] = BadBatchValue(request, ex.Message);
+                        }
+                    }
+                }
+                catch (OperationCanceledException) { throw; }
+                catch (Exception ex)
+                {
+                    foreach (var request in group.ReadRequests)
+                        values[request] = BadBatchValue(request, ex.Message);
+                }
+            }
+
+            return new BatchReadResult(requests.Select(request => values[request]).ToList());
         }
 
         protected override async Task WriteCoreAsync(WriteRequest request, CancellationToken cancellationToken)
@@ -325,7 +384,6 @@ namespace IndustrialCommSdk.Protocols.Mc
             var first = current[0];
             if (first.Address.DeviceType != next.Address.DeviceType) return false;
             if (first.Address.IsBitDevice != next.Address.IsBitDevice) return false;
-            if (first.Request.DataType != next.Request.DataType) return false;
             var start = Math.Min(current.Min(item => item.Address.Index), next.Address.Index);
             var end = Math.Max(current.Max(item => item.EndOffset), next.EndOffset);
             return end - start + 1 <= maxSpan;
@@ -335,18 +393,28 @@ namespace IndustrialCommSdk.Protocols.Mc
         {
             var start = current.Min(item => item.Address.Index);
             var end = current.Max(item => item.EndOffset);
+            var dataType = current.All(item => item.Request.DataType == current[0].Request.DataType)
+                ? (DataType?)current[0].Request.DataType
+                : null;
             return BatchRequestGroup.ForRead(
                 sequence,
                 current[0].Address.DeviceType.ToString(),
                 start,
                 end,
-                current[0].Request.DataType,
+                dataType,
                 current.Select(item => item.Request).ToList());
         }
 
         private static int EstimateEndOffset(McAddress address, ReadRequest request)
         {
-            return address.Index + Math.Max(1, (int)request.Length) - 1;
+            return address.Index + GetEffectiveReadLength(address, request) - 1;
+        }
+
+        private static ushort GetEffectiveReadLength(McAddress address, ReadRequest request)
+        {
+            return address.IsBitDevice
+                ? request.Length
+                : Math.Max(request.Length, RegisterValueCodec.GetRequiredRegisterLength(request.DataType));
         }
 
         private static int EstimateEndOffset(McAddress address, WriteRequest request)
@@ -362,6 +430,41 @@ namespace IndustrialCommSdk.Protocols.Mc
             }
         }
 
+        private async Task<byte[]> ReadPayloadAsync(
+            McAddress address,
+            int startIndex,
+            int count,
+            CancellationToken cancellationToken)
+        {
+            if (count <= 0 || count > ushort.MaxValue)
+                throw new ArgumentOutOfRangeException(nameof(count), "MC batch read count must be between 1 and 65535.");
+
+            var start = new McAddress(address.DeviceType, startIndex, address.IsBitDevice);
+            var frame = address.IsBitDevice
+                ? McFrame3E.BuildReadBitsRequest(start, (ushort)count)
+                : McFrame3E.BuildReadWordsRequest(start, (ushort)count);
+
+            await _transport.SendAsync(frame, cancellationToken).ConfigureAwait(false);
+            var header = await _transport.ReceiveExactAsync(11, cancellationToken).ConfigureAwait(false);
+            var remainingLength = McFrame3E.GetRemainingResponseLength(header);
+            var body = await _transport.ReceiveExactAsync(remainingLength, cancellationToken).ConfigureAwait(false);
+            var payload = McFrame3E.ParseResponse(McFrame3E.Combine(header, body));
+            ValidateReadPayloadLength(payload, address.IsBitDevice, count);
+            return payload;
+        }
+
+        private static void ValidateReadPayloadLength(byte[] payload, bool isBitDevice, int count)
+        {
+            var expectedBytes = isBitDevice ? (count + 1) / 2 : checked(count * 2);
+            if (payload == null || payload.Length != expectedBytes)
+            {
+                throw new Exceptions.IndustrialProtocolException(string.Format(
+                    "Invalid MC read payload length. Expected {0} bytes, received {1} bytes.",
+                    expectedBytes,
+                    payload == null ? 0 : payload.Length));
+            }
+        }
+
         protected override void DisposeCore()
         {
             _transport.Dispose();
@@ -371,6 +474,12 @@ namespace IndustrialCommSdk.Protocols.Mc
         {
             try { _transport.DisconnectAsync(CancellationToken.None).GetAwaiter().GetResult(); }
             catch { }
+        }
+
+        private static DataValue BadBatchValue(ReadRequest request, string message)
+        {
+            return new DataValue(request.Address, request.DataType, null, null,
+                QualityStatus.Bad, DateTimeOffset.UtcNow, message);
         }
 
         private sealed class PlannedMcRead

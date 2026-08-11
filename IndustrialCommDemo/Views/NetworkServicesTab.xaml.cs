@@ -18,6 +18,7 @@ using IndustrialCommSdk.Web.Gateway;
 using IndustrialCommSdk.Web.Http;
 using IndustrialCommSdk.Web.WebSockets;
 using Microsoft.Win32;
+using Newtonsoft.Json;
 
 namespace IndustrialCommDemo.Views
 {
@@ -31,6 +32,7 @@ namespace IndustrialCommDemo.Views
         private IMqttBrokerService _observedBroker;
         private IIndustrialWebGateway _observedWebGateway;
         private CancellationTokenSource _ftpTransferCancellation;
+        private JsonConfigurationValidationService _jsonValidation;
         private bool _reset;
 
         public NetworkServicesTab()
@@ -41,6 +43,10 @@ namespace IndustrialCommDemo.Views
         public void Initialize(DemoAppContext ctx)
         {
             _ctx = ctx ?? throw new ArgumentNullException(nameof(ctx));
+            _jsonValidation = new JsonConfigurationValidationService(
+                _ctx.Runtime.Sdk,
+                Path.GetDirectoryName(_ctx.NetworkServices.ConfigurationFilePath),
+                _ctx.SdkLogger);
             _httpClient = new HttpApiClient(new HttpApiClientOptions
             {
                 Timeout = TimeSpan.FromSeconds(30),
@@ -160,14 +166,9 @@ namespace IndustrialCommDemo.Views
         private async Task SaveMqttConfigurationAsync()
         {
             var configuration = _ctx.NetworkServices.Configuration;
+            ApplyMqttControls(configuration);
+            EnsureNetworkConfigurationValid(configuration);
             var mqtt = configuration.MqttBroker;
-            mqtt.BindAddress = RequireText(MqttBindAddressTextBox.Text, "MQTT 监听地址");
-            mqtt.Port = ParsePort(MqttPortTextBox.Text, "MQTT 端口");
-            mqtt.UseTls = MqttUseTlsCheckBox.IsChecked == true;
-            mqtt.TlsPort = ParsePort(MqttTlsPortTextBox.Text, "MQTT TLS 端口");
-            mqtt.CertificateThumbprint = NullIfWhiteSpace(MqttCertificateTextBox.Text);
-            mqtt.Username = RequireText(MqttUsernameTextBox.Text, "MQTT 用户名");
-            mqtt.AutoStart = MqttAutoStartCheckBox.IsChecked == true;
             if (!string.IsNullOrEmpty(MqttBrokerPasswordBox.Password))
                 _ctx.NetworkServices.SetSecret(mqtt.PasswordSecretName, MqttBrokerPasswordBox.Password);
             await _ctx.NetworkServices.SaveConfigurationAsync(configuration, CancellationToken.None);
@@ -179,6 +180,83 @@ namespace IndustrialCommDemo.Views
         {
             try { await SaveMqttConfigurationAsync(); }
             catch (Exception ex) { _ctx.HandleError("MQTT 配置保存失败。", ex, true); }
+        }
+
+        private void ValidateNetworkConfigurationButton_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var configuration = _ctx.NetworkServices.Configuration;
+                ApplyMqttControls(configuration);
+                ApplyWebControls(configuration);
+                ApplyFtpControls(configuration);
+                EnsureNetworkConfigurationValid(configuration);
+                _ctx.SetHeaderStatus("当前网络服务 JSON 校验通过。", Brushes.ForestGreen);
+            }
+            catch (Exception ex) { _ctx.HandleError("网络服务 JSON 校验失败。", ex, true); }
+        }
+
+        private void RestoreNetworkTemplateButton_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var json = _jsonValidation.LoadTemplate(JsonConfigurationDocument.NetworkServices);
+                var result = _jsonValidation.Validate(
+                    JsonConfigurationDocument.NetworkServices,
+                    json,
+                    Path.GetDirectoryName(_ctx.NetworkServices.ConfigurationFilePath),
+                    false);
+                if (!result.IsValid) throw new InvalidOperationException(result.ToDisplayText());
+
+                var configuration = JsonConvert.DeserializeObject<NetworkServicesConfiguration>(json);
+                ApplyConfiguration(configuration);
+                MqttBrokerPasswordBox.Clear();
+                WebApiKeyPasswordBox.Clear();
+                FtpPasswordBox.Clear();
+                _ctx.SetHeaderStatus("已加载网络服务模板，保存后生效。", Brushes.DarkGoldenrod);
+            }
+            catch (Exception ex) { _ctx.HandleError("加载网络服务模板失败。", ex, true); }
+        }
+
+        private void EnsureNetworkConfigurationValid(NetworkServicesConfiguration configuration)
+        {
+            var result = _jsonValidation.ValidateNetworkConfiguration(configuration);
+            if (!result.IsValid) throw new InvalidOperationException(result.ToDisplayText());
+        }
+
+        private void ApplyMqttControls(NetworkServicesConfiguration configuration)
+        {
+            var mqtt = configuration.MqttBroker;
+            mqtt.BindAddress = RequireText(MqttBindAddressTextBox.Text, "MQTT 监听地址");
+            mqtt.Port = ParsePort(MqttPortTextBox.Text, "MQTT 端口");
+            mqtt.UseTls = MqttUseTlsCheckBox.IsChecked == true;
+            mqtt.TlsPort = ParsePort(MqttTlsPortTextBox.Text, "MQTT TLS 端口");
+            mqtt.CertificateThumbprint = NullIfWhiteSpace(MqttCertificateTextBox.Text);
+            mqtt.Username = RequireText(MqttUsernameTextBox.Text, "MQTT 用户名");
+            mqtt.AutoStart = MqttAutoStartCheckBox.IsChecked == true;
+        }
+
+        private void ApplyWebControls(NetworkServicesConfiguration configuration)
+        {
+            var web = configuration.WebGateway;
+            web.ListenPrefix = RequireText(WebListenPrefixTextBox.Text, "Web 监听前缀");
+            web.EnableRemoteWrites = WebEnableWritesCheckBox.IsChecked == true;
+            web.AllowRawAddressReads = WebAllowRawReadsCheckBox.IsChecked == true;
+            web.ExposeRawAddresses = WebExposeAddressesCheckBox.IsChecked == true;
+            web.AutoStart = WebAutoStartCheckBox.IsChecked == true;
+            web.AllowedOrigins = SplitOrigins(WebOriginsTextBox.Text);
+        }
+
+        private void ApplyFtpControls(NetworkServicesConfiguration configuration)
+        {
+            var ftp = configuration.Ftp;
+            ftp.Host = RequireText(FtpHostTextBox.Text, "FTP 服务器");
+            ftp.Port = ParsePort(FtpPortTextBox.Text, "FTP 端口");
+            ftp.Username = RequireText(FtpUsernameTextBox.Text, "FTP 用户名");
+            ftp.RemoteRoot = RequireText(FtpRootTextBox.Text, "FTP 远端根目录");
+            ftp.UseTls = FtpUseTlsCheckBox.IsChecked == true;
+            ftp.AllowInsecureFtp = FtpAllowPlainCheckBox.IsChecked == true;
+            ftp.PassiveMode = FtpPassiveCheckBox.IsChecked == true;
         }
 
         private async void StartMqttButton_Click(object sender, RoutedEventArgs e)
@@ -395,13 +473,9 @@ namespace IndustrialCommDemo.Views
         private async Task SaveWebConfigurationAsync()
         {
             var configuration = _ctx.NetworkServices.Configuration;
+            ApplyWebControls(configuration);
+            EnsureNetworkConfigurationValid(configuration);
             var web = configuration.WebGateway;
-            web.ListenPrefix = RequireText(WebListenPrefixTextBox.Text, "Web 监听前缀");
-            web.EnableRemoteWrites = WebEnableWritesCheckBox.IsChecked == true;
-            web.AllowRawAddressReads = WebAllowRawReadsCheckBox.IsChecked == true;
-            web.ExposeRawAddresses = WebExposeAddressesCheckBox.IsChecked == true;
-            web.AutoStart = WebAutoStartCheckBox.IsChecked == true;
-            web.AllowedOrigins = SplitOrigins(WebOriginsTextBox.Text);
             if (!string.IsNullOrEmpty(WebApiKeyPasswordBox.Password))
                 _ctx.NetworkServices.SetSecret(web.ApiKeySecretName, WebApiKeyPasswordBox.Password);
             await _ctx.NetworkServices.SaveConfigurationAsync(configuration, CancellationToken.None);
@@ -637,14 +711,9 @@ namespace IndustrialCommDemo.Views
         private async Task SaveFtpConfigurationAsync()
         {
             var configuration = _ctx.NetworkServices.Configuration;
+            ApplyFtpControls(configuration);
+            EnsureNetworkConfigurationValid(configuration);
             var ftp = configuration.Ftp;
-            ftp.Host = RequireText(FtpHostTextBox.Text, "FTP 服务器");
-            ftp.Port = ParsePort(FtpPortTextBox.Text, "FTP 端口");
-            ftp.Username = RequireText(FtpUsernameTextBox.Text, "FTP 用户名");
-            ftp.RemoteRoot = RequireText(FtpRootTextBox.Text, "FTP 远端根目录");
-            ftp.UseTls = FtpUseTlsCheckBox.IsChecked == true;
-            ftp.AllowInsecureFtp = FtpAllowPlainCheckBox.IsChecked == true;
-            ftp.PassiveMode = FtpPassiveCheckBox.IsChecked == true;
             if (!string.IsNullOrEmpty(FtpPasswordBox.Password))
                 _ctx.NetworkServices.SetSecret(ftp.PasswordSecretName, FtpPasswordBox.Password);
             await _ctx.NetworkServices.SaveConfigurationAsync(configuration, CancellationToken.None);

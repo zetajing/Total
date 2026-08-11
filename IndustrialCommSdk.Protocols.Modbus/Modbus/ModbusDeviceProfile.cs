@@ -145,6 +145,9 @@ namespace IndustrialCommSdk.Protocols.Modbus
         private static readonly Dictionary<string, IModbusDeviceProfile> _jsonProfiles =
             new Dictionary<string, IModbusDeviceProfile>(StringComparer.OrdinalIgnoreCase);
 
+        // JSON 注册表、默认配置加载状态以及注册表快照均由同一把锁保护。
+        private static readonly object _syncRoot = new object();
+
         // 标记是否已尝试从默认路径加载
         private static bool _defaultLoaded;
 
@@ -162,9 +165,24 @@ namespace IndustrialCommSdk.Protocols.Modbus
             get
             {
                 TryLoadDefaultConfig();
-                var list = new List<IModbusDeviceProfile> { Generic, InovanceEasyPlc, MitsubishiModbusTcp };
-                list.AddRange(_jsonProfiles.Values);
-                return list.AsReadOnly();
+                lock (_syncRoot)
+                {
+                    var list = new List<IModbusDeviceProfile>();
+                    AddBuiltInOrJsonOverride(list, Generic);
+                    AddBuiltInOrJsonOverride(list, InovanceEasyPlc);
+                    AddBuiltInOrJsonOverride(list, MitsubishiModbusTcp);
+
+                    var additionalProfiles = new List<IModbusDeviceProfile>();
+                    foreach (var profile in _jsonProfiles.Values)
+                    {
+                        if (!IsBuiltInKey(profile.Key))
+                            additionalProfiles.Add(profile);
+                    }
+
+                    additionalProfiles.Sort(CompareProfilesByKey);
+                    list.AddRange(additionalProfiles);
+                    return list.AsReadOnly();
+                }
             }
         }
 
@@ -185,17 +203,30 @@ namespace IndustrialCommSdk.Protocols.Modbus
             if (collection?.Profiles == null || collection.Profiles.Count == 0)
                 return;
 
+            // 先在临时表中构造并校验整份文件，任何一项失败都不会污染全局注册表。
+            var stagedProfiles = new Dictionary<string, IModbusDeviceProfile>(StringComparer.OrdinalIgnoreCase);
             foreach (var definition in collection.Profiles)
             {
-                if (string.IsNullOrWhiteSpace(definition.Key))
-                    continue;
+                var profile = new JsonModbusProfile(definition);
+                if (stagedProfiles.ContainsKey(profile.Key))
+                {
+                    throw new ArgumentException(
+                        string.Format("Duplicate Modbus device profile key in file: {0}.", profile.Key),
+                        nameof(filePath));
+                }
 
-                _jsonProfiles[definition.Key] = new JsonModbusProfile(definition);
+                stagedProfiles.Add(profile.Key, profile);
+            }
+
+            lock (_syncRoot)
+            {
+                foreach (var profile in stagedProfiles)
+                    _jsonProfiles[profile.Key] = profile.Value;
             }
         }
 
         /// <summary>
-        /// 按 key 查找设备配置文件。先在硬编码配置中查找，找不到再去 JSON 注册表中查找。
+        /// 按 key 查找设备配置文件。JSON 注册表中的同 key 配置优先于内置配置。
         /// 如果都找不到则返回 null。
         /// </summary>
         /// <param name="key">配置文件标识键（大小写不敏感）。</param>
@@ -205,29 +236,38 @@ namespace IndustrialCommSdk.Protocols.Modbus
             if (string.IsNullOrWhiteSpace(key))
                 return null;
 
+            TryLoadDefaultConfig();
             var normalized = NormalizeToken(key);
 
-            // 检查硬编码配置
-            if (normalized == "generic" || normalized == "modbus")
-                return Generic;
-
-            foreach (var profile in new[] { (IModbusDeviceProfile)InovanceEasyPlc, MitsubishiModbusTcp })
+            lock (_syncRoot)
             {
-                if (NormalizeToken(profile.Key) == normalized || NormalizeToken(profile.DisplayName) == normalized)
-                    return profile;
-            }
+                IModbusDeviceProfile jsonProfile;
+                if (_jsonProfiles.TryGetValue(key.Trim(), out jsonProfile))
+                    return jsonProfile;
 
-            // 检查 JSON 注册表
-            TryLoadDefaultConfig();
-            IModbusDeviceProfile jsonProfile;
-            if (_jsonProfiles.TryGetValue(key, out jsonProfile))
-                return jsonProfile;
+                // 也允许用 NormalizeToken 匹配 JSON Profile；排序后消除字典枚举顺序差异。
+                var jsonProfiles = new List<IModbusDeviceProfile>(_jsonProfiles.Values);
+                jsonProfiles.Sort(CompareProfilesByKey);
+                foreach (var profile in jsonProfiles)
+                {
+                    if (NormalizeToken(profile.Key) == normalized ||
+                        NormalizeToken(profile.DisplayName) == normalized)
+                    {
+                        return profile;
+                    }
+                }
 
-            // 也允许用 NormalizeToken 匹配 JSON Profile 的 Key
-            foreach (var kvp in _jsonProfiles)
-            {
-                if (NormalizeToken(kvp.Key) == normalized || NormalizeToken(kvp.Value.DisplayName) == normalized)
-                    return kvp.Value;
+                if (normalized == "generic" || normalized == "modbus")
+                    return GetJsonOverrideOrBuiltIn(Generic);
+
+                foreach (var profile in new[] { (IModbusDeviceProfile)InovanceEasyPlc, MitsubishiModbusTcp })
+                {
+                    if (NormalizeToken(profile.Key) == normalized ||
+                        NormalizeToken(profile.DisplayName) == normalized)
+                    {
+                        return GetJsonOverrideOrBuiltIn(profile);
+                    }
+                }
             }
 
             return null;
@@ -248,23 +288,53 @@ namespace IndustrialCommSdk.Protocols.Modbus
         /// </summary>
         private static void TryLoadDefaultConfig()
         {
-            if (_defaultLoaded)
-                return;
-
-            _defaultLoaded = true;
-
-            try
+            lock (_syncRoot)
             {
-                var defaultPath = Path.Combine(Directory.GetCurrentDirectory(), "Config", "modbus-profiles.json");
-                if (File.Exists(defaultPath))
+                if (_defaultLoaded)
+                    return;
+
+                _defaultLoaded = true;
+
+                try
                 {
-                    LoadJsonProfiles(defaultPath);
+                    var defaultPath = Path.Combine(Directory.GetCurrentDirectory(), "Config", "modbus-profiles.json");
+                    if (File.Exists(defaultPath))
+                    {
+                        LoadJsonProfiles(defaultPath);
+                    }
+                }
+                catch
+                {
+                    // 默认配置文件可选，静默忽略加载失败
                 }
             }
-            catch
-            {
-                // 默认配置文件可选，静默忽略加载失败
-            }
+        }
+
+        private static void AddBuiltInOrJsonOverride(
+            ICollection<IModbusDeviceProfile> profiles,
+            IModbusDeviceProfile builtInProfile)
+        {
+            profiles.Add(GetJsonOverrideOrBuiltIn(builtInProfile));
+        }
+
+        private static IModbusDeviceProfile GetJsonOverrideOrBuiltIn(IModbusDeviceProfile builtInProfile)
+        {
+            IModbusDeviceProfile jsonProfile;
+            return _jsonProfiles.TryGetValue(builtInProfile.Key, out jsonProfile)
+                ? jsonProfile
+                : builtInProfile;
+        }
+
+        private static bool IsBuiltInKey(string key)
+        {
+            return string.Equals(key, Generic.Key, StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(key, InovanceEasyPlc.Key, StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(key, MitsubishiModbusTcp.Key, StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static int CompareProfilesByKey(IModbusDeviceProfile left, IModbusDeviceProfile right)
+        {
+            return StringComparer.OrdinalIgnoreCase.Compare(left.Key, right.Key);
         }
 
         private static ModbusProfileDefinitionCollection LoadDefinitionCollection(string filePath)

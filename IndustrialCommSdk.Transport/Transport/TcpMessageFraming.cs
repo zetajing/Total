@@ -39,9 +39,18 @@ namespace IndustrialCommSdk.Transport
         }
         internal static byte[] RemovePrefix(IList<byte> buffer, int count)
         {
+            if (count < 0 || count > buffer.Count) throw new ArgumentOutOfRangeException(nameof(count));
             var result = new byte[count];
+            var list = buffer as List<byte>;
+            if (list != null)
+            {
+                list.CopyTo(0, result, 0, count);
+                list.RemoveRange(0, count);
+                return result;
+            }
+
             for (var index = 0; index < count; index++) result[index] = buffer[index];
-            for (var index = 0; index < count; index++) buffer.RemoveAt(0);
+            for (var index = count - 1; index >= 0; index--) buffer.RemoveAt(index);
             return result;
         }
         internal static void ValidateBuffer(IList<byte> buffer) { if (buffer == null) throw new ArgumentNullException(nameof(buffer)); }

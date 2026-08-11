@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Linq;
 using System.Net;
 using System.Net.Sockets;
@@ -40,6 +41,10 @@ namespace IndustrialCommSdk.Transport
         private CancellationTokenSource _cts;
         private Task _acceptLoopTask;
         private readonly SemaphoreSlim _lifecycleGate = new SemaphoreSlim(1, 1);
+        private readonly AsyncLocal<CallbackContext> _callbackContext = new AsyncLocal<CallbackContext>();
+        private Task _stopCompletion = Task.CompletedTask;
+        private int _running;
+        private int _disposed;
 
         /// <summary>
         /// 使用指定的 IP 地址和端口号初始化 <see cref="TcpTransportServer"/> 类的新实例。
@@ -55,7 +60,7 @@ namespace IndustrialCommSdk.Transport
         /// <summary>
         /// 获取一个值，该值指示服务器当前是否正在运行并接受客户端连接。
         /// </summary>
-        public bool IsRunning { get; private set; }
+        public bool IsRunning { get { return Volatile.Read(ref _running) != 0; } }
 
         /// <summary>获取当前活动客户端会话数。</summary>
         public int SessionCount { get { return _sessions.Count; } }
@@ -88,24 +93,49 @@ namespace IndustrialCommSdk.Transport
         /// <returns>表示异步启动操作的任务。</returns>
         public async Task StartAsync(CancellationToken cancellationToken)
         {
-            await _lifecycleGate.WaitAsync(cancellationToken).ConfigureAwait(false);
-            try
+            while (true)
             {
-                if (IsRunning)
+                ThrowIfDisposed();
+                Task pendingStop = null;
+                await _lifecycleGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+                try
                 {
-                    return;
+                    ThrowIfDisposed();
+                    if (IsRunning) return;
+                    if (_stopCompletion.Status != TaskStatus.RanToCompletion)
+                    {
+                        if (IsInServerCallback())
+                        {
+                            throw new InvalidOperationException(
+                                "The TCP server cannot be restarted from one of its callbacks while the previous stop is still draining.");
+                        }
+                        pendingStop = _stopCompletion;
+                    }
+                    else
+                    {
+                        var source = new CancellationTokenSource();
+                        var listener = new TcpListener(_address, _port);
+                        try { listener.Start(); }
+                        catch
+                        {
+                            listener.Stop();
+                            source.Dispose();
+                            throw;
+                        }
+
+                        _cts = source;
+                        _listener = listener;
+                        Volatile.Write(ref _running, 1);
+                        _acceptLoopTask = Task.Run(() => AcceptLoopAsync(listener, source.Token));
+                        return;
+                    }
+                }
+                finally
+                {
+                    _lifecycleGate.Release();
                 }
 
-                _cts?.Dispose();
-                _cts = new CancellationTokenSource();
-                _listener = new TcpListener(_address, _port);
-                _listener.Start();
-                IsRunning = true;
-                _acceptLoopTask = Task.Run(() => AcceptLoopAsync(_cts.Token));
-            }
-            finally
-            {
-                _lifecycleGate.Release();
+                await AwaitWithCancellationAsync(pendingStop, cancellationToken).ConfigureAwait(false);
             }
         }
 
@@ -116,40 +146,71 @@ namespace IndustrialCommSdk.Transport
         /// <returns>表示异步停止操作的任务。</returns>
         public async Task StopAsync(CancellationToken cancellationToken)
         {
+            Task stopCompletion;
             await _lifecycleGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+            var calledFromCallback = IsInServerCallback();
             try
             {
                 if (!IsRunning)
                 {
-                    return;
+                    stopCompletion = _stopCompletion;
                 }
-
-                IsRunning = false;
-                _cts.Cancel();
-                try
+                else
                 {
-                    _listener.Stop();
-                }
-                catch
-                {
-                }
-
-                if (_acceptLoopTask != null)
-                {
-                    await _acceptLoopTask.ConfigureAwait(false);
+                    Volatile.Write(ref _running, 0);
+                    var source = _cts;
+                    var listener = _listener;
+                    var acceptLoop = _acceptLoopTask;
+                    _cts = null;
+                    _listener = null;
                     _acceptLoopTask = null;
-                }
 
-                foreach (var session in _sessions.Values)
-                {
-                    UnsubscribeAndDispose(session);
+                    try { source?.Cancel(); } catch (ObjectDisposedException) { }
+                    try { listener?.Stop(); } catch { }
+
+                    stopCompletion = CompleteStopAsync(acceptLoop, source);
+                    _stopCompletion = stopCompletion;
                 }
-                await Task.WhenAll(_sessions.Values.Select(session => session.Completion)).ConfigureAwait(false);
-                _sessions.Clear();
             }
             finally
             {
                 _lifecycleGate.Release();
+            }
+
+            // A receive callback is part of its own session Completion task. Waiting for the
+            // shared drain here would make the callback wait for itself. Cleanup continues in
+            // the background and completes as soon as this callback returns.
+            if (calledFromCallback) return;
+            await AwaitWithCancellationAsync(stopCompletion, cancellationToken).ConfigureAwait(false);
+        }
+
+        private async Task CompleteStopAsync(
+            Task acceptLoop,
+            CancellationTokenSource source)
+        {
+            Exception acceptFailure = null;
+            try
+            {
+                try
+                {
+                    if (acceptLoop != null) await acceptLoop.ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    acceptFailure = ex;
+                }
+
+                // Do not detach sessions until admission has completely stopped. This prevents
+                // Stop from disposing a session between TryAdd and Start/SessionConnected.
+                var sessions = DetachAndDisposeSessions();
+                if (sessions.Count > 0)
+                    await Task.WhenAll(sessions.Select(session => session.Completion)).ConfigureAwait(false);
+
+                if (acceptFailure != null) throw acceptFailure;
+            }
+            finally
+            {
+                source?.Dispose();
             }
         }
 
@@ -160,14 +221,14 @@ namespace IndustrialCommSdk.Transport
         /// </summary>
         /// <param name="cancellationToken">用于取消接受循环的取消令牌。</param>
         /// <returns>表示异步接受循环的任务。</returns>
-        private async Task AcceptLoopAsync(CancellationToken cancellationToken)
+        private async Task AcceptLoopAsync(TcpListener listener, CancellationToken cancellationToken)
         {
             while (!cancellationToken.IsCancellationRequested)
             {
                 TcpClient client = null;
                 try
                 {
-                    client = await _listener.AcceptTcpClientAsync().ConfigureAwait(false);
+                    client = await listener.AcceptTcpClientAsync().ConfigureAwait(false);
                 }
                 catch (ObjectDisposedException)
                 {
@@ -186,13 +247,50 @@ namespace IndustrialCommSdk.Transport
                     continue;
                 }
 
-                var session = new TcpTransportSession(client);
-                if (_sessions.TryAdd(session.SessionId, session))
+                if (cancellationToken.IsCancellationRequested)
                 {
+                    try { client.Close(); } catch { }
+                    break;
+                }
+
+                TcpTransportSession session = null;
+                var added = false;
+                try
+                {
+                    session = new TcpTransportSession(client);
+                    if (!_sessions.TryAdd(session.SessionId, session))
+                    {
+                        session.Dispose();
+                        continue;
+                    }
+
+                    added = true;
                     session.DataReceivedAsync += OnSessionDataReceivedAsync;
                     session.Closed += OnSessionClosed;
-                    InvokeSafely(SessionConnected, new TransportSessionEventArgs(session));
+                    InvokeInCallbackScope(
+                        () => InvokeSafely(SessionConnected, new TransportSessionEventArgs(session)));
+
+                    if (cancellationToken.IsCancellationRequested) break;
                     session.Start();
+                }
+                catch
+                {
+                    if (added)
+                    {
+                        TcpTransportSession removed;
+                        _sessions.TryRemove(session.SessionId, out removed);
+                        UnsubscribeAndDispose(session);
+                    }
+                    else if (session != null)
+                    {
+                        session.Dispose();
+                    }
+                    else
+                    {
+                        try { client.Close(); } catch { }
+                    }
+
+                    if (cancellationToken.IsCancellationRequested) break;
                 }
             }
         }
@@ -205,12 +303,19 @@ namespace IndustrialCommSdk.Transport
         private void OnSessionClosed(object sender, EventArgs e)
         {
             var session = (TcpTransportSession)sender;
-            TcpTransportSession removed;
-            _sessions.TryRemove(session.SessionId, out removed);
-            session.DataReceivedAsync -= OnSessionDataReceivedAsync;
-            session.Closed -= OnSessionClosed;
-            InvokeSafely(SessionClosed, new TransportSessionEventArgs(session));
-            session.Dispose();
+            try
+            {
+                InvokeInCallbackScope(
+                    () => InvokeSafely(SessionClosed, new TransportSessionEventArgs(session)));
+            }
+            finally
+            {
+                session.DataReceivedAsync -= OnSessionDataReceivedAsync;
+                session.Closed -= OnSessionClosed;
+                session.Dispose();
+                TcpTransportSession removed;
+                _sessions.TryRemove(session.SessionId, out removed);
+            }
         }
 
         /// <summary>
@@ -220,8 +325,19 @@ namespace IndustrialCommSdk.Transport
         /// <param name="payload">从会话接收到的二进制数据负载。</param>
         private async Task OnSessionDataReceivedAsync(TcpTransportSession session, byte[] payload)
         {
-            InvokeSafely(DataReceived, new TransportDataReceivedEventArgs(session, payload));
-            await InvokeAsyncSafely(DataReceivedAsync, new TransportDataReceivedEventArgs(session, payload)).ConfigureAwait(false);
+            var previousContext = _callbackContext.Value;
+            var context = new CallbackContext(previousContext);
+            _callbackContext.Value = context;
+            try
+            {
+                InvokeSafely(DataReceived, new TransportDataReceivedEventArgs(session, payload));
+                await InvokeAsyncSafely(DataReceivedAsync, new TransportDataReceivedEventArgs(session, payload)).ConfigureAwait(false);
+            }
+            finally
+            {
+                Volatile.Write(ref context.Active, 0);
+                _callbackContext.Value = previousContext;
+            }
         }
 
         /// <summary>
@@ -229,9 +345,86 @@ namespace IndustrialCommSdk.Transport
         /// </summary>
         public void Dispose()
         {
+            if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
             StopAsync(CancellationToken.None).GetAwaiter().GetResult();
-            _cts?.Dispose();
-            _lifecycleGate.Dispose();
+            // Keep the gate alive so a StartAsync already queued before Dispose can re-enter,
+            // observe the disposed flag, and unwind deterministically.
+        }
+
+        private IReadOnlyCollection<TcpTransportSession> DetachAndDisposeSessions()
+        {
+            var sessions = _sessions.Values.ToArray();
+            foreach (var session in sessions)
+            {
+                TcpTransportSession removed;
+                _sessions.TryRemove(session.SessionId, out removed);
+                UnsubscribeAndDispose(session);
+            }
+            return sessions;
+        }
+
+        private static async Task AwaitWithCancellationAsync(Task task, CancellationToken cancellationToken)
+        {
+            if (task == null) return;
+            if (!cancellationToken.CanBeCanceled || task.IsCompleted)
+            {
+                await task.ConfigureAwait(false);
+                return;
+            }
+
+            var cancellationCompletion = new TaskCompletionSource<bool>(
+                TaskCreationOptions.RunContinuationsAsynchronously);
+            using (cancellationToken.Register(
+                state => ((TaskCompletionSource<bool>)state).TrySetResult(true),
+                cancellationCompletion))
+            {
+                if (await Task.WhenAny(task, cancellationCompletion.Task).ConfigureAwait(false) != task)
+                    throw new OperationCanceledException(cancellationToken);
+            }
+            await task.ConfigureAwait(false);
+        }
+
+        private void InvokeInCallbackScope(Action callback)
+        {
+            var previousContext = _callbackContext.Value;
+            var context = new CallbackContext(previousContext);
+            _callbackContext.Value = context;
+            try
+            {
+                callback();
+            }
+            finally
+            {
+                Volatile.Write(ref context.Active, 0);
+                _callbackContext.Value = previousContext;
+            }
+        }
+
+        private bool IsInServerCallback()
+        {
+            for (var context = _callbackContext.Value; context != null; context = context.Parent)
+            {
+                if (Volatile.Read(ref context.Active) != 0) return true;
+            }
+            return false;
+        }
+
+        private void ThrowIfDisposed()
+        {
+            if (Volatile.Read(ref _disposed) != 0)
+                throw new ObjectDisposedException(nameof(TcpTransportServer));
+        }
+
+        private sealed class CallbackContext
+        {
+            public CallbackContext(CallbackContext parent)
+            {
+                Parent = parent;
+                Active = 1;
+            }
+
+            public readonly CallbackContext Parent;
+            public int Active;
         }
 
         private void UnsubscribeAndDispose(TcpTransportSession session)

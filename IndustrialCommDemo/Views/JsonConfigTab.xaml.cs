@@ -10,6 +10,7 @@ using IndustrialCommSdk;
 using IndustrialCommSdk.Abstractions;
 using IndustrialCommSdk.Runtime.Configuration;
 using IndustrialCommSdk.Runtime;
+using IndustrialCommDemo.Services;
 
 namespace IndustrialCommDemo.Views
 {
@@ -21,6 +22,7 @@ namespace IndustrialCommDemo.Views
         private DemoAppContext _ctx;
         private string _deviceConfigPath;
         private string _pointConfigPath;
+        private JsonConfigurationValidationService _jsonValidation;
         private bool _isRefreshingDeviceList;
         private bool _isLoadingDeviceForm;
 
@@ -38,6 +40,10 @@ namespace IndustrialCommDemo.Views
         {
             _ctx = ctx ?? throw new ArgumentNullException(nameof(ctx));
             _deviceConfigPath = _ctx.Runtime.ConfigFilePath;
+            _jsonValidation = new JsonConfigurationValidationService(
+                Sdk,
+                Path.GetDirectoryName(_deviceConfigPath),
+                _ctx.SdkLogger);
             LoadConfigFiles();
         }
 
@@ -178,13 +184,55 @@ namespace IndustrialCommDemo.Views
         {
             try
             {
-                SaveConfigFiles();
-                var config = Sdk.LoadConfiguration(_deviceConfigPath);
-                var result = config.Validate(Path.GetDirectoryName(_deviceConfigPath), Sdk.Protocols, _ctx.SdkLogger);
-                if (!result.IsValid) throw new InvalidOperationException(string.Join(Environment.NewLine, result.Errors.Take(8)));
-                SetStatus("配置校验通过，共 " + config.Devices.Count + " 台设备。", Brushes.ForestGreen);
+                var result = _jsonValidation.ValidateCurrent(
+                    DeviceJsonTextBox.Text,
+                    PointJsonTextBox.Text,
+                    _pointConfigPath);
+                if (!result.IsValid) throw new InvalidOperationException(result.ToDisplayText());
+                SetStatus("当前设备和点位 JSON 校验通过。", Brushes.ForestGreen);
             }
             catch (Exception ex) { _ctx.HandleError("JSON 配置校验失败。", ex, true); }
+        }
+
+        private void ValidateAllConfigButton_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var result = _jsonValidation.ValidateAll(
+                    DeviceJsonTextBox.Text,
+                    _pointConfigPath,
+                    PointJsonTextBox.Text);
+                if (!result.IsValid) throw new InvalidOperationException(result.ToDisplayText());
+                SetStatus("四类 JSON 配置全部校验通过。", Brushes.ForestGreen);
+            }
+            catch (Exception ex) { _ctx.HandleError("全部 JSON 配置校验失败。", ex, true); }
+        }
+
+        private void LoadDeviceTemplateButton_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                DeviceJsonTextBox.Text = _jsonValidation.LoadTemplate(JsonConfigurationDocument.Devices);
+                var config = Sdk.ParseConfiguration(DeviceJsonTextBox.Text);
+                RefreshDeviceList(config);
+                DeviceNameComboBox.SelectedItem = config.Devices[0].Name;
+                LoadDeviceForm();
+                _pointConfigPath = ResolveSelectedPointConfigPath();
+                LoadPointTemplateButton_Click(sender, e);
+                SetStatus("已加载设备和点位模板，保存后生效。", Brushes.DarkGoldenrod);
+            }
+            catch (Exception ex) { _ctx.HandleError("加载设备模板失败。", ex, true); }
+        }
+
+        private void LoadPointTemplateButton_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                PointJsonTextBox.Text = _jsonValidation.LoadTemplate(JsonConfigurationDocument.Points);
+                LoadPointRows();
+                SetStatus("已加载点位模板，保存后生效。", Brushes.DarkGoldenrod);
+            }
+            catch (Exception ex) { _ctx.HandleError("加载点位模板失败。", ex, true); }
         }
 
         private async void TestConnectionButton_Click(object sender, RoutedEventArgs e)
@@ -237,10 +285,17 @@ namespace IndustrialCommDemo.Views
 
         private void SaveConfigFiles()
         {
+            if (PointEditorTabControl.SelectedIndex == 0) ApplyPointRowsToJson();
+            var currentValidation = _jsonValidation.ValidateCurrent(
+                DeviceJsonTextBox.Text,
+                PointJsonTextBox.Text,
+                _pointConfigPath);
+            if (!currentValidation.IsValid)
+                throw new InvalidOperationException(currentValidation.ToDisplayText());
+
             var config = SaveDeviceConfig();
             RefreshDeviceList(config);
             _pointConfigPath = ResolveSelectedPointConfigPath();
-            if (PointEditorTabControl.SelectedIndex == 0) ApplyPointRowsToJson();
             var table = TagTable.FromJson(PointJsonTextBox.Text);
             table.SaveJson(_pointConfigPath);
             PointJsonTextBox.Text = table.ToJson();
@@ -249,6 +304,13 @@ namespace IndustrialCommDemo.Views
 
         private IndustrialSdkConfig SaveDeviceConfig()
         {
+            var schemaResult = _jsonValidation.ValidateForSave(
+                JsonConfigurationDocument.Devices,
+                DeviceJsonTextBox.Text,
+                Path.GetDirectoryName(_deviceConfigPath));
+            if (!schemaResult.IsValid)
+                throw new InvalidOperationException(schemaResult.ToDisplayText());
+
             var config = Sdk.ParseConfiguration(DeviceJsonTextBox.Text);
             foreach (var device in config.Devices)
             {

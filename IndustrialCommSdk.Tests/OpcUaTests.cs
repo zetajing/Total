@@ -50,5 +50,12 @@ namespace IndustrialCommSdk.Tests
                 DeviceId = "ua-plc", EndpointUrl = "http://localhost:4840"
             }));
         }
+
+        [Test]
+        public void CertificateTrust_DefaultsToExplicitApproval()
+        {
+            Assert.IsFalse(new OpcUaClientOptions().AutoAcceptUntrustedCertificates);
+            Assert.IsFalse(new OpcUaSettings().AutoAcceptUntrustedCertificates);
+        }
     }
 }

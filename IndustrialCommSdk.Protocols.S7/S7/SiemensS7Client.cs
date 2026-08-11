@@ -81,10 +81,13 @@ namespace IndustrialCommSdk.Protocols.S7
             capabilities = capabilities ?? Capabilities;
 
             var planned = requests
-                .Select(request => new PlannedS7Read(request, _parser.ParseTyped(request.Address), EstimateEndOffset(_parser.ParseTyped(request.Address), request)))
+                .Select(request =>
+                {
+                    var address = _parser.ParseTyped(request.Address);
+                    return new PlannedS7Read(request, address, S7BatchValueDecoder.EstimateEndOffset(address, request));
+                })
                 .OrderBy(item => item.Address.Area)
                 .ThenBy(item => item.Address.DbNumber)
-                .ThenBy(item => item.Request.DataType)
                 .ThenBy(item => item.Address.ByteOffset)
                 .ThenBy(item => item.Address.BitOffset)
                 .ToList();
@@ -164,6 +167,59 @@ namespace IndustrialCommSdk.Protocols.S7
                 return new DataValue(request.Address, request.DataType, value, null,
                     QualityStatus.Good, DateTimeOffset.UtcNow, null);
             }, cancellationToken);
+        }
+
+        protected override async Task<BatchReadResult> ReadManyCoreAsync(
+            IReadOnlyCollection<ReadRequest> requests,
+            CancellationToken cancellationToken)
+        {
+            var plan = PlanRead(requests, BatchReadOptions.Default, Capabilities);
+            var values = new Dictionary<ReadRequest, DataValue>();
+
+            foreach (var group in plan.Groups)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var firstAddress = _parser.ParseTyped(group.ReadRequests[0].Address);
+                var startOffset = group.StartOffset.Value;
+                var byteCount = group.EndOffset.Value - startOffset + 1;
+
+                try
+                {
+                    var bytes = await ExecuteWithReconnectAsync(
+                        token => _plc.ReadBytesAsync(
+                            ToPlcArea(firstAddress.Area),
+                            firstAddress.DbNumber,
+                            startOffset,
+                            byteCount,
+                            token),
+                        cancellationToken).ConfigureAwait(false);
+
+                    foreach (var request in group.ReadRequests)
+                    {
+                        try
+                        {
+                            values[request] = S7BatchValueDecoder.Decode(
+                                request,
+                                _parser.ParseTyped(request.Address),
+                                bytes,
+                                startOffset);
+                        }
+                        catch (OperationCanceledException) { throw; }
+                        catch (Exception ex)
+                        {
+                            values[request] = BadBatchValue(request, ex.Message);
+                        }
+                    }
+                }
+                catch (OperationCanceledException) { throw; }
+                catch (Exception ex)
+                {
+                    foreach (var request in group.ReadRequests)
+                        values[request] = BadBatchValue(request, ex.Message);
+                }
+            }
+
+            return new BatchReadResult(requests.Select(request => values[request]).ToList());
         }
 
         protected override Task WriteCoreAsync(WriteRequest request, CancellationToken cancellationToken)
@@ -359,7 +415,6 @@ namespace IndustrialCommSdk.Protocols.S7
             var first = current[0];
             if (first.Address.Area != next.Address.Area) return false;
             if (first.Address.DbNumber != next.Address.DbNumber) return false;
-            if (first.Request.DataType != next.Request.DataType) return false;
             var start = Math.Min(current.Min(item => item.Address.ByteOffset), next.Address.ByteOffset);
             var end = Math.Max(current.Max(item => item.EndOffset), next.EndOffset);
             return end - start + 1 <= maxSpan;
@@ -369,12 +424,15 @@ namespace IndustrialCommSdk.Protocols.S7
         {
             var start = current.Min(item => item.Address.ByteOffset);
             var end = current.Max(item => item.EndOffset);
+            var dataType = current.All(item => item.Request.DataType == current[0].Request.DataType)
+                ? (IndustrialCommSdk.Abstractions.DataType?)current[0].Request.DataType
+                : null;
             return BatchRequestGroup.ForRead(
                 sequence,
                 BuildAreaKey(current[0].Address),
                 start,
                 end,
-                current[0].Request.DataType,
+                dataType,
                 current.Select(item => item.Request).ToList());
         }
 
@@ -387,7 +445,11 @@ namespace IndustrialCommSdk.Protocols.S7
 
         private static int EstimateEndOffset(S7Address address, ReadRequest request)
         {
-            if (address.IsBitAddress) return address.ByteOffset;
+            if (address.IsBitAddress)
+            {
+                var bitCount = Math.Max(1, (int)request.Length);
+                return address.ByteOffset + (address.BitOffset + bitCount - 1) / 8;
+            }
             return address.ByteOffset + Math.Max(1, EstimateByteLength(request.DataType, request.Length)) - 1;
         }
 
@@ -468,6 +530,12 @@ namespace IndustrialCommSdk.Protocols.S7
         {
             if (plc == null) return;
             try { plc.Close(); } catch { }
+        }
+
+        private static DataValue BadBatchValue(ReadRequest request, string message)
+        {
+            return new DataValue(request.Address, request.DataType, null, null,
+                QualityStatus.Bad, DateTimeOffset.UtcNow, message);
         }
 
         private sealed class PlannedS7Read

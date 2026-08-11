@@ -1,0 +1,163 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Industrial device configuration",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [ "devices" ],
+  "properties": {
+    "devices": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [ "name", "protocol", "pointsFile", "runtime", "settings" ],
+        "properties": {
+          "name": { "type": "string", "minLength": 1 },
+          "protocol": {
+            "type": "string",
+            "enum": [ "modbus-tcp", "modbus-rtu", "siemens-s7", "mitsubishi-mc", "opc-ua", "mqtt", "redis" ]
+          },
+          "deviceId": { "type": "string", "minLength": 1 },
+          "pointsFile": { "type": "string", "minLength": 1 },
+          "enabled": { "type": "boolean" },
+          "runtime": { "$ref": "#/definitions/runtime" },
+          "settings": { "type": "object" }
+        },
+        "oneOf": [
+          { "properties": { "protocol": { "const": "modbus-tcp" }, "settings": { "$ref": "#/definitions/modbusTcpSettings" } } },
+          { "properties": { "protocol": { "const": "modbus-rtu" }, "settings": { "$ref": "#/definitions/modbusRtuSettings" } } },
+          { "properties": { "protocol": { "const": "siemens-s7" }, "settings": { "$ref": "#/definitions/s7Settings" } } },
+          { "properties": { "protocol": { "const": "mitsubishi-mc" }, "settings": { "$ref": "#/definitions/mcSettings" } } },
+          { "properties": { "protocol": { "const": "opc-ua" }, "settings": { "$ref": "#/definitions/opcUaSettings" } } },
+          { "properties": { "protocol": { "const": "mqtt" }, "settings": { "$ref": "#/definitions/mqttSettings" } } },
+          { "properties": { "protocol": { "const": "redis" }, "settings": { "$ref": "#/definitions/redisSettings" } } }
+        ]
+      }
+    }
+  },
+  "definitions": {
+    "runtime": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "pollingIntervalMilliseconds": { "type": "integer", "minimum": 1 },
+        "reconnectDelayMilliseconds": { "type": "integer", "minimum": 1 },
+        "operationTimeoutMilliseconds": { "type": "integer", "minimum": 1 },
+        "reportOnChangeOnly": { "type": "boolean" }
+      }
+    },
+    "modbusTcpSettings": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [ "host" ],
+      "properties": {
+        "host": { "type": "string", "minLength": 1 },
+        "port": { "type": "integer", "minimum": 1, "maximum": 65535 },
+        "slaveId": { "type": "integer", "minimum": 1, "maximum": 255 },
+        "deviceProfile": { "type": "string", "minLength": 1 },
+        "connectTimeoutMilliseconds": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "modbusRtuSettings": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [ "portName" ],
+      "properties": {
+        "portName": { "type": "string", "minLength": 1 },
+        "baudRate": { "type": "integer", "minimum": 1 },
+        "dataBits": { "type": "integer", "minimum": 5, "maximum": 8 },
+        "parity": { "type": "string", "enum": [ "None", "Odd", "Even", "Mark", "Space" ] },
+        "stopBits": { "type": "string", "enum": [ "None", "One", "Two", "OnePointFive" ] },
+        "readTimeoutMilliseconds": { "type": "integer", "minimum": 1 },
+        "writeTimeoutMilliseconds": { "type": "integer", "minimum": 1 },
+        "retries": { "type": "integer", "minimum": 0 },
+        "retryDelayMilliseconds": { "type": "integer", "minimum": 0 },
+        "slaveId": { "type": "integer", "minimum": 1, "maximum": 255 },
+        "deviceProfile": { "type": "string", "minLength": 1 }
+      }
+    },
+    "s7Settings": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [ "host" ],
+      "properties": {
+        "host": { "type": "string", "minLength": 1 },
+        "cpuType": { "type": "string", "minLength": 1 },
+        "rack": { "type": "integer", "minimum": 0 },
+        "slot": { "type": "integer", "minimum": 0 },
+        "connectTimeoutMilliseconds": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "mcSettings": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [ "host" ],
+      "properties": {
+        "host": { "type": "string", "minLength": 1 },
+        "port": { "type": "integer", "minimum": 1, "maximum": 65535 },
+        "sendTimeoutMilliseconds": { "type": "integer", "minimum": 1 },
+        "receiveTimeoutMilliseconds": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "opcUaSettings": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [ "endpointUrl" ],
+      "properties": {
+        "endpointUrl": { "type": "string", "minLength": 1 },
+        "username": { "type": "string" },
+        "password": { "type": "string" },
+        "useSecurity": { "type": "boolean" },
+        "autoAcceptUntrustedCertificates": { "type": "boolean" },
+        "connectTimeoutMilliseconds": { "type": "integer", "minimum": 1 },
+        "sessionTimeoutMilliseconds": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "mqttSettings": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [ "host" ],
+      "properties": {
+        "host": { "type": "string", "minLength": 1 },
+        "port": { "type": "integer", "minimum": 1, "maximum": 65535 },
+        "clientId": { "type": "string" },
+        "username": { "type": "string" },
+        "password": { "type": "string" },
+        "useTls": { "type": "boolean" },
+        "tlsTargetHost": { "type": "string" },
+        "allowUntrustedCertificates": { "type": "boolean" },
+        "ignoreCertificateChainErrors": { "type": "boolean" },
+        "ignoreCertificateRevocationErrors": { "type": "boolean" },
+        "qualityOfService": { "type": "integer", "minimum": 0, "maximum": 2 },
+        "retain": { "type": "boolean" },
+        "connectTimeoutMilliseconds": { "type": "integer", "minimum": 1 },
+        "keepAliveSeconds": { "type": "integer", "minimum": 1 },
+        "cleanSession": { "type": "boolean" },
+        "autoReconnect": { "type": "boolean" },
+        "reconnectInitialDelayMilliseconds": { "type": "integer", "minimum": 1 },
+        "reconnectMaxDelayMilliseconds": { "type": "integer", "minimum": 1 },
+        "maxApplicationMessagePayloadBytes": { "type": "integer", "minimum": 1 },
+        "maxCachedTopics": { "type": "integer", "minimum": 1 },
+        "willTopic": { "type": "string" },
+        "willPayload": { "type": "string" },
+        "willQualityOfService": { "type": "integer", "minimum": 0, "maximum": 2 },
+        "willRetain": { "type": "boolean" }
+      }
+    },
+    "redisSettings": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [ "host" ],
+      "properties": {
+        "host": { "type": "string", "minLength": 1 },
+        "port": { "type": "integer", "minimum": 1, "maximum": 65535 },
+        "username": { "type": "string" },
+        "password": { "type": "string" },
+        "database": { "type": "integer", "minimum": 0 },
+        "ssl": { "type": "boolean" },
+        "connectTimeoutMilliseconds": { "type": "integer", "minimum": 1 }
+      }
+    }
+  }
+}

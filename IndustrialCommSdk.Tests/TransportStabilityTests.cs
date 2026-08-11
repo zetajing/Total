@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Net;
 using System.Net.Sockets;
 using System.Reflection;
@@ -345,6 +346,301 @@ namespace IndustrialCommSdk.Tests
             {
                 client.Dispose();
                 listener.Stop();
+            }
+        }
+
+        [Test]
+        public async Task TcpTransportServer_DataReceivedAsyncCanAwaitStopWithoutDeadlock()
+        {
+            var reserved = StartListener(out var port);
+            reserved.Stop();
+            var callbackReturned = NewSignal();
+            var server = new TcpTransportServer(IPAddress.Loopback, port);
+            try
+            {
+                server.DataReceivedAsync += async (sender, args) =>
+                {
+                    await server.StopAsync(CancellationToken.None);
+                    callbackReturned.TrySetResult(true);
+                };
+                await server.StartAsync(CancellationToken.None);
+
+                using (var client = new TcpClient())
+                {
+                    await client.ConnectAsync(IPAddress.Loopback, port);
+                    await client.GetStream().WriteAsync(new byte[] { 1 }, 0, 1);
+                    await WithTimeout(callbackReturned.Task);
+                }
+
+                await WithTimeout(server.StopAsync(CancellationToken.None));
+                Assert.That(server.IsRunning, Is.False);
+                Assert.That(server.SessionCount, Is.Zero);
+            }
+            finally
+            {
+                server.Dispose();
+            }
+        }
+
+        [Test]
+        public async Task TcpTransportServer_CancelledStopOnlyCancelsWaitAndCleanupContinues()
+        {
+            var reserved = StartListener(out var port);
+            reserved.Stop();
+            var callbackEntered = NewSignal();
+            var releaseCallback = NewSignal();
+            var server = new TcpTransportServer(IPAddress.Loopback, port);
+            try
+            {
+                server.DataReceivedAsync += async (sender, args) =>
+                {
+                    callbackEntered.TrySetResult(true);
+                    await releaseCallback.Task;
+                };
+                await server.StartAsync(CancellationToken.None);
+
+                using (var client = new TcpClient())
+                {
+                    await client.ConnectAsync(IPAddress.Loopback, port);
+                    await client.GetStream().WriteAsync(new byte[] { 1 }, 0, 1);
+                    await WithTimeout(callbackEntered.Task);
+
+                    using (var cancellation = new CancellationTokenSource(100))
+                    {
+                        var failure = await CaptureAsync(server.StopAsync(cancellation.Token));
+                        Assert.That(failure, Is.InstanceOf<OperationCanceledException>());
+                    }
+
+                    Assert.That(server.IsRunning, Is.False);
+                    var finalStop = server.StopAsync(CancellationToken.None);
+                    await Task.Delay(50);
+                    Assert.That(finalStop.IsCompleted, Is.False);
+
+                    releaseCallback.TrySetResult(true);
+                    await WithTimeout(finalStop);
+                    Assert.That(server.SessionCount, Is.Zero);
+                }
+            }
+            finally
+            {
+                releaseCallback.TrySetResult(true);
+                server.Dispose();
+            }
+        }
+
+        [Test]
+        public async Task TcpTransportServer_SessionConnectedCanSynchronouslyStopWithoutDeadlock()
+        {
+            var reserved = StartListener(out var port);
+            reserved.Stop();
+            var callbackReturned = NewSignal();
+            var server = new TcpTransportServer(IPAddress.Loopback, port);
+            try
+            {
+                server.SessionConnected += (sender, args) =>
+                {
+                    server.StopAsync(CancellationToken.None).GetAwaiter().GetResult();
+                    callbackReturned.TrySetResult(true);
+                };
+                await server.StartAsync(CancellationToken.None);
+
+                using (var client = new TcpClient())
+                {
+                    await client.ConnectAsync(IPAddress.Loopback, port);
+                    await WithTimeout(callbackReturned.Task);
+                }
+
+                await WithTimeout(server.StopAsync(CancellationToken.None));
+                Assert.That(server.IsRunning, Is.False);
+                Assert.That(server.SessionCount, Is.Zero);
+            }
+            finally
+            {
+                server.Dispose();
+            }
+        }
+
+        [Test]
+        public async Task TcpTransportServer_StopWaitsForRunningSessionClosedCallback()
+        {
+            var reserved = StartListener(out var port);
+            reserved.Stop();
+            var connected = NewSignal();
+            var closedCallbackEntered = NewSignal();
+            var releaseClosedCallback = NewSignal();
+            var server = new TcpTransportServer(IPAddress.Loopback, port);
+            try
+            {
+                server.SessionConnected += (sender, args) => connected.TrySetResult(true);
+                server.SessionClosed += (sender, args) =>
+                {
+                    closedCallbackEntered.TrySetResult(true);
+                    releaseClosedCallback.Task.GetAwaiter().GetResult();
+                };
+                await server.StartAsync(CancellationToken.None);
+
+                using (var client = new TcpClient())
+                {
+                    await client.ConnectAsync(IPAddress.Loopback, port);
+                    await WithTimeout(connected.Task);
+                    client.Close();
+                    await WithTimeout(closedCallbackEntered.Task);
+
+                    var stop = server.StopAsync(CancellationToken.None);
+                    await Task.Delay(50);
+                    Assert.That(stop.IsCompleted, Is.False);
+
+                    releaseClosedCallback.TrySetResult(true);
+                    await WithTimeout(stop);
+                }
+
+                Assert.That(server.SessionCount, Is.Zero);
+            }
+            finally
+            {
+                releaseClosedCallback.TrySetResult(true);
+                server.Dispose();
+            }
+        }
+
+        [Test]
+        public async Task TcpTransportServer_RejectsRestartWhileDataCallbackStopIsDraining()
+        {
+            var reserved = StartListener(out var port);
+            reserved.Stop();
+            var restartFailure = new TaskCompletionSource<Exception>(
+                TaskCreationOptions.RunContinuationsAsynchronously);
+            var server = new TcpTransportServer(IPAddress.Loopback, port);
+            try
+            {
+                server.DataReceivedAsync += async (sender, args) =>
+                {
+                    await server.StopAsync(CancellationToken.None);
+                    try
+                    {
+                        await server.StartAsync(CancellationToken.None);
+                    }
+                    catch (Exception exception)
+                    {
+                        restartFailure.TrySetResult(exception);
+                    }
+                };
+                await server.StartAsync(CancellationToken.None);
+
+                using (var client = new TcpClient())
+                {
+                    await client.ConnectAsync(IPAddress.Loopback, port);
+                    await client.GetStream().WriteAsync(new byte[] { 1 }, 0, 1);
+                    var failure = await WithTimeout(restartFailure.Task);
+                    Assert.That(failure, Is.TypeOf<InvalidOperationException>());
+                    Assert.That(failure.Message, Does.Contain("cannot be restarted"));
+                }
+
+                await WithTimeout(server.StopAsync(CancellationToken.None));
+            }
+            finally
+            {
+                server.Dispose();
+            }
+        }
+
+        [Test]
+        public async Task TcpTransportServer_ImmediatePeerCloseRaisesConnectedBeforeClosedOnce()
+        {
+            var reserved = StartListener(out var port);
+            reserved.Stop();
+            var connected = NewSignal();
+            var closed = NewSignal();
+            var eventOrder = new List<string>();
+            Guid connectedSessionId = Guid.Empty;
+            Guid closedSessionId = Guid.Empty;
+            var server = new TcpTransportServer(IPAddress.Loopback, port);
+            try
+            {
+                server.SessionConnected += (sender, args) =>
+                {
+                    lock (eventOrder) eventOrder.Add("connected");
+                    connectedSessionId = args.Session.SessionId;
+                    connected.TrySetResult(true);
+                };
+                server.SessionClosed += (sender, args) =>
+                {
+                    lock (eventOrder) eventOrder.Add("closed");
+                    closedSessionId = args.Session.SessionId;
+                    closed.TrySetResult(true);
+                };
+                await server.StartAsync(CancellationToken.None);
+
+                using (var client = new TcpClient())
+                {
+                    await client.ConnectAsync(IPAddress.Loopback, port);
+                }
+
+                await WithTimeout(connected.Task);
+                await WithTimeout(closed.Task);
+                await WithTimeout(server.StopAsync(CancellationToken.None));
+
+                lock (eventOrder)
+                    CollectionAssert.AreEqual(new[] { "connected", "closed" }, eventOrder);
+                Assert.That(closedSessionId, Is.EqualTo(connectedSessionId));
+            }
+            finally
+            {
+                server.Dispose();
+            }
+        }
+
+        [Test]
+        public async Task TcpTransportServer_ConcurrentConnectAndStopCanRestartCleanly()
+        {
+            var reserved = StartListener(out var port);
+            reserved.Stop();
+            var connectedCount = 0;
+            var server = new TcpTransportServer(IPAddress.Loopback, port);
+            server.SessionConnected += (sender, args) => Interlocked.Increment(ref connectedCount);
+            try
+            {
+                for (var generation = 0; generation < 5; generation++)
+                {
+                    await server.StartAsync(CancellationToken.None);
+                    var clients = new Task[16];
+                    for (var index = 0; index < clients.Length; index++)
+                    {
+                        clients[index] = Task.Run(async () =>
+                        {
+                            try
+                            {
+                                using (var client = new TcpClient())
+                                {
+                                    await client.ConnectAsync(IPAddress.Loopback, port);
+                                    await client.GetStream().WriteAsync(new byte[] { 1 }, 0, 1);
+                                }
+                            }
+                            catch (SocketException)
+                            {
+                                // Stop may close the listener before this connection is admitted.
+                            }
+                            catch (IOException)
+                            {
+                                // A successfully accepted connection may be closed by Stop while writing.
+                            }
+                        });
+                    }
+
+                    await Task.Delay(5);
+                    await WithTimeout(server.StopAsync(CancellationToken.None));
+                    var countAfterStop = Volatile.Read(ref connectedCount);
+                    await WithTimeout(Task.WhenAll(clients));
+                    await Task.Delay(25);
+
+                    Assert.That(Volatile.Read(ref connectedCount), Is.EqualTo(countAfterStop));
+                    Assert.That(server.SessionCount, Is.Zero);
+                    Assert.That(server.IsRunning, Is.False);
+                }
+            }
+            finally
+            {
+                server.Dispose();
             }
         }
 

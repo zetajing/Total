@@ -1,0 +1,10 @@
+{
+  "tags": [
+    {
+      "name": "Speed",
+      "address": "D100",
+      "type": "Int16",
+      "writable": false
+    }
+  ]
+}
