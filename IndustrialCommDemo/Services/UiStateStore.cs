@@ -461,5 +461,11 @@ namespace IndustrialCommDemo.Services
         /// <summary>获取或设置 Siemens S7 CPU 型号。</summary>
         [DataMember(Order = 10, EmitDefaultValue = false)]
         public string CpuType { get; set; }
+        /// <summary>获取或设置原生 Siemens S7 STRING[n] 的起始地址。</summary>
+        [DataMember(Order = 11, EmitDefaultValue = false)]
+        public string NativeStringAddress { get; set; }
+        /// <summary>获取或设置原生 Siemens S7 STRING[n] 的保留长度。</summary>
+        [DataMember(Order = 12, EmitDefaultValue = false)]
+        public string NativeStringLength { get; set; }
     }
 }
