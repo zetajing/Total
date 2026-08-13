@@ -303,6 +303,32 @@ namespace IndustrialCommSdk.Protocols.S7
             }, token), cancellationToken);
         }
 
+        /// <summary>
+        /// Reads a native Siemens S7 STRING[n] value using a TIA Portal absolute DB address.
+        /// Both DB2000.DBX6.0 and DB2000.DBB6 identify a string beginning at byte 6.
+        /// </summary>
+        /// <param name="address">A byte-aligned DB address such as DB2000.DBX6.0 or DB2000.DBB6.</param>
+        /// <param name="reservedLength">The STRING[n] maximum length, excluding the two header bytes.</param>
+        /// <param name="cancellationToken">Cancels the read operation.</param>
+        /// <returns>The characters currently stored in the PLC string.</returns>
+        public Task<string> ReadDbStringAsync(
+            string address,
+            int reservedLength,
+            CancellationToken cancellationToken = default(CancellationToken))
+        {
+            if (string.IsNullOrWhiteSpace(address))
+                throw new ArgumentException("S7 string address is required.", nameof(address));
+
+            var parsed = _parser.ParseTyped(address);
+            if (parsed.Area != S7Area.Db)
+                throw new IndustrialAddressParseException("S7 string address must point to a data block: " + address);
+            if (parsed.IsBitAddress && parsed.BitOffset != 0)
+                throw new IndustrialAddressParseException(
+                    "S7 STRING must start at bit 0 of its byte address: " + address);
+
+            return ReadDbStringAsync(parsed.DbNumber, parsed.ByteOffset, reservedLength, cancellationToken);
+        }
+
         public Task<T> ReadDbClassAsync<T>(Func<T> factory, int dbNumber, int startByteAddress = 0,
             CancellationToken cancellationToken = default(CancellationToken)) where T : class
         {

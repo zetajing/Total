@@ -38,5 +38,30 @@ namespace IndustrialCommSdk.Tests
             Assert.Throws<ArgumentOutOfRangeException>(
                 () => S7StringCodec.ValidateReservedLength(reservedLength));
         }
+
+        [Test]
+        public void AddressParser_AcceptsTiaStringStartAddress()
+        {
+            var address = new S7AddressParser().ParseTyped("DB2000.DBX6.0");
+
+            Assert.AreEqual(S7Area.Db, address.Area);
+            Assert.AreEqual(2000, address.DbNumber);
+            Assert.AreEqual(6, address.ByteOffset);
+            Assert.AreEqual(0, address.BitOffset);
+        }
+
+        [Test]
+        public void ReadDbStringAddress_RejectsNonByteAlignedStringStartAddress()
+        {
+            using (var client = new SiemensS7Client(new SiemensS7ClientOptions
+            {
+                DeviceId = "s7-test",
+                Host = "127.0.0.1"
+            }))
+            {
+                Assert.Throws<IndustrialAddressParseException>(
+                    () => client.ReadDbStringAsync("DB2000.DBX6.1", 60));
+            }
+        }
     }
 }
