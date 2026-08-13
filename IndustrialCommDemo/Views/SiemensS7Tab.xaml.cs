@@ -40,6 +40,7 @@ namespace IndustrialCommDemo.Views
             StatusTextBlock.Foreground = _vm.StatusBrush;
             ResultTextBlock.Text = _vm.ResultText;
             CapabilityTextBlock.Text = _vm.CapabilityText;
+            NativeStringResultTextBlock.Text = _vm.NativeStringResultText;
 
             // Load saved field values into TextBox controls
             if (!string.IsNullOrWhiteSpace(_vm.DeviceId)) S7DeviceIdTextBox.Text = _vm.DeviceId;
@@ -49,6 +50,10 @@ namespace IndustrialCommDemo.Views
             if (!string.IsNullOrWhiteSpace(_vm.Address)) S7AddressTextBox.Text = _vm.Address;
             if (!string.IsNullOrWhiteSpace(_vm.Length)) S7LengthTextBox.Text = _vm.Length;
             if (!string.IsNullOrWhiteSpace(_vm.WriteValue)) S7WriteValueTextBox.Text = _vm.WriteValue;
+            if (!string.IsNullOrWhiteSpace(_vm.NativeStringAddress))
+                S7NativeStringAddressTextBox.Text = _vm.NativeStringAddress;
+            if (!string.IsNullOrWhiteSpace(_vm.NativeStringLength))
+                S7NativeStringLengthTextBox.Text = _vm.NativeStringLength;
 
             RefreshAddressHistory();
         }
@@ -75,6 +80,9 @@ namespace IndustrialCommDemo.Views
                     break;
                 case nameof(_vm.CapabilityText):
                     CapabilityTextBlock.Text = _vm.CapabilityText;
+                    break;
+                case nameof(_vm.NativeStringResultText):
+                    NativeStringResultTextBlock.Text = _vm.NativeStringResultText;
                     break;
                 case nameof(_vm.SelectedCpuType):
                     if (!Equals(S7CpuTypeComboBox.SelectedItem, _vm.SelectedCpuType))
@@ -144,6 +152,13 @@ namespace IndustrialCommDemo.Views
             _vm.Length = S7LengthTextBox.Text;
             _vm.WriteValue = S7WriteValueTextBox.Text;
             await _vm.WriteAsync();
+        }
+
+        private async void ReadNativeStringButton_Click(object sender, RoutedEventArgs e)
+        {
+            await _vm.ReadNativeStringAsync(
+                S7NativeStringAddressTextBox.Text,
+                S7NativeStringLengthTextBox.Text);
         }
 
         // ── Address input parsing ──

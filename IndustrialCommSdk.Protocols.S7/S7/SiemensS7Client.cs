@@ -164,6 +164,16 @@ namespace IndustrialCommSdk.Protocols.S7
             return ExecuteWithReconnectAsync(async token =>
             {
                 var value = await ReadValueAsync(address, request, token).ConfigureAwait(false);
+                if (value == null)
+                {
+                    throw new IndustrialDataConversionException(
+                        string.Format(
+                            "S7 read returned no decoded value. Address={0}, DataType={1}, Length={2}.",
+                            address.Normalized,
+                            request.DataType,
+                            request.Length));
+                }
+
                 return new DataValue(request.Address, request.DataType, value, null,
                     QualityStatus.Good, DateTimeOffset.UtcNow, null);
             }, cancellationToken);
@@ -378,21 +388,29 @@ namespace IndustrialCommSdk.Protocols.S7
 
         private async Task<object> ReadValueAsync(S7Address address, ReadRequest request, CancellationToken token)
         {
+            var count = Math.Max(1, (int)request.Length);
+
             switch (request.DataType)
             {
                 case Abstractions.DataType.String:
+                    if (request.Length == 0)
+                        throw new IndustrialDataConversionException("S7 string read length must be greater than zero.");
+
                     var stringBytes = await _plc.ReadBytesAsync(ToPlcArea(address.Area), address.DbNumber,
                         address.ByteOffset, request.Length, token).ConfigureAwait(false);
                     return Encoding.ASCII.GetString(stringBytes).TrimEnd('\0');
                 case Abstractions.DataType.ByteArray:
+                    if (request.Length == 0)
+                        throw new IndustrialDataConversionException("S7 byte-array read length must be greater than zero.");
+
                     return await _plc.ReadBytesAsync(ToPlcArea(address.Area), address.DbNumber,
                         address.ByteOffset, request.Length, token).ConfigureAwait(false);
                 case Abstractions.DataType.Char:
                     return Convert.ToChar(Convert.ToByte(await ReadTypedValueAsync(address, PlcVarType.Byte, 1, token).ConfigureAwait(false)));
                 case Abstractions.DataType.Byte:
-                    return await ReadTypedValueAsync(address, PlcVarType.Byte, request.Length, token).ConfigureAwait(false);
+                    return await ReadTypedValueAsync(address, PlcVarType.Byte, count, token).ConfigureAwait(false);
                 default:
-                    return await ReadTypedValueAsync(address, ToVarType(request.DataType), request.Length, token).ConfigureAwait(false);
+                    return await ReadTypedValueAsync(address, ToVarType(request.DataType), count, token).ConfigureAwait(false);
             }
         }
 

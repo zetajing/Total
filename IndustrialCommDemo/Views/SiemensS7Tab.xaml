@@ -3,12 +3,16 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
     <ScrollViewer VerticalScrollBarVisibility="Auto">
         <Grid Margin="10">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="1.05*" />
                 <ColumnDefinition Width="1.25*" />
             </Grid.ColumnDefinitions>
 
-            <GroupBox Header="连接" Grid.Column="0" Margin="0,0,12,0">
+            <GroupBox Header="连接" Grid.Row="0" Grid.Column="0" Margin="0,0,12,0">
                 <Grid Margin="12">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="140" />
@@ -52,7 +56,7 @@
                 </Grid>
             </GroupBox>
 
-            <GroupBox Header="操作" Grid.Column="1">
+            <GroupBox Header="操作" Grid.Row="0" Grid.Column="1">
                 <Grid Margin="12">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="150" />
@@ -92,6 +96,41 @@
                             <TextBlock x:Name="ResultTextBlock" Margin="0,8,0,0" TextWrapping="Wrap" Foreground="#334155" Text="等待中..." />
                         </StackPanel>
                     </Border>
+                </Grid>
+            </GroupBox>
+
+            <GroupBox Header="原生 STRING[n] 读取" Grid.Row="1" Grid.ColumnSpan="2" Margin="0,12,0,0">
+                <Grid Margin="12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="150" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+                    <TextBlock Grid.Row="0" Grid.Column="0" Margin="0,8" VerticalAlignment="Center" Text="字符串地址" />
+                    <TextBox x:Name="S7NativeStringAddressTextBox" Grid.Row="0" Grid.Column="1" Margin="0,6,0,6"
+                             Text="DB2000.DBX6.0" />
+                    <TextBlock Grid.Row="1" Grid.Column="0" Margin="0,8" VerticalAlignment="Center" Text="STRING 最大长度 n" />
+                    <TextBox x:Name="S7NativeStringLengthTextBox" Grid.Row="1" Grid.Column="1" Margin="0,6,0,6"
+                             Text="60" />
+                    <TextBlock Grid.Row="2" Grid.ColumnSpan="2" Margin="0,4,0,8" TextWrapping="Wrap" Foreground="#5B6F82"
+                               Text="地址填写 STRING 头部的绝对字节地址，例如 DB2000.DBX6.0；DBX 后面的位必须是 0。n 填博图中的 STRING[n] 最大字符数。" />
+                    <StackPanel Grid.Row="3" Grid.ColumnSpan="2">
+                        <Button Width="170" HorizontalAlignment="Left" Margin="0,4,0,10" Padding="10"
+                                Background="#7C3AED" Foreground="White" BorderThickness="0"
+                                Click="ReadNativeStringButton_Click" Content="读取 STRING[n]" />
+                        <Border Padding="12" CornerRadius="12" Background="#F8FAFC" BorderBrush="#D8E2EE" BorderThickness="1">
+                            <StackPanel>
+                                <TextBlock FontWeight="SemiBold" Foreground="#17324D" Text="STRING 结果" />
+                                <TextBlock x:Name="NativeStringResultTextBlock" Margin="0,8,0,0" TextWrapping="Wrap"
+                                           Foreground="#334155" Text="等待读取..." />
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
                 </Grid>
             </GroupBox>
         </Grid>

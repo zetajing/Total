@@ -1,4 +1,6 @@
 using System;
+using System.Threading;
+using System.Threading.Tasks;
 using IndustrialCommDemo.Helpers;
 using IndustrialCommSdk.Abstractions;
 using IndustrialCommSdk.Protocols.S7;
@@ -14,11 +16,32 @@ namespace IndustrialCommDemo.ViewModels
     internal sealed class SiemensS7ViewModel : ProtocolTabViewModel
     {
         private CpuType _selectedCpuType = CpuType.S71200;
+        private string _nativeStringAddress = "DB2000.DBX6.0";
+        private string _nativeStringLength = "60";
+        private string _nativeStringResultText = "等待读取...";
 
         public CpuType SelectedCpuType
         {
             get => _selectedCpuType;
             set => SetProperty(ref _selectedCpuType, value);
+        }
+
+        public string NativeStringAddress
+        {
+            get => _nativeStringAddress;
+            set => SetProperty(ref _nativeStringAddress, value);
+        }
+
+        public string NativeStringLength
+        {
+            get => _nativeStringLength;
+            set => SetProperty(ref _nativeStringLength, value);
+        }
+
+        public string NativeStringResultText
+        {
+            get => _nativeStringResultText;
+            private set => SetProperty(ref _nativeStringResultText, value);
         }
 
         public SiemensS7ViewModel(DemoAppContext ctx) : base(ctx) { }
@@ -65,7 +88,44 @@ namespace IndustrialCommDemo.ViewModels
             if (!string.IsNullOrWhiteSpace(Address))
             {
                 AddressHistoryHelper.RememberRecentAddress(Ctx.UiState.S7.RecentAddresses, Address);
-                RecentAddressChanged?.Invoke();
+            }
+            RecentAddressChanged?.Invoke();
+        }
+
+        /// <summary>
+        /// Reads a native Siemens S7 STRING[n] from the currently connected client.
+        /// The address points to the two-byte STRING header, for example DB2000.DBX6.0.
+        /// </summary>
+        internal async Task ReadNativeStringAsync(string address, string reservedLengthText)
+        {
+            NativeStringAddress = address;
+            NativeStringLength = reservedLengthText;
+
+            var client = Client as SiemensS7Client;
+            if (client == null || !client.IsConnected)
+            {
+                NativeStringResultText = "请先连接 S7。";
+                return;
+            }
+
+            try
+            {
+                var stringAddress = ParseHelper.RequireText(address, "S7 STRING 地址");
+                var reservedLength = ParseHelper.ParseIntValue(reservedLengthText, "S7 STRING 最大长度");
+                var value = await client.ReadDbStringAsync(
+                    stringAddress, reservedLength, CancellationToken.None);
+
+                NativeStringResultText = string.Format(
+                    "读取成功：{0} = {1}",
+                    stringAddress,
+                    string.IsNullOrEmpty(value) ? "（空字符串）" : value);
+                Ctx.SetHeaderStatus("S7 STRING 读取完成", System.Windows.Media.Brushes.LightGreen);
+                LogInfo("S7 STRING 读取完成：" + stringAddress);
+            }
+            catch (Exception ex)
+            {
+                NativeStringResultText = ex.Message;
+                HandleError("S7 STRING 读取失败。", ex, true);
             }
         }
 
@@ -90,6 +150,8 @@ namespace IndustrialCommDemo.ViewModels
             Ctx.UiState.S7.Length = Length;
             Ctx.UiState.S7.WriteValue = WriteValue;
             Ctx.UiState.S7.CpuType = SelectedCpuType.ToString();
+            Ctx.UiState.S7.NativeStringAddress = NativeStringAddress;
+            Ctx.UiState.S7.NativeStringLength = NativeStringLength;
         }
 
         public override void RestoreState()
@@ -104,6 +166,8 @@ namespace IndustrialCommDemo.ViewModels
             if (Enum.TryParse(s.DataType, out DataType selectedDataType)) SelectedDataType = selectedDataType;
             if (!string.IsNullOrWhiteSpace(s.Length)) Length = s.Length;
             if (!string.IsNullOrWhiteSpace(s.WriteValue)) WriteValue = s.WriteValue;
+            if (!string.IsNullOrWhiteSpace(s.NativeStringAddress)) NativeStringAddress = s.NativeStringAddress;
+            if (!string.IsNullOrWhiteSpace(s.NativeStringLength)) NativeStringLength = s.NativeStringLength;
             if (Enum.TryParse(s.CpuType, true, out CpuType selectedCpuType) &&
                 Enum.IsDefined(typeof(CpuType), selectedCpuType))
             {
