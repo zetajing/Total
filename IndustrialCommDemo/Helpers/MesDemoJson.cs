@@ -90,7 +90,7 @@ namespace IndustrialCommDemo.Helpers
             return new JObject
             {
                 ["sample"] = "value",
-            }.ToString(Newtonsoft.Json.Formatting.Indented);
+            }.ToString(Newtonsoft.Json.Formatting.Indented, Array.Empty<JsonConverter>());
         }
 
         public static string CreateDefaultReceiverConfiguration()
@@ -105,7 +105,7 @@ namespace IndustrialCommDemo.Helpers
                 ["requiredAuthorizationHeaderValue"] = string.Empty,
                 ["responseStatusCode"] = 200,
                 ["responseJson"] = new JObject { ["success"] = true },
-            }.ToString(Newtonsoft.Json.Formatting.Indented);
+            }.ToString(Newtonsoft.Json.Formatting.Indented, Array.Empty<JsonConverter>());
         }
 
         public static MesDemoReceiverConfiguration ParseReceiverConfiguration(string json)
@@ -152,14 +152,14 @@ namespace IndustrialCommDemo.Helpers
                     RequiredAuthorizationHeaderValue = ((string)root["requiredAuthorizationHeaderValue"] ?? string.Empty).Trim(),
                 },
                 ResponseStatusCode = responseStatusCode.Value,
-                ResponseJson = responseJson.ToString(Newtonsoft.Json.Formatting.None),
+                ResponseJson = responseJson.ToString(Newtonsoft.Json.Formatting.None, Array.Empty<JsonConverter>()),
             };
         }
 
         public static string FormatReceiverConfiguration(string json)
         {
             ParseReceiverConfiguration(json);
-            return JObject.Parse(json).ToString(Newtonsoft.Json.Formatting.Indented);
+            return JObject.Parse(json).ToString(Newtonsoft.Json.Formatting.Indented, Array.Empty<JsonConverter>());
         }
 
         private static void ValidateObject(string json, string label)
