@@ -156,7 +156,7 @@ namespace IndustrialCommSdk.Runtime.Configuration
             if (config == null) throw new ArgumentNullException(nameof(config));
             var devices = new JArray();
             foreach (var device in config.Devices ?? new List<IndustrialDeviceConfig>()) devices.Add(SerializeDevice(device));
-            return new JObject { ["devices"] = devices }.ToString(Formatting.Indented);
+            return new JObject { ["devices"] = devices }.ToString(Formatting.Indented, Array.Empty<JsonConverter>());
         }
 
         public void Save(IndustrialSdkConfig config, string filePath)
@@ -171,7 +171,7 @@ namespace IndustrialCommSdk.Runtime.Configuration
         public string SerializeSettings(IProtocolSettings settings)
         {
             if (settings == null) throw new ArgumentNullException(nameof(settings));
-            return JObject.FromObject(settings, _serializer).ToString(Formatting.Indented);
+            return JObject.FromObject(settings, _serializer).ToString(Formatting.Indented, Array.Empty<JsonConverter>());
         }
 
         public IProtocolSettings ParseSettings(string protocol, string json)
