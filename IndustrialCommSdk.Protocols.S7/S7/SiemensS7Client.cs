@@ -274,6 +274,35 @@ namespace IndustrialCommSdk.Protocols.S7
             }, token), cancellationToken);
         }
 
+        /// <summary>
+        /// Reads a native Siemens S7 STRING[n] value from a data block.
+        /// The PLC stores two header bytes before the characters: reserved length and current length.
+        /// </summary>
+        /// <param name="dbNumber">The data block number.</param>
+        /// <param name="startByteAddress">The byte offset of the STRING[n] header.</param>
+        /// <param name="reservedLength">The STRING[n] maximum length, excluding the two header bytes.</param>
+        /// <param name="cancellationToken">Cancels the read operation.</param>
+        /// <returns>The characters currently stored in the PLC string.</returns>
+        public Task<string> ReadDbStringAsync(
+            int dbNumber,
+            int startByteAddress,
+            int reservedLength,
+            CancellationToken cancellationToken = default(CancellationToken))
+        {
+            ValidateDbBlockArguments(dbNumber, startByteAddress);
+            S7StringCodec.ValidateReservedLength(reservedLength);
+            return ExecuteExclusiveAsync(token => ExecuteWithReconnectAsync(async inner =>
+            {
+                var bytes = await _plc.ReadBytesAsync(
+                    PlcArea.DataBlock,
+                    dbNumber,
+                    startByteAddress,
+                    S7StringCodec.GetByteLength(reservedLength),
+                    inner).ConfigureAwait(false);
+                return S7StringCodec.Decode(bytes, reservedLength);
+            }, token), cancellationToken);
+        }
+
         public Task<T> ReadDbClassAsync<T>(Func<T> factory, int dbNumber, int startByteAddress = 0,
             CancellationToken cancellationToken = default(CancellationToken)) where T : class
         {
