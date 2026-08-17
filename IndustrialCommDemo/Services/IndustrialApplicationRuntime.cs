@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using IndustrialCommDemo.Helpers;
 using IndustrialCommSdk;
 using IndustrialCommSdk.Abstractions;
 using IndustrialCommSdk.Runtime.Configuration;
@@ -157,7 +158,9 @@ namespace IndustrialCommDemo.Services
                     DeviceName = e.DeviceName,
                     TagName = tag.Name,
                     Address = tag.Address,
-                    Value = value.Value == null ? string.Empty : value.Value.ToString(),
+                    Value = value.Value == null
+                        ? "<读取失败>"
+                        : FormatHelper.FormatDisplayValue(value.Value),
                     Quality = value.Quality.ToString(),
                     Timestamp = e.Timestamp.LocalDateTime.ToString("yyyy-MM-dd HH:mm:ss.fff"),
                     Error = value.ErrorMessage ?? string.Empty,

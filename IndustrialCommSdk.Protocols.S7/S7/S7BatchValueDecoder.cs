@@ -16,11 +16,18 @@ namespace IndustrialCommSdk.Protocols.S7
         {
             if (address == null) throw new ArgumentNullException(nameof(address));
             if (request == null) throw new ArgumentNullException(nameof(request));
+            ValidateAddress(request, address);
 
-            if (address.IsBitAddress)
+            // DBX/MX/IX/QX addresses can also be used as byte-position inputs
+            // when the request explicitly supplies a non-Boolean value type
+            // (for example DB1.DBX8.0 + Float). Only Boolean requests are
+            // bit-width reads; every other type must reserve its full byte
+            // width so that the shared payload contains enough data to decode.
+            if (request.DataType == DataType.Bool)
             {
                 var bitCount = Math.Max(1, (int)request.Length);
-                return address.ByteOffset + (address.BitOffset + bitCount - 1) / 8;
+                var bitOffset = Math.Max(0, address.BitOffset);
+                return address.ByteOffset + (bitOffset + bitCount - 1) / 8;
             }
 
             return address.ByteOffset + Math.Max(1, GetByteLength(request)) - 1;
@@ -31,6 +38,7 @@ namespace IndustrialCommSdk.Protocols.S7
             if (request == null) throw new ArgumentNullException(nameof(request));
             if (address == null) throw new ArgumentNullException(nameof(address));
             if (payload == null) throw new ArgumentNullException(nameof(payload));
+            ValidateAddress(request, address);
 
             object value;
             if (request.DataType == DataType.Bool)
@@ -51,6 +59,18 @@ namespace IndustrialCommSdk.Protocols.S7
                 QualityStatus.Good,
                 DateTimeOffset.UtcNow,
                 null);
+        }
+
+        internal static void ValidateAddress(ReadRequest request, S7Address address)
+        {
+            if (request == null) throw new ArgumentNullException(nameof(request));
+            if (address == null) throw new ArgumentNullException(nameof(address));
+            if (request.DataType != DataType.Bool && address.IsBitAddress && address.BitOffset != 0)
+            {
+                throw new IndustrialAddressParseException(
+                    "S7 non-Boolean reads using X address syntax require bit index 0: " +
+                    request.Address);
+            }
         }
 
         private static object DecodeBits(ReadRequest request, S7Address address, byte[] payload, int batchStartOffset)

@@ -161,6 +161,7 @@ namespace IndustrialCommSdk.Protocols.S7
         protected override Task<DataValue> ReadCoreAsync(ReadRequest request, CancellationToken cancellationToken)
         {
             var address = _parser.ParseTyped(request.Address);
+            S7BatchValueDecoder.ValidateAddress(request, address);
             return ExecuteWithReconnectAsync(async token =>
             {
                 var value = await ReadValueAsync(address, request, token).ConfigureAwait(false);
@@ -516,19 +517,9 @@ namespace IndustrialCommSdk.Protocols.S7
                 : address.Area.ToString();
         }
 
-        private static int EstimateEndOffset(S7Address address, ReadRequest request)
-        {
-            if (address.IsBitAddress)
-            {
-                var bitCount = Math.Max(1, (int)request.Length);
-                return address.ByteOffset + (address.BitOffset + bitCount - 1) / 8;
-            }
-            return address.ByteOffset + Math.Max(1, EstimateByteLength(request.DataType, request.Length)) - 1;
-        }
-
         private static int EstimateEndOffset(S7Address address, WriteRequest request)
         {
-            if (address.IsBitAddress) return address.ByteOffset;
+            if (request.DataType == Abstractions.DataType.Bool) return address.ByteOffset;
             return address.ByteOffset + Math.Max(1, EstimateByteLength(request.DataType, request.Length)) - 1;
         }
 

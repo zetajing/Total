@@ -5,6 +5,7 @@ using System.Net;
 using System.Threading;
 using System.Threading.Tasks;
 using IndustrialCommSdk.Abstractions;
+using IndustrialCommSdk.Exceptions;
 using IndustrialCommSdk.Protocols.Mc;
 using IndustrialCommSdk.Protocols.S7;
 using IndustrialCommSdk.Transport;
@@ -50,6 +51,92 @@ namespace IndustrialCommSdk.Tests
                 address,
                 new byte[] { 0x41, 0x20, 0x00, 0x00, 0x00, 0x2A },
                 0);
+
+            Assert.AreEqual(QualityStatus.Good, value.Quality);
+            Assert.AreEqual(10f, (float)value.Value, 0.0001f);
+        }
+
+        [TestCase(1, 11)]
+        [TestCase(2, 15)]
+        public void SiemensS7PlanRead_UsesFloatWidthForDbxByteAddress(int length, int expectedEndOffset)
+        {
+            using (var client = new SiemensS7Client(new SiemensS7ClientOptions
+            {
+                DeviceId = "s7-test",
+                Host = "127.0.0.1"
+            }))
+            {
+                var request = new ReadRequest(
+                    "s7-test", "DB1.DBX8.0", DataType.Float, (ushort)length);
+
+                var plan = client.PlanRead(
+                    new[] { request },
+                    new BatchReadOptions(maxItemsPerBatch: 8, maxAddressSpan: 32),
+                    client.Capabilities);
+
+                Assert.AreEqual(1, plan.Groups.Count);
+                Assert.AreEqual(8, plan.Groups[0].StartOffset);
+                Assert.AreEqual(expectedEndOffset, plan.Groups[0].EndOffset,
+                    "A Float request must reserve four bytes per value even when its byte position uses DBX8.0 syntax.");
+            }
+        }
+
+        [Test]
+        public void SiemensS7PlanRead_RejectsNonByteAlignedDbxFloatAddress()
+        {
+            using (var client = new SiemensS7Client(new SiemensS7ClientOptions
+            {
+                DeviceId = "s7-test",
+                Host = "127.0.0.1"
+            }))
+            {
+                var request = new ReadRequest(
+                    "s7-test", "DB1.DBX8.1", DataType.Float);
+
+                var exception = Assert.Throws<IndustrialAddressParseException>(() =>
+                    client.PlanRead(
+                        new[] { request },
+                        BatchReadOptions.Default,
+                        client.Capabilities));
+
+                StringAssert.Contains("bit index 0", exception.Message);
+            }
+        }
+
+        [Test]
+        public void SiemensS7PlanWrite_UsesFloatWidthForDbxByteAddress()
+        {
+            using (var client = new SiemensS7Client(new SiemensS7ClientOptions
+            {
+                DeviceId = "s7-test",
+                Host = "127.0.0.1"
+            }))
+            {
+                var request = new WriteRequest(
+                    "s7-test", "DB1.DBX8.0", DataType.Float, 10f);
+
+                var plan = client.PlanWrite(
+                    new[] { request },
+                    BatchWriteOptions.Default,
+                    client.Capabilities);
+
+                Assert.AreEqual(1, plan.Groups.Count);
+                Assert.AreEqual(8, plan.Groups[0].StartOffset);
+                Assert.AreEqual(11, plan.Groups[0].EndOffset);
+            }
+        }
+
+        [Test]
+        public void SiemensS7BatchDecoder_DecodesFloatFromDbxByteAddress()
+        {
+            var request = new ReadRequest("s7-test", "DB1.DBX8.0", DataType.Float);
+            var address = new S7Address(S7Area.Db, 1, 8, 0, "DB1.DBX8.0");
+
+            var value = S7BatchValueDecoder.Decode(
+                request,
+                address,
+                new byte[] { 0x41, 0x20, 0x00, 0x00 },
+                8);
 
             Assert.AreEqual(QualityStatus.Good, value.Quality);
             Assert.AreEqual(10f, (float)value.Value, 0.0001f);

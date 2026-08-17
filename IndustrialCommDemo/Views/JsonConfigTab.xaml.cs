@@ -10,6 +10,7 @@ using IndustrialCommSdk;
 using IndustrialCommSdk.Abstractions;
 using IndustrialCommSdk.Runtime.Configuration;
 using IndustrialCommSdk.Runtime;
+using IndustrialCommDemo.Helpers;
 using IndustrialCommDemo.Services;
 
 namespace IndustrialCommDemo.Views
@@ -259,21 +260,32 @@ namespace IndustrialCommDemo.Views
                     try
                     {
                         var values = await device.ReadManyAsync();
+                        var successCount = 0;
                         for (var index = 0; index < device.Tags.Tags.Count; index++)
                         {
                             var tag = device.Tags.Tags[index];
                             var value = values.Values[index];
+                            if (value.Quality == QualityStatus.Good) successCount++;
                             _rows.Add(new JsonReadResultRow
                             {
                                 Name = tag.Name, Address = tag.Address, Type = tag.DataType.ToString(),
-                                Value = value.Value == null ? string.Empty : value.Value.ToString(),
+                                Value = value.Value == null
+                                    ? "<读取失败>"
+                                    : FormatHelper.FormatDisplayValue(value.Value),
                                 Quality = value.Quality.ToString(), Error = value.ErrorMessage,
                             });
                         }
+
+                        var failureCount = _rows.Count - successCount;
+                        SetStatus(
+                            string.Format("批量读取完成，共 {0} 个点位，成功 {1}，失败 {2}。",
+                                _rows.Count, successCount, failureCount),
+                            failureCount == 0
+                                ? Brushes.ForestGreen
+                                : successCount == 0 ? Brushes.IndianRed : Brushes.DarkGoldenrod);
                     }
                     finally { await device.DisconnectAsync(); }
                 }
-                SetStatus("批量读取完成，共 " + _rows.Count + " 个点位。", Brushes.ForestGreen);
             });
         }
 
