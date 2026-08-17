@@ -17,9 +17,25 @@
 | 地址 | 默认值 |
 | --- | --- |
 | `DB1.DBX0.0` | `TRUE` |
+| `DB1.DBW2` | `1500`（额外 INT） |
+| `DB1.DBD4` | `123456`（额外 DINT） |
 | `DB1.DBD8` | `10.0`（S7 REAL，大端序） |
+| `DB1.DBD12` | `20.0`（额外 REAL） |
+| `DB1.DBD16` | `30.0`（额外 REAL） |
+| `DB1.DBX0.1` | `FALSE`（额外 Bool） |
+| `DB1.DBX0.2` | `TRUE`（额外 Bool） |
 
-启动区域可以修改 REAL 和 Bool 的初始值，然后重新启动服务。S7.NetPlus 客户端使用固定的 S7 默认端口 102，因此页面将端口锁定为 102；如果端口被其他程序占用，请先停止占用者。
+启动区域可以修改快捷 REAL、Bool 和“额外点位”列表，然后重新启动服务。额外点位每行一个，支持以下格式：
+
+```text
+REAL DB1.DBD12=20.0
+BOOL DB1.DBX0.1=false
+INT DB1.DBW2=1500
+DINT DB1.DBD4=123456
+DB1.DBD16=30.0
+```
+
+类型可以写在地址前面或后面，也可以根据 `DBW`/`DBD`/`DBX` 地址省略；当前额外点位支持 `BOOL`、`INT`、`DINT` 和 `REAL`，仅注册 DB1。S7.NetPlus 客户端使用固定的 S7 默认端口 102，因此页面将端口锁定为 102；如果端口被其他程序占用，请先停止占用者。
 
 ## 单独启动
 
@@ -27,7 +43,9 @@
 
 ```powershell
 IndustrialCommDemo.Snap7Server\bin\Release\net472\IndustrialCommDemo.Snap7Server.exe `
-  --address 0.0.0.0 --port 102 --float 12.5 --bool false
+  --address 0.0.0.0 --port 102 --float 12.5 --bool false `
+  --point "REAL DB1.DBD12=20.0" `
+  --point "BOOL DB1.DBX0.1=true"
 ```
 
 进程参数：
@@ -37,5 +55,6 @@ IndustrialCommDemo.Snap7Server\bin\Release\net472\IndustrialCommDemo.Snap7Server
 - `--db-size`：DB1 字节数，默认 `256`。
 - `--float`：写入 `DB1.DBD8` 的 REAL 初值，默认 `10.0`。
 - `--bool`：写入 `DB1.DBX0.0` 的 Bool 初值，默认 `true`。
+- `--point`：追加一个 `BOOL`、`INT`、`DINT` 或 `REAL` 点位，参数可重复；例如 `--point "REAL DB1.DBD12=20.0"`。
 
 原生 `snap7.dll` 来自 `Snap7Server.Net` NuGet 包，并随 x86 服务端输出复制。主 WPF 进程不直接加载这个 x86 DLL，避免 AnyCPU/x64 进程出现“试图加载格式不正确的程序”。

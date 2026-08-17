@@ -210,6 +210,7 @@ namespace IndustrialCommDemo.Views
                     throw new FormatException("Snap7Server REAL 值必须是数字。");
                 }
 
+                var pointSpecs = ParseSnap7ServerPointSpecs(Snap7ServerPointsTextBox.Text);
                 var arguments = string.Format(
                     CultureInfo.InvariantCulture,
                     "--address {0} --port {1} --float {2} --bool {3}",
@@ -217,6 +218,10 @@ namespace IndustrialCommDemo.Views
                     port,
                     floatValue.ToString("R", CultureInfo.InvariantCulture),
                     Snap7ServerBoolCheckBox.IsChecked == true ? "true" : "false");
+                arguments = string.Join(
+                    " ",
+                    new[] { arguments }.Concat(
+                        pointSpecs.Select(point => "--point " + QuoteProcessArgument(point))));
                 var process = new Process
                 {
                     StartInfo = new ProcessStartInfo
@@ -247,7 +252,12 @@ namespace IndustrialCommDemo.Views
 
                 UpdateSnap7ServerStatus();
                 SetHeaderStatus("Snap7Server 已启动", Brushes.LightGreen);
-                LogInfo(string.Format(CultureInfo.InvariantCulture, "Snap7Server 已在 {0}:{1} 启动。", address, port));
+                LogInfo(string.Format(
+                    CultureInfo.InvariantCulture,
+                    "Snap7Server 已在 {0}:{1} 启动，初始点位 {2} 个。",
+                    address,
+                    port,
+                    pointSpecs.Length + 2));
             }
             catch (Exception ex)
             {
@@ -319,6 +329,24 @@ namespace IndustrialCommDemo.Views
         private static string QuoteProcessArgument(string value)
         {
             return "\"" + (value ?? string.Empty).Replace("\"", "\\\"") + "\"";
+        }
+
+        private static string[] ParseSnap7ServerPointSpecs(string text)
+        {
+            var lines = (text ?? string.Empty)
+                .Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
+                .Select(line => line.Trim())
+                .Where(line => line.Length > 0 && !line.StartsWith("#", StringComparison.Ordinal))
+                .ToArray();
+
+            foreach (var line in lines)
+            {
+                if (line.IndexOf('=') <= 0 || line.LastIndexOf('=') == line.Length - 1)
+                    throw new FormatException(
+                        "额外点位格式错误：每行应为 REAL DB1.DBD12=20.0、INT DB1.DBW2=1500 或 BOOL DB1.DBX0.1=false。错误行：" + line);
+            }
+
+            return lines;
         }
 
         private void SetHeaderStatus(string text, Brush brush)
