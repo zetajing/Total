@@ -86,6 +86,7 @@ namespace IndustrialCommDemo
                 SaveAllUiState();
                 await ModbusControlTag.ResetClientAsync();
                 await S7ControlTag.ResetClientAsync();
+                await S7ControlTag.ResetSnap7ServerAsync();
                 await McControlTag.ResetClientAsync();
                 await OpcUaControlTag.ResetClientAsync();
                 await SocketControlTag.ResetAllAsync();
