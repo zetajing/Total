@@ -219,7 +219,11 @@
             <ScrollViewer VerticalScrollBarVisibility="Auto">
                 <Grid Margin="8">
                     <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
-                    <GroupBox Grid.Column="0" Margin="0,0,6,8" Header="WebSocket 调试客户端">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+                    <GroupBox Grid.Row="0" Grid.Column="0" Margin="0,0,6,8" Header="WebSocket 调试客户端">
                         <Grid Margin="10">
                             <Grid.ColumnDefinitions><ColumnDefinition Width="105" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
                             <Grid.RowDefinitions>
@@ -242,7 +246,7 @@
                             <TextBlock x:Name="WebSocketClientStatusTextBlock" Grid.Row="5" Grid.ColumnSpan="2" Margin="0,8,0,0" Foreground="IndianRed" Text="未连接" />
                         </Grid>
                     </GroupBox>
-                    <GroupBox Grid.Column="1" Margin="6,0,0,8" Header="服务端会话">
+                    <GroupBox Grid.Row="0" Grid.Column="1" Margin="6,0,0,8" Header="服务端会话">
                         <Grid Margin="10">
                             <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /></Grid.RowDefinitions>
                             <Button Width="120" HorizontalAlignment="Left" Margin="0,0,0,8" Click="RefreshWebSocketSessionsButton_Click" Content="刷新会话" />
