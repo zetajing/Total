@@ -40,7 +40,7 @@ namespace IndustrialCommDemo.Views
             catch (Exception ex)
             {
                 DataDirectoryHintTextBlock.Text = ex.Message;
-                DataDirectoryHintTextBlock.Foreground = Brushes.OrangeRed;
+                DataDirectoryHintTextBlock.Foreground = ThemeBrush.Danger;
                 _ctx.HandleError("数据目录设置失败。", ex, true);
             }
         }

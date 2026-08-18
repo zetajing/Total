@@ -65,14 +65,14 @@ namespace IndustrialCommDemo.Views
         {
             var isRunning = _server != null && _server.IsRunning;
             ServerStatusTextBlock.Text = isRunning ? "运行中" : "已停止";
-            ServerStatusTextBlock.Foreground = isRunning ? Brushes.ForestGreen : Brushes.IndianRed;
+            ServerStatusTextBlock.Foreground = isRunning ? ThemeBrush.Success : ThemeBrush.Danger;
         }
 
         private void UpdateClientStatus()
         {
             var isConnected = _client != null && _client.IsConnected;
             ClientStatusTextBlock.Text = isConnected ? "已连接" : "未连接";
-            ClientStatusTextBlock.Foreground = isConnected ? Brushes.ForestGreen : Brushes.IndianRed;
+            ClientStatusTextBlock.Foreground = isConnected ? ThemeBrush.Success : ThemeBrush.Danger;
             if (!isConnected) ClientLastReceivedTextBlock.Text = "（无）";
         }
 
@@ -89,7 +89,7 @@ namespace IndustrialCommDemo.Views
                 var port = ParseHelper.ParseIntValue(SocketServerPortTextBox.Text, "Socket 服务端端口");
                 await _server.StartAsync(listenAddress, port, CancellationToken.None);
                 UpdateServerStatus();
-                _ctx.SetHeaderStatus("Socket 服务端已启动", Brushes.LightGreen);
+                _ctx.SetHeaderStatus("Socket 服务端已启动", ThemeBrush.Success);
                 _ctx.DemoLogger.Info(string.Format("Socket 服务端已在 {0}:{1} 启动。", listenAddress, port));
             }
             catch (Exception ex)
@@ -101,7 +101,7 @@ namespace IndustrialCommDemo.Views
 
         private async void StopServerButton_Click(object sender, RoutedEventArgs e)
         {
-            try { await ResetServerAsync(); _ctx.SetHeaderStatus("Socket 服务端已停止", Brushes.Khaki); _ctx.DemoLogger.Info("Socket 服务端已停止。"); }
+            try { await ResetServerAsync(); _ctx.SetHeaderStatus("Socket 服务端已停止", ThemeBrush.Warning); _ctx.DemoLogger.Info("Socket 服务端已停止。"); }
             catch (Exception ex) { _ctx.HandleError("Socket 服务端停止失败。", ex, false); }
         }
 
@@ -118,7 +118,7 @@ namespace IndustrialCommDemo.Views
                 var port = ParseHelper.ParseIntValue(SocketClientPortTextBox.Text, "Socket 服务端端口");
                 await _client.ConnectAsync(host, port, CancellationToken.None);
                 UpdateClientStatus();
-                _ctx.SetHeaderStatus("Socket 客户端已连接", Brushes.LightGreen);
+                _ctx.SetHeaderStatus("Socket 客户端已连接", ThemeBrush.Success);
                 _ctx.DemoLogger.Info(string.Format("Socket 客户端已连接到 {0}:{1}。", host, port));
             }
             catch (Exception ex)
@@ -130,7 +130,7 @@ namespace IndustrialCommDemo.Views
 
         private async void DisconnectClientButton_Click(object sender, RoutedEventArgs e)
         {
-            try { await ResetClientAsync(); _ctx.SetHeaderStatus("Socket 客户端已断开", Brushes.Khaki); _ctx.DemoLogger.Info("Socket 客户端已断开。"); }
+            try { await ResetClientAsync(); _ctx.SetHeaderStatus("Socket 客户端已断开", ThemeBrush.Warning); _ctx.DemoLogger.Info("Socket 客户端已断开。"); }
             catch (Exception ex) { _ctx.HandleError("Socket 客户端断开失败。", ex, false); }
         }
 
@@ -140,7 +140,7 @@ namespace IndustrialCommDemo.Views
             try
             {
                 await _server.BroadcastAsync(SocketServerMessageTextBox.Text ?? string.Empty, CancellationToken.None);
-                _ctx.SetHeaderStatus("Socket 服务端广播已发送", Brushes.LightGreen);
+                _ctx.SetHeaderStatus("Socket 服务端广播已发送", ThemeBrush.Success);
                 _ctx.DemoLogger.Info("Socket 服务端广播已发送。");
             }
             catch (Exception ex) { _ctx.HandleError("Socket 服务端发送失败。", ex, true); }
@@ -152,7 +152,7 @@ namespace IndustrialCommDemo.Views
             try
             {
                 await _client.SendAsync(SocketClientMessageTextBox.Text ?? string.Empty, CancellationToken.None);
-                _ctx.SetHeaderStatus("Socket 客户端消息已发送", Brushes.LightGreen);
+                _ctx.SetHeaderStatus("Socket 客户端消息已发送", ThemeBrush.Success);
                 _ctx.DemoLogger.Info("Socket 客户端消息已发送。");
             }
             catch (Exception ex) { _ctx.HandleError("Socket 客户端发送失败。", ex, true); }
@@ -160,12 +160,12 @@ namespace IndustrialCommDemo.Views
 
         private void Server_ClientConnected(object sender, SocketSessionEventArgs e)
         {
-            _ctx.RunOnUi(() => { UpdateServerStatus(); ServerSessionsTextBlock.Text = (e.SessionCount).ToString(CultureInfo.InvariantCulture); _ctx.SetHeaderStatus("Socket 服务端接受了一个客户端", Brushes.LightGreen); _ctx.DemoLogger.Info(string.Format("Socket 服务端客户端已连接：{0}。", e.RemoteEndPoint)); });
+            _ctx.RunOnUi(() => { UpdateServerStatus(); ServerSessionsTextBlock.Text = (e.SessionCount).ToString(CultureInfo.InvariantCulture); _ctx.SetHeaderStatus("Socket 服务端接受了一个客户端", ThemeBrush.Success); _ctx.DemoLogger.Info(string.Format("Socket 服务端客户端已连接：{0}。", e.RemoteEndPoint)); });
         }
 
         private void Server_ClientDisconnected(object sender, SocketSessionEventArgs e)
         {
-            _ctx.RunOnUi(() => { UpdateServerStatus(); ServerSessionsTextBlock.Text = (e.SessionCount).ToString(CultureInfo.InvariantCulture); _ctx.SetHeaderStatus("客户端已从服务端断开", Brushes.Khaki); _ctx.DemoLogger.Info(string.Format("Socket 服务端客户端已断开：{0}。", e.RemoteEndPoint)); });
+            _ctx.RunOnUi(() => { UpdateServerStatus(); ServerSessionsTextBlock.Text = (e.SessionCount).ToString(CultureInfo.InvariantCulture); _ctx.SetHeaderStatus("客户端已从服务端断开", ThemeBrush.Warning); _ctx.DemoLogger.Info(string.Format("Socket 服务端客户端已断开：{0}。", e.RemoteEndPoint)); });
         }
 
         private async void Server_MessageReceived(object sender, SocketTextMessageEventArgs e)
@@ -174,7 +174,7 @@ namespace IndustrialCommDemo.Views
                 ? EchoCheckBox.IsChecked == true
                 : (bool)_ctx.Dispatcher.Invoke(() => EchoCheckBox.IsChecked == true);
 
-            _ctx.RunOnUi(() => { _ctx.SetHeaderStatus("Socket 服务端收到数据", Brushes.LightGreen); _ctx.DemoLogger.Info(string.Format("Socket 服务端收到来自 {0} 的数据：{1}", e.RemoteEndPoint, e.Message)); });
+            _ctx.RunOnUi(() => { _ctx.SetHeaderStatus("Socket 服务端收到数据", ThemeBrush.Success); _ctx.DemoLogger.Info(string.Format("Socket 服务端收到来自 {0} 的数据：{1}", e.RemoteEndPoint, e.Message)); });
 
             if (shouldEcho && _server != null)
             {
@@ -185,11 +185,11 @@ namespace IndustrialCommDemo.Views
 
         private void Client_Connected(object sender, EventArgs e) { _ctx.RunOnUi(UpdateClientStatus); }
 
-        private void Client_Disconnected(object sender, EventArgs e) { _ctx.RunOnUi(() => { UpdateClientStatus(); _ctx.SetHeaderStatus("Socket 客户端已断开", Brushes.Khaki); }); }
+        private void Client_Disconnected(object sender, EventArgs e) { _ctx.RunOnUi(() => { UpdateClientStatus(); _ctx.SetHeaderStatus("Socket 客户端已断开", ThemeBrush.Warning); }); }
 
         private void Client_MessageReceived(object sender, SocketTextMessageEventArgs e)
         {
-            _ctx.RunOnUi(() => { ClientLastReceivedTextBlock.Text = e.Message; _ctx.SetHeaderStatus("Socket 客户端收到数据", Brushes.LightGreen); _ctx.DemoLogger.Info(string.Format("Socket 客户端收到：{0}", e.Message)); });
+            _ctx.RunOnUi(() => { ClientLastReceivedTextBlock.Text = e.Message; _ctx.SetHeaderStatus("Socket 客户端收到数据", ThemeBrush.Success); _ctx.DemoLogger.Info(string.Format("Socket 客户端收到：{0}", e.Message)); });
         }
 
         // ── State ──

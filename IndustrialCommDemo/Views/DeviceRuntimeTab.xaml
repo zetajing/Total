@@ -4,24 +4,24 @@
     <Grid Margin="8">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
-            <RowDefinition Height="170" />
+            <RowDefinition Height="Auto" MinHeight="150" MaxHeight="260" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <Border Padding="14" CornerRadius="10" Background="#F1F5F9">
+        <Border Padding="14" CornerRadius="10" Background="{StaticResource PanelBrush}">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
                 <StackPanel>
-                    <TextBlock FontSize="18" FontWeight="SemiBold" Foreground="#17324D" Text="设备运行中心" />
-                    <TextBlock x:Name="RuntimeStatusTextBlock" Margin="0,5,0,0" Foreground="#475569" Text="加载 Config/devices.json 后可统一启动设备。" />
+                    <TextBlock FontSize="18" FontWeight="SemiBold" Text="设备运行中心" />
+                    <TextBlock x:Name="RuntimeStatusTextBlock" Margin="0,5,0,0" Foreground="{StaticResource TextSecondaryBrush}" Text="加载 Config/devices.json 后可统一启动设备。" />
                 </StackPanel>
                 <StackPanel Grid.Column="1" Orientation="Horizontal">
                     <Button x:Name="ReloadButton" Margin="0,0,8,0" Click="ReloadButton_Click" Content="重新加载配置" />
-                    <Button x:Name="StartButton" Margin="0,0,8,0" Background="#DCFCE7" Click="StartButton_Click" Content="启动全部设备" />
-                    <Button x:Name="StopButton" Background="#FEE2E2" Click="StopButton_Click" Content="停止" IsEnabled="False" />
+                    <Button x:Name="StartButton" Margin="0,0,8,0" Style="{StaticResource SuccessButtonStyle}" Click="StartButton_Click" Content="启动全部设备" />
+                    <Button x:Name="StopButton" Style="{StaticResource DangerButtonStyle}" Click="StopButton_Click" Content="停止" IsEnabled="False" />
                 </StackPanel>
             </Grid>
         </Border>

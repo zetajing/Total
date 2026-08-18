@@ -47,7 +47,7 @@ namespace IndustrialCommDemo.Views
             {
                 MesDemoJson.ParseConfiguration(MesConfigJsonTextBox.Text);
                 MesConfigJsonTextBox.Text = MesDemoJson.FormatObject(MesConfigJsonTextBox.Text);
-                _ctx.SetHeaderStatus("MES HTTP 配置 JSON 校验通过", Brushes.LightGreen);
+                _ctx.SetHeaderStatus("MES HTTP 配置 JSON 校验通过", ThemeBrush.Success);
             }
             catch (Exception ex) { _ctx.HandleError("MES HTTP 配置 JSON 无效。", ex, true); }
         }
@@ -62,7 +62,7 @@ namespace IndustrialCommDemo.Views
                 _httpClient = new MesHttpClient(options, _ctx.SdkLogger);
                 _endpoint = endpoint;
                 UpdateClientState(true, "HTTP JSON 配置已应用");
-                _ctx.SetHeaderStatus("MES HTTP JSON 配置已应用（未发送请求）", Brushes.LightGreen);
+                _ctx.SetHeaderStatus("MES HTTP JSON 配置已应用（未发送请求）", ThemeBrush.Success);
             }
             catch (Exception ex)
             {
@@ -77,7 +77,7 @@ namespace IndustrialCommDemo.Views
             await ResetClientAsync();
             MesConfigJsonTextBox.Text = MesDemoJson.CreateDefaultConfiguration();
             UpdateClientState(false, "已恢复默认，等待应用");
-            _ctx.SetHeaderStatus("MES HTTP 配置已恢复默认，尚未应用", Brushes.Khaki);
+            _ctx.SetHeaderStatus("MES HTTP 配置已恢复默认，尚未应用", ThemeBrush.Warning);
         }
 
         private void FormatPayloadButton_Click(object sender, RoutedEventArgs e)
@@ -85,7 +85,7 @@ namespace IndustrialCommDemo.Views
             try
             {
                 MesPayloadJsonTextBox.Text = MesDemoJson.FormatObject(MesPayloadJsonTextBox.Text);
-                _ctx.SetHeaderStatus("MES 上传报文 JSON 校验通过", Brushes.LightGreen);
+                _ctx.SetHeaderStatus("MES 上传报文 JSON 校验通过", ThemeBrush.Success);
             }
             catch (Exception ex) { _ctx.HandleError("MES 上传报文 JSON 无效。", ex, true); }
         }
@@ -103,7 +103,7 @@ namespace IndustrialCommDemo.Views
             {
                 MesReceiverConfigJsonTextBox.Text = MesDemoJson.FormatReceiverConfiguration(
                     MesReceiverConfigJsonTextBox.Text);
-                _ctx.SetHeaderStatus("MES 接收配置 JSON 校验通过", Brushes.LightGreen);
+                _ctx.SetHeaderStatus("MES 接收配置 JSON 校验通过", ThemeBrush.Success);
             }
             catch (Exception ex) { _ctx.HandleError("MES 接收配置 JSON 无效。", ex, true); }
         }
@@ -131,7 +131,7 @@ namespace IndustrialCommDemo.Views
                 _receiver = receiver;
                 receiver = null;
                 UpdateReceiverState(true, "正在监听 " + config.Options.ListenPrefix);
-                _ctx.SetHeaderStatus("MES HTTP JSON 接收器已启动", Brushes.LightGreen);
+                _ctx.SetHeaderStatus("MES HTTP JSON 接收器已启动", ThemeBrush.Success);
             }
             catch (Exception ex)
             {
@@ -150,7 +150,7 @@ namespace IndustrialCommDemo.Views
             {
                 await StopReceiverAsync();
                 UpdateReceiverState(false, "已停止");
-                _ctx.SetHeaderStatus("MES HTTP JSON 接收器已停止", Brushes.Khaki);
+                _ctx.SetHeaderStatus("MES HTTP JSON 接收器已停止", ThemeBrush.Warning);
             }
             catch (Exception ex) { _ctx.HandleError("MES HTTP JSON 接收器停止失败。", ex, true); }
         }
@@ -162,7 +162,7 @@ namespace IndustrialCommDemo.Views
             MesReceivedContentTypeTextBlock.Text = request.ContentType ?? "（未提供）";
             MesReceivedAtTextBlock.Text = DateTimeOffset.Now.ToString("yyyy-MM-dd HH:mm:ss.fff zzz", CultureInfo.InvariantCulture);
             MesReceivedBodyTextBox.Text = request.Body ?? string.Empty;
-            _ctx.SetHeaderStatus("收到 MES HTTP JSON: " + request.Endpoint, Brushes.LightGreen);
+            _ctx.SetHeaderStatus("收到 MES HTTP JSON: " + request.Endpoint, ThemeBrush.Success);
         }
 
         private async void SendJsonButton_Click(object sender, RoutedEventArgs e)
@@ -189,19 +189,19 @@ namespace IndustrialCommDemo.Views
                     response.StatusCode,
                     response.IsSuccessStatusCode ? "成功" : "失败");
                 MesHttpStatusTextBlock.Foreground = response.IsSuccessStatusCode
-                    ? Brushes.ForestGreen
-                    : Brushes.IndianRed;
+                    ? ThemeBrush.Success
+                    : ThemeBrush.Danger;
                 MesContentTypeTextBlock.Text = response.ContentType ?? "（未提供）";
                 MesReasonPhraseTextBlock.Text = response.ReasonPhrase ?? "（未提供）";
                 MesResponseBodyTextBox.Text = response.Body ?? string.Empty;
                 _ctx.SetHeaderStatus(
                     "MES HTTP JSON 已发送: " + response.StatusCode,
-                    response.IsSuccessStatusCode ? Brushes.LightGreen : Brushes.Khaki);
+                    response.IsSuccessStatusCode ? ThemeBrush.Success : ThemeBrush.Warning);
             }
             catch (Exception ex)
             {
                 MesHttpStatusTextBlock.Text = "请求失败";
-                MesHttpStatusTextBlock.Foreground = Brushes.IndianRed;
+                MesHttpStatusTextBlock.Foreground = ThemeBrush.Danger;
                 _ctx.HandleError("MES HTTP JSON 发送失败。", ex, true);
             }
             finally
@@ -259,14 +259,14 @@ namespace IndustrialCommDemo.Views
         private void UpdateClientState(bool ready, string text)
         {
             MesStatusTextBlock.Text = text;
-            MesStatusTextBlock.Foreground = ready ? Brushes.ForestGreen : Brushes.IndianRed;
+            MesStatusTextBlock.Foreground = ready ? ThemeBrush.Success : ThemeBrush.Danger;
             MesSendButton.IsEnabled = ready;
         }
 
         private void UpdateReceiverState(bool running, string text)
         {
             MesReceiverStatusTextBlock.Text = text;
-            MesReceiverStatusTextBlock.Foreground = running ? Brushes.ForestGreen : Brushes.IndianRed;
+            MesReceiverStatusTextBlock.Foreground = running ? ThemeBrush.Success : ThemeBrush.Danger;
             MesReceiverStartButton.IsEnabled = !running;
             MesReceiverStopButton.IsEnabled = running;
         }

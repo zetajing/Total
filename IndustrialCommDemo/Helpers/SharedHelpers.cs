@@ -232,9 +232,9 @@ namespace IndustrialCommDemo.Helpers
 
         public static Brush ResultBrush(string result)
         {
-            if (string.Equals(result, "OK", StringComparison.OrdinalIgnoreCase)) return System.Windows.Media.Brushes.ForestGreen;
-            if (string.Equals(result, "NG", StringComparison.OrdinalIgnoreCase)) return System.Windows.Media.Brushes.IndianRed;
-            return System.Windows.Media.Brushes.DarkGoldenrod;
+            if (string.Equals(result, "OK", StringComparison.OrdinalIgnoreCase)) return ThemeBrush.Success;
+            if (string.Equals(result, "NG", StringComparison.OrdinalIgnoreCase)) return ThemeBrush.Danger;
+            return ThemeBrush.Warning;
         }
     }
 

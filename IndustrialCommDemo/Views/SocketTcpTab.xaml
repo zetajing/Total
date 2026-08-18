@@ -23,18 +23,18 @@
                         <RowDefinition Height="Auto" /><RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" /><RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
-                    <TextBlock Grid.Row="0" Grid.Column="0" Margin="0,8" VerticalAlignment="Center" Text="监听 IP" />
+                    <TextBlock Grid.Row="0" Grid.Column="0" Style="{StaticResource FieldLabelStyle}" Text="监听 IP" />
                     <TextBox x:Name="SocketServerIpTextBox" Grid.Row="0" Grid.Column="1" Margin="0,6,0,6" Text="0.0.0.0" />
-                    <TextBlock Grid.Row="1" Grid.Column="0" Margin="0,8" VerticalAlignment="Center" Text="端口" />
+                    <TextBlock Grid.Row="1" Grid.Column="0" Style="{StaticResource FieldLabelStyle}" Text="端口" />
                     <TextBox x:Name="SocketServerPortTextBox" Grid.Row="1" Grid.Column="1" Margin="0,6,0,6" Text="9000" />
-                    <TextBlock Grid.Row="2" Grid.Column="0" Margin="0,8" VerticalAlignment="Center" Text="状态" />
-                    <TextBlock x:Name="ServerStatusTextBlock" Grid.Row="2" Grid.Column="1" Margin="0,8,0,0" Foreground="#0F766E" Text="已停止" />
-                    <TextBlock Grid.Row="3" Grid.Column="0" Margin="0,8" VerticalAlignment="Center" Text="会话数" />
+                    <TextBlock Grid.Row="2" Grid.Column="0" Style="{StaticResource FieldLabelStyle}" Text="状态" />
+                    <TextBlock x:Name="ServerStatusTextBlock" Grid.Row="2" Grid.Column="1" Margin="0,8,0,0" Foreground="{StaticResource SuccessBrush}" Text="已停止" />
+                    <TextBlock Grid.Row="3" Grid.Column="0" Style="{StaticResource FieldLabelStyle}" Text="会话数" />
                     <TextBlock x:Name="ServerSessionsTextBlock" Grid.Row="3" Grid.Column="1" Margin="0,8,0,0" Text="0" />
                     <CheckBox x:Name="EchoCheckBox" Grid.Row="4" Grid.ColumnSpan="2" Margin="0,10,0,0" IsChecked="True" Content="将接收到的文本回显给客户端" />
                     <UniformGrid Grid.Row="5" Grid.ColumnSpan="2" Margin="0,14,0,0" Columns="2">
-                        <Button Margin="0,0,8,0" Padding="10" Background="#1D4ED8" Foreground="White" BorderThickness="0" Click="StartServerButton_Click" Content="启动服务端" />
-                        <Button Margin="8,0,0,0" Padding="10" Background="#334155" Foreground="White" BorderThickness="0" Click="StopServerButton_Click" Content="停止服务端" />
+                        <Button Margin="0,0,8,0" Style="{StaticResource PrimaryButtonStyle}" Click="StartServerButton_Click" Content="启动服务端" />
+                        <Button Margin="8,0,0,0" Style="{StaticResource NeutralButtonStyle}" Click="StopServerButton_Click" Content="停止服务端" />
                     </UniformGrid>
                 </Grid>
             </GroupBox>
@@ -50,17 +50,17 @@
                         <RowDefinition Height="Auto" /><RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
-                    <TextBlock Grid.Row="0" Grid.Column="0" Margin="0,8" VerticalAlignment="Center" Text="服务端主机" />
+                    <TextBlock Grid.Row="0" Grid.Column="0" Style="{StaticResource FieldLabelStyle}" Text="服务端主机" />
                     <TextBox x:Name="SocketClientHostTextBox" Grid.Row="0" Grid.Column="1" Margin="0,6,0,6" Text="127.0.0.1" />
-                    <TextBlock Grid.Row="1" Grid.Column="0" Margin="0,8" VerticalAlignment="Center" Text="服务端端口" />
+                    <TextBlock Grid.Row="1" Grid.Column="0" Style="{StaticResource FieldLabelStyle}" Text="服务端端口" />
                     <TextBox x:Name="SocketClientPortTextBox" Grid.Row="1" Grid.Column="1" Margin="0,6,0,6" Text="9000" />
-                    <TextBlock Grid.Row="2" Grid.Column="0" Margin="0,8" VerticalAlignment="Center" Text="状态" />
-                    <TextBlock x:Name="ClientStatusTextBlock" Grid.Row="2" Grid.Column="1" Margin="0,8,0,0" Foreground="#0F766E" Text="未连接" />
-                    <TextBlock Grid.Row="3" Grid.Column="0" Margin="0,8" VerticalAlignment="Center" Text="最近接收" />
+                    <TextBlock Grid.Row="2" Grid.Column="0" Style="{StaticResource FieldLabelStyle}" Text="状态" />
+                    <TextBlock x:Name="ClientStatusTextBlock" Grid.Row="2" Grid.Column="1" Margin="0,8,0,0" Foreground="{StaticResource SuccessBrush}" Text="未连接" />
+                    <TextBlock Grid.Row="3" Grid.Column="0" Style="{StaticResource FieldLabelStyle}" Text="最近接收" />
                     <TextBlock x:Name="ClientLastReceivedTextBlock" Grid.Row="3" Grid.Column="1" Margin="0,8,0,0" TextWrapping="Wrap" Text="（无）" />
                     <UniformGrid Grid.Row="4" Grid.ColumnSpan="2" Margin="0,14,0,0" Columns="2">
-                        <Button Margin="0,0,8,0" Padding="10" Background="#0891B2" Foreground="White" BorderThickness="0" Click="ConnectClientButton_Click" Content="连接客户端" />
-                        <Button Margin="8,0,0,0" Padding="10" Background="#334155" Foreground="White" BorderThickness="0" Click="DisconnectClientButton_Click" Content="断开客户端" />
+                        <Button Margin="0,0,8,0" Style="{StaticResource PrimaryButtonStyle}" Click="ConnectClientButton_Click" Content="连接客户端" />
+                        <Button Margin="8,0,0,0" Style="{StaticResource NeutralButtonStyle}" Click="DisconnectClientButton_Click" Content="断开客户端" />
                     </UniformGrid>
                 </Grid>
             </GroupBox>
@@ -82,8 +82,8 @@
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" /><ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
-                        <Button Grid.Column="0" Margin="0,0,12,0" Padding="10" Background="#059669" Foreground="White" BorderThickness="0" Click="SendFromServerButton_Click" Content="服务端广播" />
-                        <Button Grid.Column="1" Margin="0,0,0,0" Padding="10" Background="#7C3AED" Foreground="White" BorderThickness="0" Click="SendFromClientButton_Click" Content="客户端发送" />
+                        <Button Grid.Column="0" Margin="0,0,12,0" Style="{StaticResource PrimaryButtonStyle}" Click="SendFromServerButton_Click" Content="服务端广播" />
+                        <Button Grid.Column="1" Margin="0,0,0,0" Style="{StaticResource PrimaryButtonStyle}" Click="SendFromClientButton_Click" Content="客户端发送" />
                     </Grid>
                 </Grid>
             </GroupBox>

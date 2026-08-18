@@ -251,7 +251,7 @@ namespace IndustrialCommDemo.Views
                 }
 
                 UpdateSnap7ServerStatus();
-                SetHeaderStatus("Snap7Server 已启动", Brushes.LightGreen);
+                SetHeaderStatus("Snap7Server 已启动", ThemeBrush.Success);
                 LogInfo(string.Format(
                     CultureInfo.InvariantCulture,
                     "Snap7Server 已在 {0}:{1} 启动，初始点位 {2} 个。",
@@ -272,7 +272,7 @@ namespace IndustrialCommDemo.Views
             try
             {
                 await ResetSnap7ServerAsync();
-                SetHeaderStatus("Snap7Server 已停止", Brushes.Khaki);
+                SetHeaderStatus("Snap7Server 已停止", ThemeBrush.Warning);
                 LogInfo("Snap7Server 已停止。");
             }
             catch (Exception ex)
@@ -291,7 +291,7 @@ namespace IndustrialCommDemo.Views
                 {
                     _snap7ServerProcess = null;
                     UpdateSnap7ServerStatus();
-                    SetHeaderStatus("Snap7Server 已退出", Brushes.Khaki);
+                    SetHeaderStatus("Snap7Server 已退出", ThemeBrush.Warning);
                 }
             });
         }
@@ -301,7 +301,7 @@ namespace IndustrialCommDemo.Views
             var running = _snap7ServerProcess != null;
             try { running = running && !_snap7ServerProcess.HasExited; } catch { running = false; }
             Snap7ServerStatusTextBlock.Text = running ? "运行中" : "未启动";
-            Snap7ServerStatusTextBlock.Foreground = running ? Brushes.ForestGreen : Brushes.SlateGray;
+            Snap7ServerStatusTextBlock.Foreground = running ? ThemeBrush.Success : ThemeBrush.Muted;
         }
 
         private static string FindSnap7ServerExecutable()

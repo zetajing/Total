@@ -13,6 +13,21 @@
         <SolidColorBrush x:Key="AccentBrush" Color="#0067C0" />
         <SolidColorBrush x:Key="AccentHoverBrush" Color="#1975C5" />
         <SolidColorBrush x:Key="AccentPressedBrush" Color="#005A9E" />
+        <SolidColorBrush x:Key="SuccessBrush" Color="#0F7B0F" />
+        <SolidColorBrush x:Key="SuccessFillBrush" Color="#E6F4EA" />
+        <SolidColorBrush x:Key="SuccessStrokeBrush" Color="#C3E6CB" />
+        <SolidColorBrush x:Key="WarningBrush" Color="#8A6100" />
+        <SolidColorBrush x:Key="WarningFillBrush" Color="#FFF4CE" />
+        <SolidColorBrush x:Key="WarningStrokeBrush" Color="#F2D675" />
+        <SolidColorBrush x:Key="DangerBrush" Color="#C42B1C" />
+        <SolidColorBrush x:Key="DangerFillBrush" Color="#FDECEA" />
+        <SolidColorBrush x:Key="DangerStrokeBrush" Color="#F5C6C0" />
+        <SolidColorBrush x:Key="InfoBrush" Color="#174A73" />
+        <SolidColorBrush x:Key="InfoFillBrush" Color="#E8F2FF" />
+        <SolidColorBrush x:Key="InfoStrokeBrush" Color="#B8D8F8" />
+        <SolidColorBrush x:Key="MutedBrush" Color="#64748B" />
+        <SolidColorBrush x:Key="PanelBrush" Color="#F8FAFC" />
+        <SolidColorBrush x:Key="PanelStrokeBrush" Color="#D8E2EE" />
 
         <Style TargetType="Window">
             <Setter Property="FontFamily" Value="Segoe UI Variable Text, Segoe UI" />
@@ -38,8 +53,8 @@
                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
                         </Border>
                         <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="ButtonBorder" Property="Background" Value="#F7F7F7" /></Trigger>
-                            <Trigger Property="IsPressed" Value="True"><Setter TargetName="ButtonBorder" Property="Background" Value="#EFEFEF" /></Trigger>
+                            <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="ButtonBorder" Property="Opacity" Value="0.88" /></Trigger>
+                            <Trigger Property="IsPressed" Value="True"><Setter TargetName="ButtonBorder" Property="Opacity" Value="0.72" /></Trigger>
                             <Trigger Property="IsEnabled" Value="False"><Setter TargetName="ButtonBorder" Property="Opacity" Value="0.45" /></Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -51,6 +66,42 @@
             <Setter Property="Background" Value="{StaticResource AccentBrush}" />
             <Setter Property="BorderBrush" Value="{StaticResource AccentPressedBrush}" />
         </Style>
+        <Style x:Key="PrimaryButtonStyle" TargetType="Button" BasedOn="{StaticResource AccentButtonStyle}" />
+        <Style x:Key="SuccessButtonStyle" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="Foreground" Value="White" />
+            <Setter Property="Background" Value="#15803D" />
+            <Setter Property="BorderBrush" Value="#166534" />
+        </Style>
+        <Style x:Key="DangerButtonStyle" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="Foreground" Value="White" />
+            <Setter Property="Background" Value="{StaticResource DangerBrush}" />
+            <Setter Property="BorderBrush" Value="#99201A" />
+        </Style>
+        <Style x:Key="NeutralButtonStyle" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="Foreground" Value="White" />
+            <Setter Property="Background" Value="#334155" />
+            <Setter Property="BorderBrush" Value="#1E293B" />
+        </Style>
+        <Style x:Key="FieldLabelStyle" TargetType="TextBlock">
+            <Setter Property="Margin" Value="0,8,10,4" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="Foreground" Value="{StaticResource TextSecondaryBrush}" />
+        </Style>
+        <Style x:Key="FieldControlStyle" TargetType="Control">
+            <Setter Property="Margin" Value="0,4" />
+        </Style>
+        <Style x:Key="LogBoxStyle" TargetType="TextBox">
+            <Setter Property="IsReadOnly" Value="True" />
+            <Setter Property="AcceptsReturn" Value="True" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+            <Setter Property="VerticalScrollBarVisibility" Value="Auto" />
+            <Setter Property="FontFamily" Value="Cascadia Mono, Consolas" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="Background" Value="#1E293B" />
+            <Setter Property="Foreground" Value="#E2E8F0" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Padding" Value="8" />
+        </Style>
         <Style TargetType="TextBox">
             <Setter Property="MinHeight" Value="32" />
             <Setter Property="Padding" Value="8,4" />
@@ -61,6 +112,13 @@
         <Style TargetType="ComboBox">
             <Setter Property="MinHeight" Value="32" />
             <Setter Property="Padding" Value="6,3" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="Background" Value="{StaticResource ControlBrush}" />
+            <Setter Property="BorderBrush" Value="{StaticResource StrokeStrongBrush}" />
+        </Style>
+        <Style TargetType="PasswordBox">
+            <Setter Property="MinHeight" Value="32" />
+            <Setter Property="Padding" Value="8,4" />
             <Setter Property="VerticalContentAlignment" Value="Center" />
             <Setter Property="Background" Value="{StaticResource ControlBrush}" />
             <Setter Property="BorderBrush" Value="{StaticResource StrokeStrongBrush}" />

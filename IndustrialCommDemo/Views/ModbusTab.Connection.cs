@@ -41,11 +41,11 @@ namespace IndustrialCommDemo.Views
 
         private void UpdateStatus()
         {
-            if (_client == null) { StatusTextBlock.Text = "未连接"; StatusTextBlock.Foreground = Brushes.IndianRed; return; }
-            if (_client.IsConnected) { StatusTextBlock.Text = "已连接"; StatusTextBlock.Foreground = Brushes.ForestGreen; return; }
+            if (_client == null) { StatusTextBlock.Text = "未连接"; StatusTextBlock.Foreground = ThemeBrush.Danger; return; }
+            if (_client.IsConnected) { StatusTextBlock.Text = "已连接"; StatusTextBlock.Foreground = ThemeBrush.Success; return; }
             var health = _client.GetHealth();
             StatusTextBlock.Text = health?.Status.ToString() ?? "未连接";
-            StatusTextBlock.Foreground = Brushes.DarkGoldenrod;
+            StatusTextBlock.Foreground = ThemeBrush.Warning;
         }
 
         private void RefreshCapabilityText()
@@ -100,7 +100,7 @@ namespace IndustrialCommDemo.Views
                     await _client.ConnectAsync(CancellationToken.None);
                     UpdateStatus();
                     RefreshCapabilityText();
-                    _ctx.SetHeaderStatus("Modbus RTU 已连接", Brushes.LightGreen);
+                    _ctx.SetHeaderStatus("Modbus RTU 已连接", ThemeBrush.Success);
                     _ctx.DemoLogger.Info(string.Format("Modbus RTU 已连接到 {0}。", options.PortName));
                 }
                 else
@@ -117,7 +117,7 @@ namespace IndustrialCommDemo.Views
                     await _client.ConnectAsync(CancellationToken.None);
                     UpdateStatus();
                     RefreshCapabilityText();
-                    _ctx.SetHeaderStatus("Modbus 已连接", Brushes.LightGreen);
+                    _ctx.SetHeaderStatus("Modbus 已连接", ThemeBrush.Success);
                     _ctx.DemoLogger.Info(string.Format("Modbus 已连接到 {0}:{1}。", options.Host, options.Port));
                 }
             }
@@ -138,7 +138,7 @@ namespace IndustrialCommDemo.Views
                 _subRows.Clear();
                 UpdateStatus();
                 RefreshCapabilityText();
-                _ctx.SetHeaderStatus("Modbus 已断开", Brushes.Khaki);
+                _ctx.SetHeaderStatus("Modbus 已断开", ThemeBrush.Warning);
                 _ctx.DemoLogger.Info("Modbus 已断开。");
             }
             catch (Exception ex)

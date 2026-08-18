@@ -49,7 +49,7 @@ namespace IndustrialCommDemo.Views
             try
             {
                 NetworkSettingsStatusTextBlock.Text = "正在读取网卡信息...";
-                NetworkSettingsStatusTextBlock.Foreground = Brushes.DarkGoldenrod;
+                NetworkSettingsStatusTextBlock.Foreground = ThemeBrush.Warning;
                 var selected = NetworkAdapterComboBox.SelectedItem as NetworkAdapterInfo;
                 var selectedId = preferredId ?? (selected == null ? null : selected.Id);
                 var adapters = await Task.Run(() => NetworkAdapterService.GetAdapters());
@@ -59,12 +59,12 @@ namespace IndustrialCommDemo.Views
                     ?? adapters.FirstOrDefault(item => item.CanConfigure)
                     ?? adapters.FirstOrDefault();
                 NetworkSettingsStatusTextBlock.Text = adapters.Count == 0 ? "未找到可用网卡。" : "已读取当前网卡配置。";
-                NetworkSettingsStatusTextBlock.Foreground = adapters.Count == 0 ? Brushes.IndianRed : Brushes.ForestGreen;
+                NetworkSettingsStatusTextBlock.Foreground = adapters.Count == 0 ? ThemeBrush.Danger : ThemeBrush.Success;
             }
             catch (Exception ex)
             {
                 NetworkSettingsStatusTextBlock.Text = "读取失败：" + ex.Message;
-                NetworkSettingsStatusTextBlock.Foreground = Brushes.IndianRed;
+                NetworkSettingsStatusTextBlock.Foreground = ThemeBrush.Danger;
             }
         }
 
@@ -85,7 +85,7 @@ namespace IndustrialCommDemo.Views
             if (!adapter.CanConfigure)
             {
                 NetworkSettingsStatusTextBlock.Text = "该接口仅供查看，请选择物理以太网或 Wi-Fi 网卡进行修改。";
-                NetworkSettingsStatusTextBlock.Foreground = Brushes.DarkGoldenrod;
+                NetworkSettingsStatusTextBlock.Foreground = ThemeBrush.Warning;
             }
         }
 
@@ -135,7 +135,7 @@ namespace IndustrialCommDemo.Views
             {
                 SetNetworkButtonsEnabled(false);
                 NetworkSettingsStatusTextBlock.Text = "正在应用网络配置...";
-                NetworkSettingsStatusTextBlock.Foreground = Brushes.DarkGoldenrod;
+                NetworkSettingsStatusTextBlock.Foreground = ThemeBrush.Warning;
                 await Task.Run(change);
                 NetworkSettingsStatusTextBlock.Text = "配置已应用，正在刷新...";
                 await Task.Delay(1200);
@@ -144,7 +144,7 @@ namespace IndustrialCommDemo.Views
             catch (Exception ex)
             {
                 NetworkSettingsStatusTextBlock.Text = "设置失败：" + ex.Message;
-                NetworkSettingsStatusTextBlock.Foreground = Brushes.IndianRed;
+                NetworkSettingsStatusTextBlock.Foreground = ThemeBrush.Danger;
                 MessageBox.Show(ex.Message, "网卡设置失败", MessageBoxButton.OK, MessageBoxImage.Warning);
             }
             finally

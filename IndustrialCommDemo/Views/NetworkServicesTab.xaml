@@ -1,37 +1,6 @@
 <UserControl x:Class="IndustrialCommDemo.Views.NetworkServicesTab"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
-    <UserControl.Resources>
-        <Style x:Key="FieldLabelStyle" TargetType="TextBlock">
-            <Setter Property="Margin" Value="0,8,10,4" />
-            <Setter Property="VerticalAlignment" Value="Center" />
-        </Style>
-        <Style x:Key="FieldControlStyle" TargetType="Control">
-            <Setter Property="Margin" Value="0,4" />
-        </Style>
-        <Style x:Key="ActionButtonStyle" TargetType="Button" BasedOn="{StaticResource AccentButtonStyle}">
-            <Setter Property="Margin" Value="0,0,8,0" />
-        </Style>
-        <Style TargetType="PasswordBox">
-            <Setter Property="MinHeight" Value="32" />
-            <Setter Property="Padding" Value="8,4" />
-            <Setter Property="VerticalContentAlignment" Value="Center" />
-            <Setter Property="Background" Value="{StaticResource ControlBrush}" />
-            <Setter Property="BorderBrush" Value="{StaticResource StrokeStrongBrush}" />
-        </Style>
-        <Style x:Key="LogBoxStyle" TargetType="TextBox">
-            <Setter Property="IsReadOnly" Value="True" />
-            <Setter Property="AcceptsReturn" Value="True" />
-            <Setter Property="TextWrapping" Value="Wrap" />
-            <Setter Property="VerticalScrollBarVisibility" Value="Auto" />
-            <Setter Property="FontFamily" Value="Cascadia Mono, Consolas" />
-            <Setter Property="FontSize" Value="12" />
-            <Setter Property="Background" Value="#1E293B" />
-            <Setter Property="Foreground" Value="#E2E8F0" />
-            <Setter Property="BorderThickness" Value="0" />
-            <Setter Property="Padding" Value="8" />
-        </Style>
-    </UserControl.Resources>
 
     <TabControl x:Name="NetworkServicesTabControl" Background="Transparent" BorderThickness="0">
         <TabItem Header="MQTT 客户端 / Broker">
@@ -76,11 +45,11 @@
                             <TextBlock Grid.Row="3" Grid.Column="2" Style="{StaticResource FieldLabelStyle}" Text="密码" />
                             <PasswordBox x:Name="MqttBrokerPasswordBox" Grid.Row="3" Grid.Column="3" Margin="0,4" ToolTip="留空表示保留 DPAPI 中已保存的密码。" />
                             <CheckBox x:Name="MqttAutoStartCheckBox" Grid.Row="4" Grid.ColumnSpan="4" Margin="0,8,0,4" Content="程序启动时自动启动 Broker" />
-                            <Border Grid.Row="5" Grid.ColumnSpan="4" Margin="0,6,0,8" Padding="9" Background="#FFF4CE" BorderBrush="#F2D675" BorderThickness="1" CornerRadius="5">
-                                <TextBlock Foreground="#5C4400" TextWrapping="Wrap" Text="默认仅监听 127.0.0.1。远程监听必须启用 TLS；密码通过 Windows DPAPI 保存，不写入 JSON。" />
+                            <Border Grid.Row="5" Grid.ColumnSpan="4" Margin="0,6,0,8" Padding="9" Background="{StaticResource WarningFillBrush}" BorderBrush="{StaticResource WarningStrokeBrush}" BorderThickness="1" CornerRadius="5">
+                                <TextBlock Foreground="{StaticResource WarningBrush}" TextWrapping="Wrap" Text="默认仅监听 127.0.0.1。远程监听必须启用 TLS；密码通过 Windows DPAPI 保存，不写入 JSON。" />
                             </Border>
                             <StackPanel Grid.Row="6" Grid.ColumnSpan="4" Orientation="Horizontal">
-                                <Button Style="{StaticResource ActionButtonStyle}" Click="SaveMqttButton_Click" Content="保存安全配置" />
+                                <Button Style="{StaticResource PrimaryButtonStyle}" Click="SaveMqttButton_Click" Content="保存安全配置" />
                                 <Button Margin="0,0,8,0" Click="ValidateNetworkConfigurationButton_Click" Content="校验 JSON" />
                                 <Button Margin="0,0,8,0" Click="RestoreNetworkTemplateButton_Click" Content="恢复模板" />
                                 <Button Margin="0,0,8,0" Click="StartMqttButton_Click" Content="启动 Broker" />
@@ -88,7 +57,7 @@
                                 <Button Click="RefreshMqttClientsButton_Click" Content="刷新客户端" />
                             </StackPanel>
                             <TextBlock Grid.Row="7" Grid.Column="0" Style="{StaticResource FieldLabelStyle}" Text="运行状态" />
-                            <TextBlock x:Name="MqttBrokerStatusTextBlock" Grid.Row="7" Grid.Column="1" Grid.ColumnSpan="3" Margin="0,8,0,4" Foreground="IndianRed" Text="已停止" />
+                            <TextBlock x:Name="MqttBrokerStatusTextBlock" Grid.Row="7" Grid.Column="1" Grid.ColumnSpan="3" Margin="0,8,0,4" Foreground="{StaticResource DangerBrush}" Text="已停止" />
                         </Grid>
                     </GroupBox>
 
@@ -125,13 +94,13 @@
                             <TextBlock Grid.Row="5" Grid.Column="0" Style="{StaticResource FieldLabelStyle}" Text="消息" />
                             <TextBox x:Name="MqttPayloadTextBox" Grid.Row="5" Grid.Column="1" Grid.ColumnSpan="3" Margin="0,4" MinHeight="60" AcceptsReturn="True" TextWrapping="Wrap" Text="{}{&quot;correlationId&quot;:&quot;demo-1&quot;,&quot;items&quot;:[]}" />
                             <WrapPanel Grid.Row="6" Grid.ColumnSpan="4" Margin="0,8,0,4">
-                                <Button Style="{StaticResource ActionButtonStyle}" Click="ConnectMqttClientButton_Click" Content="连接" />
+                                <Button Style="{StaticResource PrimaryButtonStyle}" Click="ConnectMqttClientButton_Click" Content="连接" />
                                 <Button Margin="0,0,8,0" Click="DisconnectMqttClientButton_Click" Content="断开" />
                                 <Button Margin="0,0,8,0" Click="SubscribeMqttButton_Click" Content="订阅" />
                                 <Button Click="PublishMqttButton_Click" Content="发布" />
                             </WrapPanel>
                             <TextBlock Grid.Row="7" Grid.Column="0" Style="{StaticResource FieldLabelStyle}" Text="客户端状态" />
-                            <TextBlock x:Name="MqttClientStatusTextBlock" Grid.Row="7" Grid.Column="1" Grid.ColumnSpan="3" Margin="0,8,0,4" Foreground="IndianRed" Text="未连接" />
+                            <TextBlock x:Name="MqttClientStatusTextBlock" Grid.Row="7" Grid.Column="1" Grid.ColumnSpan="3" Margin="0,8,0,4" Foreground="{StaticResource DangerBrush}" Text="未连接" />
                             <TextBox x:Name="MqttClientLogTextBox" Grid.Row="8" Grid.ColumnSpan="4" Height="100" Margin="0,6,0,0" Style="{StaticResource LogBoxStyle}" />
                         </Grid>
                     </GroupBox>
@@ -175,11 +144,11 @@
                             <CheckBox x:Name="WebAllowRawReadsCheckBox" Grid.Row="4" Grid.ColumnSpan="2" Margin="0,3" Content="允许原始地址读取（默认关闭）" />
                             <CheckBox x:Name="WebExposeAddressesCheckBox" Grid.Row="5" Grid.ColumnSpan="2" Margin="0,3" Content="在结果中公开底层地址" />
                             <CheckBox x:Name="WebAutoStartCheckBox" Grid.Row="6" Grid.ColumnSpan="2" Margin="0,3,0,8" Content="程序启动时自动启动 Web 网关" />
-                            <Border Grid.Row="7" Grid.ColumnSpan="2" Margin="0,4,0,8" Padding="9" Background="#E8F2FF" BorderBrush="#B8D8F8" BorderThickness="1" CornerRadius="5">
-                                <TextBlock Foreground="#174A73" TextWrapping="Wrap" Text="非本机监听必须使用 HTTPS/WSS、API Key 和 Origin 白名单。远程地址可能需要管理员配置 HTTP.sys URL ACL 与证书绑定；本程序只检查并提示，不会自动执行 netsh。" />
+                            <Border Grid.Row="7" Grid.ColumnSpan="2" Margin="0,4,0,8" Padding="9" Background="{StaticResource InfoFillBrush}" BorderBrush="{StaticResource InfoStrokeBrush}" BorderThickness="1" CornerRadius="5">
+                                <TextBlock Foreground="{StaticResource InfoBrush}" TextWrapping="Wrap" Text="非本机监听必须使用 HTTPS/WSS、API Key 和 Origin 白名单。远程地址可能需要管理员配置 HTTP.sys URL ACL 与证书绑定；本程序只检查并提示，不会自动执行 netsh。" />
                             </Border>
                             <StackPanel Grid.Row="8" Grid.ColumnSpan="2" Orientation="Horizontal">
-                                <Button Style="{StaticResource ActionButtonStyle}" Click="SaveWebButton_Click" Content="保存安全配置" />
+                                <Button Style="{StaticResource PrimaryButtonStyle}" Click="SaveWebButton_Click" Content="保存安全配置" />
                                 <Button Margin="0,0,8,0" Click="StartWebButton_Click" Content="启动" />
                                 <Button Margin="0,0,8,0" Click="StopWebButton_Click" Content="停止" />
                                 <Button Click="HealthWebButton_Click" Content="健康测试" />
@@ -204,9 +173,9 @@
                             <TextBlock Grid.Row="2" Style="{StaticResource FieldLabelStyle}" Text="JSON 正文" />
                             <TextBox x:Name="HttpBodyTextBox" Grid.Row="2" Grid.Column="1" Margin="0,4" MinHeight="80" AcceptsReturn="True" TextWrapping="Wrap" Text="{}{&quot;correlationId&quot;:&quot;demo-1&quot;,&quot;items&quot;:[]}" />
                             <CheckBox x:Name="HttpUseSavedApiKeyCheckBox" Grid.Row="3" Grid.ColumnSpan="2" Margin="0,8,0,4" IsChecked="True" Content="使用 DPAPI 中保存的 X-Industrial-Api-Key" />
-                            <Button Grid.Row="4" Grid.ColumnSpan="2" Margin="0,8,0,8" Style="{StaticResource ActionButtonStyle}" Click="SendHttpButton_Click" Content="发送请求" />
+                            <Button Grid.Row="4" Grid.ColumnSpan="2" Margin="0,8,0,8" Style="{StaticResource PrimaryButtonStyle}" Click="SendHttpButton_Click" Content="发送请求" />
                             <StackPanel Grid.Row="5" Grid.ColumnSpan="2">
-                                <TextBlock x:Name="WebGatewayStatusTextBlock" Margin="0,0,0,6" Foreground="IndianRed" Text="网关已停止" />
+                                <TextBlock x:Name="WebGatewayStatusTextBlock" Margin="0,0,0,6" Foreground="{StaticResource DangerBrush}" Text="网关已停止" />
                                 <TextBox x:Name="HttpLogTextBox" Height="190" Style="{StaticResource LogBoxStyle}" />
                             </StackPanel>
                         </Grid>
@@ -239,11 +208,11 @@
                             <TextBlock Grid.Row="3" Style="{StaticResource FieldLabelStyle}" Text="发送文本" />
                             <TextBox x:Name="WebSocketMessageTextBox" Grid.Row="3" Grid.Column="1" Margin="0,4" MinHeight="90" AcceptsReturn="True" TextWrapping="Wrap" Text="{}{&quot;type&quot;:&quot;ping&quot;,&quot;correlationId&quot;:&quot;demo-1&quot;}" />
                             <WrapPanel Grid.Row="4" Grid.ColumnSpan="2" Margin="0,8,0,4">
-                                <Button Style="{StaticResource ActionButtonStyle}" Click="ConnectWebSocketButton_Click" Content="连接" />
+                                <Button Style="{StaticResource PrimaryButtonStyle}" Click="ConnectWebSocketButton_Click" Content="连接" />
                                 <Button Margin="0,0,8,0" Click="DisconnectWebSocketButton_Click" Content="断开" />
                                 <Button Click="SendWebSocketButton_Click" Content="发送文本" />
                             </WrapPanel>
-                            <TextBlock x:Name="WebSocketClientStatusTextBlock" Grid.Row="5" Grid.ColumnSpan="2" Margin="0,8,0,0" Foreground="IndianRed" Text="未连接" />
+                            <TextBlock x:Name="WebSocketClientStatusTextBlock" Grid.Row="5" Grid.ColumnSpan="2" Margin="0,8,0,0" Foreground="{StaticResource DangerBrush}" Text="未连接" />
                         </Grid>
                     </GroupBox>
                     <GroupBox Grid.Row="0" Grid.Column="1" Margin="6,0,0,8" Header="服务端会话">
@@ -292,15 +261,15 @@
                             <CheckBox x:Name="FtpAllowPlainCheckBox" Grid.Row="6" Grid.ColumnSpan="2" Margin="0,3" Content="明确允许不安全的明文 FTP" />
                             <CheckBox x:Name="FtpPassiveCheckBox" Grid.Row="7" Grid.ColumnSpan="2" Margin="0,3,0,8" Content="被动模式" />
                             <StackPanel Grid.Row="8" Grid.ColumnSpan="2">
-                                <Border Margin="0,0,0,8" Padding="9" Background="#FFF4CE" BorderBrush="#F2D675" BorderThickness="1" CornerRadius="5">
-                                    <TextBlock Foreground="#5C4400" TextWrapping="Wrap" Text="这里只连接外部 IIS/FileZilla 等标准服务器，不内嵌或启动 FTP Server；SFTP 属于 SSH 协议，不在此页支持。" />
+                                <Border Margin="0,0,0,8" Padding="9" Background="{StaticResource WarningFillBrush}" BorderBrush="{StaticResource WarningStrokeBrush}" BorderThickness="1" CornerRadius="5">
+                                    <TextBlock Foreground="{StaticResource WarningBrush}" TextWrapping="Wrap" Text="这里只连接外部 IIS/FileZilla 等标准服务器，不内嵌或启动 FTP Server；SFTP 属于 SSH 协议，不在此页支持。" />
                                 </Border>
                                 <WrapPanel>
-                                    <Button Style="{StaticResource ActionButtonStyle}" Click="SaveFtpButton_Click" Content="保存配置" />
+                                    <Button Style="{StaticResource PrimaryButtonStyle}" Click="SaveFtpButton_Click" Content="保存配置" />
                                     <Button Margin="0,0,8,0" Click="ConnectFtpButton_Click" Content="连接" />
                                     <Button Click="DisconnectFtpButton_Click" Content="断开" />
                                 </WrapPanel>
-                                <TextBlock x:Name="FtpStatusTextBlock" Margin="0,10,0,0" Foreground="IndianRed" Text="未连接" />
+                                <TextBlock x:Name="FtpStatusTextBlock" Margin="0,10,0,0" Foreground="{StaticResource DangerBrush}" Text="未连接" />
                             </StackPanel>
                         </Grid>
                     </GroupBox>
@@ -325,7 +294,7 @@
                             <TextBlock Grid.Row="2" Style="{StaticResource FieldLabelStyle}" Text="目标/新名称" />
                             <TextBox x:Name="FtpTargetPathTextBox" Grid.Row="2" Grid.Column="1" Style="{StaticResource FieldControlStyle}" />
                             <WrapPanel Grid.Row="3" Grid.ColumnSpan="3" Margin="0,8,0,6">
-                                <Button Style="{StaticResource ActionButtonStyle}" Click="UploadFtpButton_Click" Content="上传" />
+                                <Button Style="{StaticResource PrimaryButtonStyle}" Click="UploadFtpButton_Click" Content="上传" />
                                 <Button Margin="0,0,8,0" Click="DownloadFtpButton_Click" Content="下载" />
                                 <Button Margin="0,0,8,0" Click="DeleteFtpButton_Click" Content="删除文件" />
                                 <Button Margin="0,0,8,0" Click="RenameFtpButton_Click" Content="改名/移动" />

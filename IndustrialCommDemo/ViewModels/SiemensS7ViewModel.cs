@@ -119,7 +119,7 @@ namespace IndustrialCommDemo.ViewModels
                     "读取成功：{0} = {1}",
                     stringAddress,
                     string.IsNullOrEmpty(value) ? "（空字符串）" : value);
-                Ctx.SetHeaderStatus("S7 STRING 读取完成", System.Windows.Media.Brushes.LightGreen);
+                Ctx.SetHeaderStatus("S7 STRING 读取完成", ThemeBrush.Success);
                 LogInfo("S7 STRING 读取完成：" + stringAddress);
             }
             catch (Exception ex)

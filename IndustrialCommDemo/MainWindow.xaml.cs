@@ -66,7 +66,7 @@ namespace IndustrialCommDemo
                     _ = NetworkControlTag.OnTabLoadedAsync();
             };
 
-            SetHeaderStatus("就绪", Brushes.LightGreen);
+            SetHeaderStatus("就绪", ThemeBrush.Success);
             _demoLogger.Info("工业设备运行中心已就绪。");
             _ = NetworkServicesControlTag.StartAutoServicesAsync();
         }
@@ -131,6 +131,15 @@ namespace IndustrialCommDemo
         {
             HeaderStatusTextBlock.Text = text;
             HeaderStatusTextBlock.Foreground = foreground;
+            HeaderStatusDot.Fill = foreground;
+            // ThemeBrush 均为 Frozen 单例，可直接按引用匹配语义状态。
+            string fillKey, strokeKey;
+            if (foreground == ThemeBrush.Warning) { fillKey = "WarningFillBrush"; strokeKey = "WarningStrokeBrush"; }
+            else if (foreground == ThemeBrush.Danger) { fillKey = "DangerFillBrush"; strokeKey = "DangerStrokeBrush"; }
+            else if (foreground == ThemeBrush.Info || foreground == ThemeBrush.Muted) { fillKey = "InfoFillBrush"; strokeKey = "InfoStrokeBrush"; }
+            else { fillKey = "SuccessFillBrush"; strokeKey = "SuccessStrokeBrush"; }
+            HeaderStatusPill.Background = (Brush)FindResource(fillKey);
+            HeaderStatusPill.BorderBrush = (Brush)FindResource(strokeKey);
         }
 
         // ── Log panel ──

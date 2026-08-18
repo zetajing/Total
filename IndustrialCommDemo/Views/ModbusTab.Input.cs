@@ -128,17 +128,17 @@ namespace IndustrialCommDemo.Views
             var analysis = AnalyzeAddresses();
             if (!analysis.IsValid)
             {
-                AddressHintTextBlock.Foreground = Brushes.OrangeRed;
+                AddressHintTextBlock.Foreground = ThemeBrush.Danger;
                 AddressHintTextBlock.Text = analysis.ErrorMessage;
             }
             else if (analysis.AddressCount == 0)
             {
-                AddressHintTextBlock.Foreground = Brushes.DimGray;
+                AddressHintTextBlock.Foreground = ThemeBrush.Muted;
                 AddressHintTextBlock.Text = "支持逗号、分号、换行输入多个地址。";
             }
             else
             {
-                AddressHintTextBlock.Foreground = Brushes.ForestGreen;
+                AddressHintTextBlock.Foreground = ThemeBrush.Success;
                 var modeText = analysis.AddressCount == 1 ? "单地址" : string.Format(CultureInfo.InvariantCulture, "多地址（{0} 个）", analysis.AddressCount);
                 AddressHintTextBlock.Text = string.Format(CultureInfo.InvariantCulture,
                     "{0}，{1}。{2}", modeText,
@@ -152,30 +152,30 @@ namespace IndustrialCommDemo.Views
         {
             if (!analysis.IsValid || analysis.AddressCount == 0)
             {
-                WriteHintTextBlock.Foreground = Brushes.DimGray;
+                WriteHintTextBlock.Foreground = ThemeBrush.Muted;
                 WriteHintTextBlock.Text = "多地址写入时，可填写 1 个值广播，或填写与地址数相同的多个值。";
                 return;
             }
             if (analysis.AddressCount == 1)
             {
-                WriteHintTextBlock.Foreground = Brushes.DimGray;
+                WriteHintTextBlock.Foreground = ThemeBrush.Muted;
                 WriteHintTextBlock.Text = "单地址写入沿用当前解析类型和长度。";
                 return;
             }
             var values = ParseHelper.SplitBatchWriteValues(WriteValueTextBox.Text);
             if (values.Count <= 1)
             {
-                WriteHintTextBlock.Foreground = Brushes.ForestGreen;
+                WriteHintTextBlock.Foreground = ThemeBrush.Success;
                 WriteHintTextBlock.Text = string.Format(CultureInfo.InvariantCulture, "当前将把同一个值写到 {0} 个地址。", analysis.AddressCount);
             }
             else if (values.Count == analysis.AddressCount)
             {
-                WriteHintTextBlock.Foreground = Brushes.ForestGreen;
+                WriteHintTextBlock.Foreground = ThemeBrush.Success;
                 WriteHintTextBlock.Text = string.Format(CultureInfo.InvariantCulture, "当前将按顺序逐项写入 {0} 个地址。", analysis.AddressCount);
             }
             else
             {
-                WriteHintTextBlock.Foreground = Brushes.OrangeRed;
+                WriteHintTextBlock.Foreground = ThemeBrush.Danger;
                 WriteHintTextBlock.Text = string.Format(CultureInfo.InvariantCulture,
                     "多地址写入时，写入值数量必须是 1 个或 {0} 个，当前为 {1} 个。", analysis.AddressCount, values.Count);
             }

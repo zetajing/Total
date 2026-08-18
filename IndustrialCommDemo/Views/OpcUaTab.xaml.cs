@@ -111,7 +111,7 @@ namespace IndustrialCommDemo.Views
                 await client.ConnectAsync(CancellationToken.None);
                 UpdateStatus(true, "已连接");
                 RefreshCapabilityText();
-                _ctx.SetHeaderStatus("OPC UA 已连接", Brushes.LightGreen);
+                _ctx.SetHeaderStatus("OPC UA 已连接", ThemeBrush.Success);
                 _ctx.DemoLogger.Info("OPC UA 已连接到 " + options.EndpointUrl + "。");
             }
             catch (Exception ex)
@@ -128,7 +128,7 @@ namespace IndustrialCommDemo.Views
             {
                 await ResetClientAsync();
                 ResultTextBlock.Text = "已断开。";
-                _ctx.SetHeaderStatus("OPC UA 已断开", Brushes.Khaki);
+                _ctx.SetHeaderStatus("OPC UA 已断开", ThemeBrush.Warning);
                 _ctx.DemoLogger.Info("OPC UA 已断开。");
             }
             catch (Exception ex)
@@ -151,7 +151,7 @@ namespace IndustrialCommDemo.Views
                 ResultTextBlock.Text = FormatHelper.FormatDataValue(result);
                 RememberCurrentAddress(request.Address);
                 _ctx.QueueDatabaseValues(_client, new[] { result });
-                _ctx.SetHeaderStatus("OPC UA 读取完成", Brushes.LightGreen);
+                _ctx.SetHeaderStatus("OPC UA 读取完成", ThemeBrush.Success);
                 _ctx.DemoLogger.Info("OPC UA 读取完成：" + request.Address + "。");
             }
             catch (Exception ex)
@@ -176,7 +176,7 @@ namespace IndustrialCommDemo.Views
                 await _client.WriteAsync(request, CancellationToken.None);
                 RememberCurrentAddress(request.Address);
                 ResultTextBlock.Text = string.Format("写入成功：{0} = {1}", request.Address, FormatHelper.FormatDisplayValue(request.Value));
-                _ctx.SetHeaderStatus("OPC UA 写入完成", Brushes.LightGreen);
+                _ctx.SetHeaderStatus("OPC UA 写入完成", ThemeBrush.Success);
                 _ctx.DemoLogger.Info("OPC UA 写入完成：" + request.Address + "。");
             }
             catch (Exception ex)
@@ -219,7 +219,7 @@ namespace IndustrialCommDemo.Views
         private void UpdateStatus(bool connected, string text)
         {
             StatusTextBlock.Text = text;
-            StatusTextBlock.Foreground = connected ? Brushes.ForestGreen : Brushes.IndianRed;
+            StatusTextBlock.Foreground = connected ? ThemeBrush.Success : ThemeBrush.Danger;
         }
 
         private static int ParsePositiveInt(string text, string fieldName)
