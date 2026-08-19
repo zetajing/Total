@@ -132,21 +132,21 @@
                             </WrapPanel>
                             <TextBlock Grid.Row="7" Grid.Column="0" Style="{StaticResource FieldLabelStyle}" Text="客户端状态" />
                             <TextBlock x:Name="MqttClientStatusTextBlock" Grid.Row="7" Grid.Column="1" Grid.ColumnSpan="3" Margin="0,8,0,4" Foreground="IndianRed" Text="未连接" />
-                            <TextBox x:Name="MqttClientLogTextBox" Grid.Row="8" Grid.ColumnSpan="4" Height="100" Margin="0,6,0,0" Style="{StaticResource LogBoxStyle}" />
+                            <TextBox x:Name="MqttClientLogTextBox" Grid.Row="8" Grid.ColumnSpan="4" Height="80" Margin="0,6,0,0" Style="{StaticResource LogBoxStyle}" />
                         </Grid>
                     </GroupBox>
 
                     <GroupBox Grid.Row="1" Grid.ColumnSpan="2" Header="Broker 客户端与消息">
                         <Grid Margin="10">
                             <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
-                            <DataGrid x:Name="MqttBrokerClientsDataGrid" Grid.Column="0" Margin="0,0,6,0" Height="145" AutoGenerateColumns="False" IsReadOnly="True">
+                            <DataGrid x:Name="MqttBrokerClientsDataGrid" Grid.Column="0" Margin="0,0,6,0" Height="115" AutoGenerateColumns="False" IsReadOnly="True">
                                 <DataGrid.Columns>
                                     <DataGridTextColumn Header="Client ID" Binding="{Binding ClientId}" Width="*" />
                                     <DataGridTextColumn Header="用户名" Binding="{Binding Username}" Width="110" />
                                     <DataGridTextColumn Header="远端" Binding="{Binding Endpoint}" Width="150" />
                                 </DataGrid.Columns>
                             </DataGrid>
-                            <TextBox x:Name="MqttBrokerLogTextBox" Grid.Column="1" Height="145" Margin="6,0,0,0" Style="{StaticResource LogBoxStyle}" />
+                            <TextBox x:Name="MqttBrokerLogTextBox" Grid.Column="1" Height="115" Margin="6,0,0,0" Style="{StaticResource LogBoxStyle}" />
                         </Grid>
                     </GroupBox>
                 </Grid>
@@ -207,7 +207,7 @@
                             <Button Grid.Row="4" Grid.ColumnSpan="2" Margin="0,8,0,8" Style="{StaticResource ActionButtonStyle}" Click="SendHttpButton_Click" Content="发送请求" />
                             <StackPanel Grid.Row="5" Grid.ColumnSpan="2">
                                 <TextBlock x:Name="WebGatewayStatusTextBlock" Margin="0,0,0,6" Foreground="IndianRed" Text="网关已停止" />
-                                <TextBox x:Name="HttpLogTextBox" Height="190" Style="{StaticResource LogBoxStyle}" />
+                                <TextBox x:Name="HttpLogTextBox" Height="140" Style="{StaticResource LogBoxStyle}" />
                             </StackPanel>
                         </Grid>
                     </GroupBox>
@@ -250,7 +250,7 @@
                         <Grid Margin="10">
                             <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /></Grid.RowDefinitions>
                             <Button Width="120" HorizontalAlignment="Left" Margin="0,0,0,8" Click="RefreshWebSocketSessionsButton_Click" Content="刷新会话" />
-                            <DataGrid x:Name="WebSocketSessionsDataGrid" Grid.Row="1" Height="230" AutoGenerateColumns="False" IsReadOnly="True">
+                            <DataGrid x:Name="WebSocketSessionsDataGrid" Grid.Row="1" Height="180" AutoGenerateColumns="False" IsReadOnly="True">
                                 <DataGrid.Columns>
                                     <DataGridTextColumn Header="会话 ID" Binding="{Binding Id}" Width="*" />
                                     <DataGridTextColumn Header="远端" Binding="{Binding RemoteEndpoint}" Width="150" />
@@ -260,7 +260,7 @@
                         </Grid>
                     </GroupBox>
                     <GroupBox Grid.Row="1" Grid.ColumnSpan="2" Header="收发日志">
-                        <TextBox x:Name="WebSocketLogTextBox" Height="180" Margin="10" Style="{StaticResource LogBoxStyle}" />
+                        <TextBox x:Name="WebSocketLogTextBox" Height="140" Margin="10" Style="{StaticResource LogBoxStyle}" />
                     </GroupBox>
                 </Grid>
             </ScrollViewer>
@@ -333,7 +333,7 @@
                             </WrapPanel>
                             <ProgressBar x:Name="FtpProgressBar" Grid.Row="4" Grid.ColumnSpan="3" Height="16" Margin="0,4" Minimum="0" Maximum="100" />
                             <TextBlock x:Name="FtpProgressTextBlock" Grid.Row="5" Grid.ColumnSpan="3" Margin="0,3,0,6" Foreground="{StaticResource TextSecondaryBrush}" Text="等待操作" />
-                            <DataGrid x:Name="FtpItemsDataGrid" Grid.Row="6" Grid.ColumnSpan="3" Height="230" AutoGenerateColumns="False" IsReadOnly="True" SelectionChanged="FtpItemsDataGrid_SelectionChanged">
+                            <DataGrid x:Name="FtpItemsDataGrid" Grid.Row="6" Grid.ColumnSpan="3" Height="180" AutoGenerateColumns="False" IsReadOnly="True" SelectionChanged="FtpItemsDataGrid_SelectionChanged">
                                 <DataGrid.Columns>
                                     <DataGridTextColumn Header="名称" Binding="{Binding Name}" Width="*" />
                                     <DataGridTextColumn Header="类型" Binding="{Binding Type}" Width="90" />

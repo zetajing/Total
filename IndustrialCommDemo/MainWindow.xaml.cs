@@ -20,6 +20,7 @@ namespace IndustrialCommDemo
         private IndustrialApplicationRuntime _runtime;
         private NetworkServicesRuntime _networkServices;
         private DemoUiState _uiState;
+        private bool _logPanelVisible = true;
         private bool _closeCleanupStarted;
         private bool _closeCleanupCompleted;
 
@@ -159,6 +160,14 @@ namespace IndustrialCommDemo
                 LogTextBox.Clear();
                 _demoLogger.Info("Demo 日志已清空。");
             }
+        }
+
+        private void ToggleLogButton_Click(object sender, RoutedEventArgs e)
+        {
+            _logPanelVisible = !_logPanelVisible;
+            LogPanelRow.Height = _logPanelVisible ? new GridLength(132) : new GridLength(0);
+            LogPanelBorder.Visibility = _logPanelVisible ? Visibility.Visible : Visibility.Collapsed;
+            ToggleLogButton.Content = _logPanelVisible ? "隐藏日志" : "显示日志";
         }
     }
 }
