@@ -80,7 +80,7 @@ namespace IndustrialCommDemo.Views
                 ComboHelper.RefreshAddressHistory(AddressHistoryComboBox, _ctx.UiState.Modbus.RecentAddresses);
                 UpdateStatus();
                 RefreshCapabilityText();
-                _ctx.SetHeaderStatus("Modbus 读取完成", ThemeBrush.Success);
+                _ctx.SetHeaderStatus("Modbus 读取完成", Brushes.LightGreen);
                 _ctx.DemoLogger.Info("Modbus 读取完成。");
             }
             catch (Exception ex)
@@ -115,7 +115,7 @@ namespace IndustrialCommDemo.Views
                 ComboHelper.RefreshAddressHistory(AddressHistoryComboBox, _ctx.UiState.Modbus.RecentAddresses);
                 UpdateStatus();
                 RefreshCapabilityText();
-                _ctx.SetHeaderStatus("Modbus 写入完成", ThemeBrush.Success);
+                _ctx.SetHeaderStatus("Modbus 写入完成", Brushes.LightGreen);
             }
             catch (Exception ex)
             {
@@ -149,7 +149,7 @@ namespace IndustrialCommDemo.Views
                 ComboHelper.RefreshAddressHistory(AddressHistoryComboBox, _ctx.UiState.Modbus.RecentAddresses);
                 ResultTextBlock.Text = "订阅已启动：" + _subscriptionId;
                 RefreshCapabilityText();
-                _ctx.SetHeaderStatus("Modbus 订阅已启动", ThemeBrush.Success);
+                _ctx.SetHeaderStatus("Modbus 订阅已启动", Brushes.LightGreen);
                 _ctx.DemoLogger.Info("Modbus 订阅已启动。");
             }
             catch (Exception ex)
@@ -176,7 +176,7 @@ namespace IndustrialCommDemo.Views
                 ResultTextBlock.Text = "订阅已停止。";
                 _subRows.Clear();
                 RefreshCapabilityText();
-                _ctx.SetHeaderStatus("Modbus 订阅已停止", ThemeBrush.Warning);
+                _ctx.SetHeaderStatus("Modbus 订阅已停止", Brushes.Khaki);
             }
         }
 

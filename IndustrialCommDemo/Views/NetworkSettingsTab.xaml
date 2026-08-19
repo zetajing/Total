@@ -12,7 +12,7 @@
                 <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
 
-            <Border Grid.Row="0" Grid.Column="0" Padding="18" CornerRadius="14" Background="{StaticResource PanelBrush}" BorderBrush="{StaticResource PanelStrokeBrush}" BorderThickness="1">
+            <Border Grid.Row="0" Grid.Column="0" Padding="18" CornerRadius="14" Background="#F8FAFC" BorderBrush="#D8E2EE" BorderThickness="1">
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="105" />
@@ -48,11 +48,11 @@
                     <TextBlock Grid.Row="3" VerticalAlignment="Center" Text="当前模式" />
                     <TextBlock x:Name="NetworkAdapterModeTextBlock" Grid.Row="3" Grid.Column="1" Margin="0,8" FontWeight="SemiBold" Text="--" />
                     <TextBlock Grid.Row="4" VerticalAlignment="Center" Text="状态" />
-                    <TextBlock x:Name="NetworkSettingsStatusTextBlock" Grid.Row="4" Grid.Column="1" Margin="0,8" Foreground="{StaticResource TextSecondaryBrush}" Text="等待读取..." />
+                    <TextBlock x:Name="NetworkSettingsStatusTextBlock" Grid.Row="4" Grid.Column="1" Margin="0,8" Foreground="#475569" Text="等待读取..." />
                 </Grid>
             </Border>
 
-            <Border Grid.Row="0" Grid.Column="1" Margin="14,0,0,0" Padding="18" CornerRadius="14" Background="{StaticResource CardBrush}" BorderBrush="{StaticResource PanelStrokeBrush}" BorderThickness="1">
+            <Border Grid.Row="0" Grid.Column="1" Margin="14,0,0,0" Padding="18" CornerRadius="14" Background="White" BorderBrush="#D8E2EE" BorderThickness="1">
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="105" />
@@ -66,7 +66,7 @@
                         <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
 
-                    <TextBlock Grid.ColumnSpan="2" Margin="0,0,0,10" FontSize="17" FontWeight="SemiBold" Foreground="{StaticResource TextBrush}" Text="IPv4 静态配置" />
+                    <TextBlock Grid.ColumnSpan="2" Margin="0,0,0,10" FontSize="17" FontWeight="SemiBold" Foreground="#17324D" Text="IPv4 静态配置" />
                     <TextBlock Grid.Row="1" VerticalAlignment="Center" Text="IP 地址" />
                     <TextBox x:Name="NetworkIpAddressTextBox" Grid.Row="1" Grid.Column="1" Margin="0,5" />
                     <TextBlock Grid.Row="2" VerticalAlignment="Center" Text="子网掩码" />
@@ -78,7 +78,7 @@
                 </Grid>
             </Border>
 
-            <Border Grid.Row="1" Grid.ColumnSpan="2" Margin="0,14,0,0" Padding="16" CornerRadius="12" Background="{StaticResource WarningFillBrush}" BorderBrush="{StaticResource WarningStrokeBrush}" BorderThickness="1">
+            <Border Grid.Row="1" Grid.ColumnSpan="2" Margin="0,14,0,0" Padding="16" CornerRadius="12" Background="#FFF7ED" BorderBrush="#FED7AA" BorderThickness="1">
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto" />
@@ -87,20 +87,26 @@
                 <StackPanel Grid.Column="0" Orientation="Horizontal">
                     <Button x:Name="ApplyStaticNetworkButton"
                             Width="150"
-                            Style="{StaticResource PrimaryButtonStyle}"
+                            Padding="12,8"
+                            Background="#2563EB"
+                            Foreground="White"
+                            BorderThickness="0"
                             Click="ApplyStaticNetworkButton_Click"
                             Content="应用静态 IP" />
                     <Button x:Name="EnableDhcpButton"
                             Width="150"
                             Margin="12,0,0,0"
-                            Style="{StaticResource NeutralButtonStyle}"
+                            Padding="12,8"
+                            Background="#334155"
+                            Foreground="White"
+                            BorderThickness="0"
                             Click="EnableDhcpButton_Click"
                             Content="恢复 DHCP" />
                 </StackPanel>
                 <TextBlock Grid.Column="1"
                            Margin="20,0,0,0"
                            VerticalAlignment="Center"
-                           Foreground="{StaticResource WarningBrush}"
+                           Foreground="#9A3412"
                            TextWrapping="Wrap"
                            Text="修改网络配置需要管理员权限，并可能立即中断当前连接。请确认 IP、掩码和网关属于同一网络后再应用。" />
                 </Grid>

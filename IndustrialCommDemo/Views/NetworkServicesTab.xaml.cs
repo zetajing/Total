@@ -191,7 +191,7 @@ namespace IndustrialCommDemo.Views
                 ApplyWebControls(configuration);
                 ApplyFtpControls(configuration);
                 EnsureNetworkConfigurationValid(configuration);
-                _ctx.SetHeaderStatus("当前网络服务 JSON 校验通过。", ThemeBrush.Success);
+                _ctx.SetHeaderStatus("当前网络服务 JSON 校验通过。", Brushes.ForestGreen);
             }
             catch (Exception ex) { _ctx.HandleError("网络服务 JSON 校验失败。", ex, true); }
         }
@@ -213,7 +213,7 @@ namespace IndustrialCommDemo.Views
                 MqttBrokerPasswordBox.Clear();
                 WebApiKeyPasswordBox.Clear();
                 FtpPasswordBox.Clear();
-                _ctx.SetHeaderStatus("已加载网络服务模板，保存后生效。", ThemeBrush.Warning);
+                _ctx.SetHeaderStatus("已加载网络服务模板，保存后生效。", Brushes.DarkGoldenrod);
             }
             catch (Exception ex) { _ctx.HandleError("加载网络服务模板失败。", ex, true); }
         }
@@ -273,7 +273,7 @@ namespace IndustrialCommDemo.Views
                 AttachBrokerEvents();
                 await RefreshMqttClientsAsync();
                 UpdateServiceStatuses();
-                _ctx.SetHeaderStatus("MQTT Broker 已启动", ThemeBrush.Success);
+                _ctx.SetHeaderStatus("MQTT Broker 已启动", Brushes.LightGreen);
             }
             catch (Exception ex)
             {
@@ -290,7 +290,7 @@ namespace IndustrialCommDemo.Views
                 await _ctx.NetworkServices.StopMqttAsync(CancellationToken.None);
                 MqttBrokerClientsDataGrid.ItemsSource = null;
                 UpdateServiceStatuses();
-                _ctx.SetHeaderStatus("MQTT Broker 已停止", ThemeBrush.Warning);
+                _ctx.SetHeaderStatus("MQTT Broker 已停止", Brushes.Khaki);
             }
             catch (Exception ex) { _ctx.HandleError("MQTT Broker 停止失败。", ex, false); }
         }
@@ -465,7 +465,7 @@ namespace IndustrialCommDemo.Views
         {
             var connected = _mqttClient != null && _mqttClient.IsConnected;
             MqttClientStatusTextBlock.Text = connected ? "已连接" : "未连接";
-            MqttClientStatusTextBlock.Foreground = connected ? ThemeBrush.Success : ThemeBrush.Danger;
+            MqttClientStatusTextBlock.Foreground = connected ? Brushes.ForestGreen : Brushes.IndianRed;
         }
 
         // Web gateway and HTTP client
@@ -502,7 +502,7 @@ namespace IndustrialCommDemo.Views
                 await _ctx.NetworkServices.StartWebGatewayAsync(CancellationToken.None);
                 AttachWebGatewayEvents();
                 UpdateServiceStatuses();
-                _ctx.SetHeaderStatus("WebAPI/WebSocket 网关已启动", ThemeBrush.Success);
+                _ctx.SetHeaderStatus("WebAPI/WebSocket 网关已启动", Brushes.LightGreen);
             }
             catch (Exception ex)
             {
@@ -520,7 +520,7 @@ namespace IndustrialCommDemo.Views
                 await _ctx.NetworkServices.StopWebGatewayAsync(CancellationToken.None);
                 UpdateServiceStatuses();
                 WebSocketSessionsDataGrid.ItemsSource = null;
-                _ctx.SetHeaderStatus("WebAPI/WebSocket 网关已停止", ThemeBrush.Warning);
+                _ctx.SetHeaderStatus("WebAPI/WebSocket 网关已停止", Brushes.Khaki);
             }
             catch (Exception ex) { _ctx.HandleError("Web 网关停止失败。", ex, false); }
         }
@@ -692,7 +692,7 @@ namespace IndustrialCommDemo.Views
         {
             var connected = _webSocketClient != null && _webSocketClient.IsConnected;
             WebSocketClientStatusTextBlock.Text = connected ? "已连接" : "未连接";
-            WebSocketClientStatusTextBlock.Foreground = connected ? ThemeBrush.Success : ThemeBrush.Danger;
+            WebSocketClientStatusTextBlock.Foreground = connected ? Brushes.ForestGreen : Brushes.IndianRed;
         }
 
         private void RefreshWebSocketSessionsButton_Click(object sender, RoutedEventArgs e)
@@ -737,7 +737,7 @@ namespace IndustrialCommDemo.Views
                 await _ctx.NetworkServices.ConnectFtpAsync(CancellationToken.None);
                 UpdateServiceStatuses();
                 await RefreshFtpListAsync();
-                _ctx.SetHeaderStatus("FTP/FTPS 已连接", ThemeBrush.Success);
+                _ctx.SetHeaderStatus("FTP/FTPS 已连接", Brushes.LightGreen);
             }
             catch (Exception ex)
             {
@@ -968,15 +968,15 @@ namespace IndustrialCommDemo.Views
         {
             var mqtt = _ctx.NetworkServices.IsMqttRunning;
             MqttBrokerStatusTextBlock.Text = mqtt ? "运行中" : "已停止";
-            MqttBrokerStatusTextBlock.Foreground = mqtt ? ThemeBrush.Success : ThemeBrush.Danger;
+            MqttBrokerStatusTextBlock.Foreground = mqtt ? Brushes.ForestGreen : Brushes.IndianRed;
 
             var web = _ctx.NetworkServices.IsWebGatewayRunning;
             WebGatewayStatusTextBlock.Text = web ? "网关运行中" : "网关已停止";
-            WebGatewayStatusTextBlock.Foreground = web ? ThemeBrush.Success : ThemeBrush.Danger;
+            WebGatewayStatusTextBlock.Foreground = web ? Brushes.ForestGreen : Brushes.IndianRed;
 
             var ftp = _ctx.NetworkServices.IsFtpConnected;
             FtpStatusTextBlock.Text = ftp ? "已连接" : "未连接";
-            FtpStatusTextBlock.Foreground = ftp ? ThemeBrush.Success : ThemeBrush.Danger;
+            FtpStatusTextBlock.Foreground = ftp ? Brushes.ForestGreen : Brushes.IndianRed;
         }
 
         private static Uri BuildWebEndpoint(string listenPrefix, string relativePath)

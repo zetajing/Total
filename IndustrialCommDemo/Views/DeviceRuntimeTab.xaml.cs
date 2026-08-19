@@ -95,17 +95,17 @@ namespace IndustrialCommDemo.Views
             try
             {
                 RuntimeStatusTextBlock.Text = actionName + "...";
-                RuntimeStatusTextBlock.Foreground = ThemeBrush.Warning;
+                RuntimeStatusTextBlock.Foreground = Brushes.DarkGoldenrod;
                 await action();
                 RuntimeStatusTextBlock.Text = actionName + "完成，共 " + _devices.Count + " 台启用设备。";
-                RuntimeStatusTextBlock.Foreground = ThemeBrush.Success;
-                _ctx.SetHeaderStatus(actionName + "完成", ThemeBrush.Success);
+                RuntimeStatusTextBlock.Foreground = Brushes.ForestGreen;
+                _ctx.SetHeaderStatus(actionName + "完成", Brushes.LightGreen);
                 _ctx.DemoLogger.Info(actionName + "完成。devices=" + _devices.Count);
             }
             catch (Exception ex)
             {
                 RuntimeStatusTextBlock.Text = actionName + "失败：" + ex.Message;
-                RuntimeStatusTextBlock.Foreground = ThemeBrush.Danger;
+                RuntimeStatusTextBlock.Foreground = Brushes.IndianRed;
                 _ctx.HandleError(actionName + "失败。", ex, true);
             }
             finally

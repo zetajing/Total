@@ -19,7 +19,7 @@ namespace IndustrialCommDemo.ViewModels
     {
         private IIndustrialClient _client;
         private string _statusText = "未连接";
-        private Brush _statusBrush = ThemeBrush.Danger;
+        private Brush _statusBrush = Brushes.IndianRed;
         private string _resultText = "等待中...";
         private string _capabilityText = "协议能力：连接后显示。";
         private string _deviceId;
@@ -138,7 +138,7 @@ namespace IndustrialCommDemo.ViewModels
                 OnAfterConnect();
                 RefreshCapabilityText();
                 UpdateStatus(true);
-                Ctx.SetHeaderStatus(ProtocolTag + " 已连接", ThemeBrush.Success);
+                Ctx.SetHeaderStatus(ProtocolTag + " 已连接", Brushes.LightGreen);
                 LogInfo(ProtocolTag + " 已连接。");
             }
             catch (Exception ex)
@@ -157,7 +157,7 @@ namespace IndustrialCommDemo.ViewModels
                 ResultText = "已断开。";
                 RefreshCapabilityText();
                 UpdateStatus(false);
-                Ctx.SetHeaderStatus(ProtocolTag + " 已断开", ThemeBrush.Warning);
+                Ctx.SetHeaderStatus(ProtocolTag + " 已断开", Brushes.Khaki);
                 LogInfo(ProtocolTag + " 已断开。");
             }
             catch (Exception ex)
@@ -176,7 +176,7 @@ namespace IndustrialCommDemo.ViewModels
                 ResultText = FormatHelper.FormatDataValue(result);
                 Ctx.QueueDatabaseValues(_client, new[] { result });
                 RememberCurrentAddress();
-                Ctx.SetHeaderStatus(ProtocolTag + " 读取完成", ThemeBrush.Success);
+                Ctx.SetHeaderStatus(ProtocolTag + " 读取完成", Brushes.LightGreen);
                 LogInfo(ProtocolTag + " 读取完成。");
             }
             catch (Exception ex)
@@ -194,7 +194,7 @@ namespace IndustrialCommDemo.ViewModels
                 await _client.WriteAsync(request, CancellationToken.None);
                 RememberCurrentAddress();
                 ResultText = string.Format("写入成功：{0} = {1}", request.Address, FormatHelper.FormatDisplayValue(request.Value));
-                Ctx.SetHeaderStatus(ProtocolTag + " 写入完成", ThemeBrush.Success);
+                Ctx.SetHeaderStatus(ProtocolTag + " 写入完成", Brushes.LightGreen);
                 LogInfo(ProtocolTag + " 写入完成。");
             }
             catch (Exception ex)
@@ -244,18 +244,18 @@ namespace IndustrialCommDemo.ViewModels
             if (!connected || _client == null)
             {
                 StatusText = "未连接";
-                StatusBrush = ThemeBrush.Danger;
+                StatusBrush = Brushes.IndianRed;
                 return;
             }
             if (_client.IsConnected)
             {
                 StatusText = "已连接";
-                StatusBrush = ThemeBrush.Success;
+                StatusBrush = Brushes.ForestGreen;
                 return;
             }
             var health = _client.GetHealth();
             StatusText = health?.Status.ToString() ?? "未连接";
-            StatusBrush = ThemeBrush.Warning;
+            StatusBrush = Brushes.DarkGoldenrod;
         }
 
         /// <summary>

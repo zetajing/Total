@@ -84,7 +84,7 @@ namespace IndustrialCommDemo
         public void HandleError(string summary, Exception exception, bool showDialog)
         {
             DemoLogger.Error(summary, exception);
-            SetHeaderStatus(summary, ThemeBrush.Danger);
+            SetHeaderStatus(summary, Brushes.OrangeRed);
             if (showDialog)
             {
                 var window = _getWindow();

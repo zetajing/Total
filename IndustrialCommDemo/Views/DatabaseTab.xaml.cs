@@ -144,15 +144,15 @@ namespace IndustrialCommDemo.Views
                 _ctx.DatabaseRecordingEnabled = 1;
                 _historyRows.Clear();
                 HistoryStatusTextBlock.Text = "正在读取最近的历史数据...";
-                HistoryStatusTextBlock.Foreground = ThemeBrush.Info;
+                HistoryStatusTextBlock.Foreground = Brushes.SteelBlue;
                 _historyCts = new CancellationTokenSource();
                 _historyTask = RefreshHistoryAsync(_managementStore, _historyCts.Token);
                 await RefreshFilterOptionsAsync();
                 await RefreshLatestAsync();
                 EnabledCheckBox.IsChecked = true;
                 StatusTextBlock.Text = "已连接，正在后台记录读取和轮询数据。";
-                StatusTextBlock.Foreground = ThemeBrush.Success;
-                _ctx.SetHeaderStatus("数据库记录已启用", ThemeBrush.Success);
+                StatusTextBlock.Foreground = Brushes.ForestGreen;
+                _ctx.SetHeaderStatus("数据库记录已启用", Brushes.LightGreen);
                 _ctx.DemoLogger.Info(settings.DisplayName + " 历史数据记录已启用，数据表=" + settings.TableName + "。");
             }
             catch (Exception ex)
@@ -162,7 +162,7 @@ namespace IndustrialCommDemo.Views
                 EnabledCheckBox.IsChecked = false;
                 _ctx.DatabaseRecordingEnabled = 0;
                 StatusTextBlock.Text = "连接失败：" + ex.Message;
-                StatusTextBlock.Foreground = ThemeBrush.Danger;
+                StatusTextBlock.Foreground = Brushes.IndianRed;
                 _ctx.HandleError("数据库连接失败。", ex, true);
             }
             finally
@@ -181,9 +181,9 @@ namespace IndustrialCommDemo.Views
                 await StopRecorderCoreAsync();
                 EnabledCheckBox.IsChecked = false;
                 StatusTextBlock.Text = "已停止";
-                StatusTextBlock.Foreground = ThemeBrush.Warning;
+                StatusTextBlock.Foreground = Brushes.DarkGoldenrod;
                 HistoryStatusTextBlock.Text = string.Format(CultureInfo.InvariantCulture, "刷新已停止，保留当前 {0} 条", _historyRows.Count);
-                HistoryStatusTextBlock.Foreground = ThemeBrush.Warning;
+                HistoryStatusTextBlock.Foreground = Brushes.DarkGoldenrod;
                 UpdateMetrics();
                 _ctx.DemoLogger.Info("数据库历史数据记录已停止。");
             }

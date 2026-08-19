@@ -55,12 +55,12 @@ namespace IndustrialCommDemo.Views
             try
             {
                 SaveConfigFiles();
-                SetStatus("配置已保存：" + _deviceConfigPath, ThemeBrush.Success);
+                SetStatus("配置已保存：" + _deviceConfigPath, Brushes.ForestGreen);
                 _ctx.DemoLogger.Info("JSON 配置已保存。devices=" + _deviceConfigPath + " points=" + _pointConfigPath);
             }
             catch (Exception ex)
             {
-                SetStatus("保存配置失败：" + ex.Message, ThemeBrush.Danger);
+                SetStatus("保存配置失败：" + ex.Message, Brushes.IndianRed);
                 _ctx.HandleError("保存 JSON 配置失败。", ex, true);
             }
         }
@@ -72,9 +72,9 @@ namespace IndustrialCommDemo.Views
             {
                 LoadDeviceForm();
                 LoadSelectedPointConfig();
-                SetStatus("已切换点位表：" + _pointConfigPath, ThemeBrush.Success);
+                SetStatus("已切换点位表：" + _pointConfigPath, Brushes.ForestGreen);
             }
-            catch (Exception ex) { SetStatus("切换设备失败：" + ex.Message, ThemeBrush.Danger); }
+            catch (Exception ex) { SetStatus("切换设备失败：" + ex.Message, Brushes.IndianRed); }
         }
 
         private void ProtocolComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -84,9 +84,9 @@ namespace IndustrialCommDemo.Views
             {
                 var provider = Sdk.Protocols.Get(GetSelectedProtocol());
                 SettingsJsonTextBox.Text = Sdk.Configuration.SerializeSettings(provider.CreateDefaultSettings());
-                SetStatus("已加载协议默认 settings，请应用到 JSON。", ThemeBrush.Warning);
+                SetStatus("已加载协议默认 settings，请应用到 JSON。", Brushes.DarkGoldenrod);
             }
-            catch (Exception ex) { SetStatus("加载协议 settings 失败：" + ex.Message, ThemeBrush.Danger); }
+            catch (Exception ex) { SetStatus("加载协议 settings 失败：" + ex.Message, Brushes.IndianRed); }
         }
 
         private void FormatSettingsButton_Click(object sender, RoutedEventArgs e)
@@ -95,7 +95,7 @@ namespace IndustrialCommDemo.Views
             {
                 var settings = Sdk.Configuration.ParseSettings(GetSelectedProtocol(), SettingsJsonTextBox.Text);
                 SettingsJsonTextBox.Text = Sdk.Configuration.SerializeSettings(settings);
-                SetStatus("协议 settings JSON 有效。", ThemeBrush.Success);
+                SetStatus("协议 settings JSON 有效。", Brushes.ForestGreen);
             }
             catch (Exception ex) { _ctx.HandleError("协议 settings JSON 无效。", ex, true); }
         }
@@ -132,7 +132,7 @@ namespace IndustrialCommDemo.Views
                 DeviceJsonTextBox.Text = Sdk.SerializeConfiguration(config);
                 RefreshDeviceList(config);
                 DeviceNameComboBox.SelectedItem = newName;
-                SetStatus("公共参数和 settings 已应用，请保存配置。", ThemeBrush.Success);
+                SetStatus("公共参数和 settings 已应用，请保存配置。", Brushes.ForestGreen);
             }
             catch (Exception ex) { _ctx.HandleError("应用设备参数失败。", ex, true); }
         }
@@ -160,7 +160,7 @@ namespace IndustrialCommDemo.Views
                 RefreshDeviceList(config);
                 DeviceNameComboBox.SelectedItem = name;
                 LoadDeviceForm();
-                SetStatus("已新增 " + name + "，请完善 settings 和点位文件后保存。", ThemeBrush.Success);
+                SetStatus("已新增 " + name + "，请完善 settings 和点位文件后保存。", Brushes.ForestGreen);
             }
             catch (Exception ex) { _ctx.HandleError("新增设备失败。", ex, true); }
         }
@@ -176,7 +176,7 @@ namespace IndustrialCommDemo.Views
                 DeviceJsonTextBox.Text = Sdk.SerializeConfiguration(config);
                 RefreshDeviceList(config);
                 LoadSelectedPointConfig(true, false);
-                SetStatus("已从配置中删除 " + name + "，保存后生效。", ThemeBrush.Warning);
+                SetStatus("已从配置中删除 " + name + "，保存后生效。", Brushes.DarkGoldenrod);
             }
             catch (Exception ex) { _ctx.HandleError("删除设备失败。", ex, true); }
         }
@@ -190,7 +190,7 @@ namespace IndustrialCommDemo.Views
                     PointJsonTextBox.Text,
                     _pointConfigPath);
                 if (!result.IsValid) throw new InvalidOperationException(result.ToDisplayText());
-                SetStatus("当前设备和点位 JSON 校验通过。", ThemeBrush.Success);
+                SetStatus("当前设备和点位 JSON 校验通过。", Brushes.ForestGreen);
             }
             catch (Exception ex) { _ctx.HandleError("JSON 配置校验失败。", ex, true); }
         }
@@ -204,7 +204,7 @@ namespace IndustrialCommDemo.Views
                     _pointConfigPath,
                     PointJsonTextBox.Text);
                 if (!result.IsValid) throw new InvalidOperationException(result.ToDisplayText());
-                SetStatus("四类 JSON 配置全部校验通过。", ThemeBrush.Success);
+                SetStatus("四类 JSON 配置全部校验通过。", Brushes.ForestGreen);
             }
             catch (Exception ex) { _ctx.HandleError("全部 JSON 配置校验失败。", ex, true); }
         }
@@ -220,7 +220,7 @@ namespace IndustrialCommDemo.Views
                 LoadDeviceForm();
                 _pointConfigPath = ResolveSelectedPointConfigPath();
                 LoadPointTemplateButton_Click(sender, e);
-                SetStatus("已加载设备和点位模板，保存后生效。", ThemeBrush.Warning);
+                SetStatus("已加载设备和点位模板，保存后生效。", Brushes.DarkGoldenrod);
             }
             catch (Exception ex) { _ctx.HandleError("加载设备模板失败。", ex, true); }
         }
@@ -231,7 +231,7 @@ namespace IndustrialCommDemo.Views
             {
                 PointJsonTextBox.Text = _jsonValidation.LoadTemplate(JsonConfigurationDocument.Points);
                 LoadPointRows();
-                SetStatus("已加载点位模板，保存后生效。", ThemeBrush.Warning);
+                SetStatus("已加载点位模板，保存后生效。", Brushes.DarkGoldenrod);
             }
             catch (Exception ex) { _ctx.HandleError("加载点位模板失败。", ex, true); }
         }
@@ -243,7 +243,7 @@ namespace IndustrialCommDemo.Views
                 using (var device = OpenConfiguredDevice())
                 {
                     var report = await device.Client.TestAsync();
-                    SetStatus(report.ToString(), report.IsSuccess ? ThemeBrush.Success : ThemeBrush.Danger);
+                    SetStatus(report.ToString(), report.IsSuccess ? Brushes.ForestGreen : Brushes.IndianRed);
                 }
             });
         }
@@ -281,8 +281,8 @@ namespace IndustrialCommDemo.Views
                             string.Format("批量读取完成，共 {0} 个点位，成功 {1}，失败 {2}。",
                                 _rows.Count, successCount, failureCount),
                             failureCount == 0
-                                ? ThemeBrush.Success
-                                : successCount == 0 ? ThemeBrush.Danger : ThemeBrush.Warning);
+                                ? Brushes.ForestGreen
+                                : successCount == 0 ? Brushes.IndianRed : Brushes.DarkGoldenrod);
                     }
                     finally { await device.DisconnectAsync(); }
                 }
@@ -339,8 +339,8 @@ namespace IndustrialCommDemo.Views
 
         private async Task RunAsync(string actionName, Func<Task> action)
         {
-            try { SetButtonsEnabled(false); SetStatus("正在执行：" + actionName + "...", ThemeBrush.Warning); await action(); }
-            catch (Exception ex) { SetStatus(actionName + "失败：" + ex.Message, ThemeBrush.Danger); _ctx.HandleError(actionName + "失败。", ex, true); }
+            try { SetButtonsEnabled(false); SetStatus("正在执行：" + actionName + "...", Brushes.DarkGoldenrod); await action(); }
+            catch (Exception ex) { SetStatus(actionName + "失败：" + ex.Message, Brushes.IndianRed); _ctx.HandleError(actionName + "失败。", ex, true); }
             finally { SetButtonsEnabled(true); }
         }
 

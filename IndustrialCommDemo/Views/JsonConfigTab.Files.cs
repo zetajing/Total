@@ -23,9 +23,9 @@ namespace IndustrialCommDemo.Views
                 RefreshDeviceList(config);
                 LoadSelectedPointConfig(true, false);
                 _rows.Clear();
-                SetStatus("已读取配置：" + _deviceConfigPath, ThemeBrush.Success);
+                SetStatus("已读取配置：" + _deviceConfigPath, Brushes.ForestGreen);
             }
-            catch (Exception ex) { SetStatus("读取配置失败：" + ex.Message, ThemeBrush.Danger); _ctx.HandleError("读取 JSON 配置失败。", ex, true); }
+            catch (Exception ex) { SetStatus("读取配置失败：" + ex.Message, Brushes.IndianRed); _ctx.HandleError("读取 JSON 配置失败。", ex, true); }
         }
 
         private string ResolveSelectedPointConfigPath()

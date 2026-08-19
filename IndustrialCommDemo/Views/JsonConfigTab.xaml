@@ -76,7 +76,7 @@
                                     <Button Margin="4" Click="AddDeviceButton_Click" Content="新增设备" />
                                     <Button Margin="4" Click="DeleteDeviceButton_Click" Content="删除设备" />
                                     <Button Margin="4" Click="FormatSettingsButton_Click" Content="格式化 settings" />
-                                    <Button Margin="4" Style="{StaticResource PrimaryButtonStyle}" Click="ApplyDeviceFormButton_Click" Content="应用到 JSON" />
+                                    <Button Margin="4" Background="#2563EB" Foreground="White" Click="ApplyDeviceFormButton_Click" Content="应用到 JSON" />
                                 </WrapPanel>
                             </Grid>
                         </ScrollViewer>
@@ -132,7 +132,7 @@
                 <RowDefinition Height="*" />
             </Grid.RowDefinitions>
 
-            <Border Padding="16" CornerRadius="12" Background="{StaticResource PanelBrush}" BorderBrush="{StaticResource PanelStrokeBrush}" BorderThickness="1">
+            <Border Padding="16" CornerRadius="12" Background="#F8FAFC" BorderBrush="#D8E2EE" BorderThickness="1">
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="90" />
@@ -144,7 +144,7 @@
                         <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
 
-                    <TextBlock Grid.ColumnSpan="2" Margin="0,0,0,10" FontSize="17" FontWeight="SemiBold" Foreground="{StaticResource TextBrush}" Text="JSON 快速部署示例" />
+                    <TextBlock Grid.ColumnSpan="2" Margin="0,0,0,10" FontSize="17" FontWeight="SemiBold" Foreground="#17324D" Text="JSON 快速部署示例" />
                     <TextBlock Grid.Row="1" VerticalAlignment="Center" Text="设备" />
                     <ComboBox x:Name="DeviceNameComboBox"
                              Grid.Row="1"
@@ -158,14 +158,14 @@
                         <Button Width="100" Margin="0,0,8,8" Click="ValidateAllConfigButton_Click" Content="校验全部" />
                         <Button Width="100" Margin="0,0,8,8" Click="LoadDeviceTemplateButton_Click" Content="设备模板" />
                         <Button Width="100" Margin="0,0,8,8" Click="LoadPointTemplateButton_Click" Content="点位模板" />
-                        <Button Width="100" Margin="0,0,8,8" Style="{StaticResource PrimaryButtonStyle}" Click="TestConnectionButton_Click" Content="测试连接" />
-                        <Button Width="100" Margin="0,0,8,8" Style="{StaticResource PrimaryButtonStyle}" Click="ReadPointsButton_Click" Content="批量读取" />
+                        <Button Width="100" Margin="0,0,8,8" Background="#2563EB" Foreground="White" BorderThickness="0" Click="TestConnectionButton_Click" Content="测试连接" />
+                        <Button Width="100" Margin="0,0,8,8" Background="#0F766E" Foreground="White" BorderThickness="0" Click="ReadPointsButton_Click" Content="批量读取" />
                     </WrapPanel>
                 </Grid>
             </Border>
 
-            <Border Grid.Row="1" Margin="0,12,0,0" Padding="14" CornerRadius="12" Background="{StaticResource InfoFillBrush}" BorderBrush="{StaticResource InfoStrokeBrush}" BorderThickness="1">
-                <TextBlock x:Name="JsonConfigStatusTextBlock" Foreground="{StaticResource TextBrush}" TextWrapping="Wrap" Text="修改左侧 JSON 后，可直接测试连接或批量读取。" />
+            <Border Grid.Row="1" Margin="0,12,0,0" Padding="14" CornerRadius="12" Background="#EEF6FF" BorderBrush="#BBD7F0" BorderThickness="1">
+                <TextBlock x:Name="JsonConfigStatusTextBlock" Foreground="#17324D" TextWrapping="Wrap" Text="修改左侧 JSON 后，可直接测试连接或批量读取。" />
             </Border>
 
             <DataGrid x:Name="JsonReadResultGrid"

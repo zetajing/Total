@@ -9,7 +9,7 @@
                 <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
 
-            <Border Padding="18" CornerRadius="14" Background="{StaticResource PanelBrush}" BorderBrush="{StaticResource PanelStrokeBrush}" BorderThickness="1">
+            <Border Padding="18" CornerRadius="14" Background="#F8FAFC" BorderBrush="#D8E2EE" BorderThickness="1">
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="140" />
@@ -21,7 +21,7 @@
                         <RowDefinition Height="Auto" /><RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
 
-                    <TextBlock Grid.ColumnSpan="2" Margin="0,0,0,12" FontSize="18" FontWeight="SemiBold" Foreground="{StaticResource TextBrush}" Text="数据库历史数据" />
+                    <TextBlock Grid.ColumnSpan="2" Margin="0,0,0,12" FontSize="18" FontWeight="SemiBold" Foreground="#17324D" Text="数据库历史数据" />
 
                     <TextBlock Grid.Row="1" VerticalAlignment="Center" Text="数据库类型" />
                     <ComboBox x:Name="DatabaseProviderComboBox" Grid.Row="1" Grid.Column="1" Margin="0,6"
@@ -39,36 +39,36 @@
                               Focusable="False" IsHitTestVisible="False"
                               Content="保存 Modbus / S7 / MC 的读取和轮询结果" />
                     <TextBlock x:Name="ProviderHintTextBlock" Grid.Row="5" Grid.Column="1" Margin="0,2,0,0"
-                               Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap"
+                               Foreground="#64748B" TextWrapping="Wrap"
                                Text="SQL Server 使用 schema.table；建议使用 Windows 身份验证。" />
                 </Grid>
             </Border>
 
             <StackPanel Grid.Row="1" Margin="0,16,0,0" Orientation="Horizontal">
-                <Button x:Name="StartButton" Width="150" Style="{StaticResource PrimaryButtonStyle}"
+                <Button x:Name="StartButton" Width="150" Padding="12,8" Background="#2563EB" Foreground="White" BorderThickness="0"
                         Click="StartButton_Click" Content="测试并启用" />
-                <Button x:Name="StopButton" Width="110" Margin="10,0,0,0" Style="{StaticResource NeutralButtonStyle}"
+                <Button x:Name="StopButton" Width="110" Margin="10,0,0,0" Padding="12,8" Background="#E2E8F0" BorderBrush="#CBD5E1"
                         Click="StopButton_Click" Content="停止记录" />
             </StackPanel>
 
-            <Border Grid.Row="2" Margin="0,16,0,0" Padding="14" CornerRadius="12" Background="{StaticResource InfoFillBrush}" BorderBrush="{StaticResource InfoStrokeBrush}" BorderThickness="1">
+            <Border Grid.Row="2" Margin="0,16,0,0" Padding="14" CornerRadius="12" Background="#EFF6FF" BorderBrush="#BFDBFE" BorderThickness="1">
                 <StackPanel>
-                    <TextBlock FontWeight="SemiBold" Foreground="{StaticResource InfoBrush}" Text="状态" />
-                    <TextBlock x:Name="StatusTextBlock" Margin="0,6,0,0" Foreground="{StaticResource TextSecondaryBrush}" Text="未启用" />
-                    <TextBlock x:Name="MetricsTextBlock" Margin="0,6,0,0" Foreground="{StaticResource TextSecondaryBrush}" Text="队列 0 · 已接收 0 · 已写入 0 · 丢弃 0 · 失败 0" />
+                    <TextBlock FontWeight="SemiBold" Foreground="#1E3A5F" Text="状态" />
+                    <TextBlock x:Name="StatusTextBlock" Margin="0,6,0,0" Foreground="#475569" Text="未启用" />
+                    <TextBlock x:Name="MetricsTextBlock" Margin="0,6,0,0" Foreground="#475569" Text="队列 0 · 已接收 0 · 已写入 0 · 丢弃 0 · 失败 0" />
                 </StackPanel>
             </Border>
 
             <TabControl Grid.Row="3" Margin="0,16,0,0">
                 <TabItem Header="实时流水">
-                    <Border Padding="14" Background="{StaticResource CardBrush}" BorderBrush="{StaticResource PanelStrokeBrush}" BorderThickness="1">
+                    <Border Padding="14" Background="#FFFFFF" BorderBrush="#D8E2EE" BorderThickness="1">
                         <Grid>
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="Auto" /><RowDefinition Height="Auto" />
                             </Grid.RowDefinitions>
                             <DockPanel Margin="0,0,0,10">
-                                <TextBlock DockPanel.Dock="Left" FontSize="16" FontWeight="SemiBold" Foreground="{StaticResource TextBrush}" Text="实时历史数据" />
-                                <TextBlock x:Name="HistoryStatusTextBlock" DockPanel.Dock="Right" HorizontalAlignment="Right" Foreground="{StaticResource MutedBrush}" Text="连接数据库后自动刷新" />
+                                <TextBlock DockPanel.Dock="Left" FontSize="16" FontWeight="SemiBold" Foreground="#17324D" Text="实时历史数据" />
+                                <TextBlock x:Name="HistoryStatusTextBlock" DockPanel.Dock="Right" HorizontalAlignment="Right" Foreground="#64748B" Text="连接数据库后自动刷新" />
                             </DockPanel>
                             <DataGrid x:Name="HistoryDataGrid" Grid.Row="1" Height="340" AutoGenerateColumns="False"
                                       CanUserAddRows="False" CanUserDeleteRows="False" EnableRowVirtualization="True"
@@ -136,7 +136,7 @@
                 </TabItem>
             </TabControl>
 
-            <TextBlock Grid.Row="4" Margin="0,14,0,0" Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap"
+            <TextBlock Grid.Row="4" Margin="0,14,0,0" Foreground="#64748B" TextWrapping="Wrap"
                        Text="数据库只负责历史记录，不参与实时控制。实时流水、最新值和历史管理互不影响；删除与保留期清理均需要确认。" />
         </Grid>
     </ScrollViewer>

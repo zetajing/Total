@@ -58,7 +58,7 @@ namespace IndustrialCommDemo.Views
                             _ctx.DemoLogger.Error("数据库实时表格刷新失败，将自动重试。", ex);
                             errorLogged = true;
                         }
-                        _ctx.RunOnUi(() => { HistoryStatusTextBlock.Text = "刷新失败，将自动重试：" + ex.Message; HistoryStatusTextBlock.Foreground = ThemeBrush.Danger; });
+                        _ctx.RunOnUi(() => { HistoryStatusTextBlock.Text = "刷新失败，将自动重试：" + ex.Message; HistoryStatusTextBlock.Foreground = Brushes.IndianRed; });
                         await Task.Delay(TimeSpan.FromSeconds(2), ct).ConfigureAwait(false);
                     }
                 }
@@ -83,7 +83,7 @@ namespace IndustrialCommDemo.Views
         private void UpdateHistoryStatus()
         {
             HistoryStatusTextBlock.Text = string.Format(System.Globalization.CultureInfo.InvariantCulture, "已显示 {0} 条 · {1}", _historyRows.Count, DateTime.Now.ToString("HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture));
-            HistoryStatusTextBlock.Foreground = ThemeBrush.Success;
+            HistoryStatusTextBlock.Foreground = Brushes.ForestGreen;
         }
 
         private void UpdateMetrics()

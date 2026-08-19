@@ -29,30 +29,30 @@
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
-                    <TextBlock Grid.Row="0" Grid.Column="0" Style="{StaticResource FieldLabelStyle}" Text="设备 ID" />
+                    <TextBlock Grid.Row="0" Grid.Column="0" Margin="0,8" VerticalAlignment="Center" Text="设备 ID" />
                     <TextBox x:Name="S7DeviceIdTextBox" Grid.Row="0" Grid.Column="1" Margin="0,6,0,6" Text="s7-1" />
-                    <TextBlock Grid.Row="1" Grid.Column="0" Style="{StaticResource FieldLabelStyle}" Text="主机" />
+                    <TextBlock Grid.Row="1" Grid.Column="0" Margin="0,8" VerticalAlignment="Center" Text="主机" />
                     <TextBox x:Name="S7HostTextBox" Grid.Row="1" Grid.Column="1" Margin="0,6,0,6" Text="127.0.0.1" />
-                    <TextBlock Grid.Row="2" Grid.Column="0" Style="{StaticResource FieldLabelStyle}" Text="CPU 型号" />
+                    <TextBlock Grid.Row="2" Grid.Column="0" Margin="0,8" VerticalAlignment="Center" Text="CPU 型号" />
                     <ComboBox x:Name="S7CpuTypeComboBox" Grid.Row="2" Grid.Column="1" Margin="0,6,0,6"
                               SelectionChanged="CpuTypeComboBox_SelectionChanged" />
-                    <TextBlock Grid.Row="3" Grid.Column="0" Style="{StaticResource FieldLabelStyle}" Text="机架" />
+                    <TextBlock Grid.Row="3" Grid.Column="0" Margin="0,8" VerticalAlignment="Center" Text="机架" />
                     <TextBox x:Name="S7RackTextBox" Grid.Row="3" Grid.Column="1" Margin="0,6,0,6" Text="0" />
-                    <TextBlock Grid.Row="4" Grid.Column="0" Style="{StaticResource FieldLabelStyle}" Text="槽位" />
+                    <TextBlock Grid.Row="4" Grid.Column="0" Margin="0,8" VerticalAlignment="Center" Text="槽位" />
                     <TextBox x:Name="S7SlotTextBox" Grid.Row="4" Grid.Column="1" Margin="0,6,0,6" Text="1" />
                     <TextBlock Grid.Row="5" Grid.Column="0" Margin="0,8" VerticalAlignment="Top" Text="示例" />
-                    <TextBlock Grid.Row="5" Grid.Column="1" Margin="0,8,0,0" TextWrapping="Wrap" Foreground="{StaticResource TextSecondaryBrush}"
+                    <TextBlock Grid.Row="5" Grid.Column="1" Margin="0,8,0,0" TextWrapping="Wrap" Foreground="#5B6F82"
                                Text="DB1.DBX0.1, DINT %DB200.DBD6, REAL %DB200.DBD10, LREAL P#DB200.DBX20.0" />
                     <Border Grid.Row="6" Grid.ColumnSpan="2" Margin="0,10,0,0" Padding="10" CornerRadius="10"
-                            Background="{StaticResource PanelBrush}" BorderBrush="{StaticResource PanelStrokeBrush}" BorderThickness="1">
-                        <TextBlock x:Name="CapabilityTextBlock" TextWrapping="Wrap" Foreground="{StaticResource TextSecondaryBrush}"
+                            Background="#F8FAFC" BorderBrush="#D8E2EE" BorderThickness="1">
+                        <TextBlock x:Name="CapabilityTextBlock" TextWrapping="Wrap" Foreground="#475569"
                                    Text="协议能力：等待初始化。" />
                     </Border>
                     <StackPanel Grid.Row="7" Grid.ColumnSpan="2" Orientation="Horizontal" Margin="0,16,0,0">
-                        <Button Width="120" Margin="0,0,12,0" Style="{StaticResource PrimaryButtonStyle}" Click="ConnectButton_Click" Content="连接" />
-                        <Button Width="120" Margin="0,0,12,0" Style="{StaticResource NeutralButtonStyle}" Click="DisconnectButton_Click" Content="断开" />
+                        <Button Width="120" Margin="0,0,12,0" Padding="10" Background="#1D4ED8" Foreground="White" BorderThickness="0" Click="ConnectButton_Click" Content="连接" />
+                        <Button Width="120" Margin="0,0,12,0" Padding="10" Background="#334155" Foreground="White" BorderThickness="0" Click="DisconnectButton_Click" Content="断开" />
                         <TextBlock Margin="8,0,0,0" VerticalAlignment="Center" FontWeight="SemiBold" Text="状态：" />
-                        <TextBlock x:Name="StatusTextBlock" Margin="8,0,0,0" VerticalAlignment="Center" Foreground="{StaticResource SuccessBrush}" Text="未连接" />
+                        <TextBlock x:Name="StatusTextBlock" Margin="8,0,0,0" VerticalAlignment="Center" Foreground="#0F766E" Text="未连接" />
                     </StackPanel>
                 </Grid>
             </GroupBox>
@@ -71,30 +71,30 @@
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
-                    <TextBlock Grid.Row="0" Grid.Column="0" Style="{StaticResource FieldLabelStyle}" Text="地址" />
+                    <TextBlock Grid.Row="0" Grid.Column="0" Margin="0,8" VerticalAlignment="Center" Text="地址" />
                     <StackPanel Grid.Row="0" Grid.Column="1">
                         <TextBox x:Name="S7AddressTextBox" Margin="0,6,0,6" Text="DB1.DBW0" TextChanged="AddressTextBox_TextChanged" />
                         <ComboBox x:Name="S7AddressHistoryComboBox" Margin="0,0,0,6" SelectionChanged="AddressHistoryComboBox_SelectionChanged" />
                     </StackPanel>
-                    <TextBlock Grid.Row="1" Grid.Column="0" Style="{StaticResource FieldLabelStyle}" Text="数据类型" />
+                    <TextBlock Grid.Row="1" Grid.Column="0" Margin="0,8" VerticalAlignment="Center" Text="数据类型" />
                     <ComboBox x:Name="S7DataTypeComboBox" Grid.Row="1" Grid.Column="1" Margin="0,6,0,6" SelectedIndex="1" SelectionChanged="DataTypeComboBox_SelectionChanged">
                         <ComboBoxItem Content="Bool" /><ComboBoxItem Content="Byte" /><ComboBoxItem Content="Char" />
                         <ComboBoxItem Content="Int16" /><ComboBoxItem Content="UInt16" /><ComboBoxItem Content="Int32" />
                         <ComboBoxItem Content="UInt32" /><ComboBoxItem Content="Float" /><ComboBoxItem Content="Double" />
                         <ComboBoxItem Content="String" /><ComboBoxItem Content="ByteArray" />
                     </ComboBox>
-                    <TextBlock Grid.Row="2" Grid.Column="0" Style="{StaticResource FieldLabelStyle}" Text="长度" />
+                    <TextBlock Grid.Row="2" Grid.Column="0" Margin="0,8" VerticalAlignment="Center" Text="长度" />
                     <TextBox x:Name="S7LengthTextBox" Grid.Row="2" Grid.Column="1" Margin="0,6,0,6" Text="1" />
-                    <TextBlock Grid.Row="3" Grid.Column="0" Style="{StaticResource FieldLabelStyle}" Text="写入值" />
+                    <TextBlock Grid.Row="3" Grid.Column="0" Margin="0,8" VerticalAlignment="Center" Text="写入值" />
                     <TextBox x:Name="S7WriteValueTextBox" Grid.Row="3" Grid.Column="1" Margin="0,6,0,6" Text="123" />
                     <UniformGrid Grid.Row="4" Grid.ColumnSpan="2" Margin="0,14,0,0" Columns="2">
-                        <Button Margin="0,0,8,8" Style="{StaticResource PrimaryButtonStyle}" Click="ReadButton_Click" Content="读取" />
-                        <Button Margin="8,0,0,8" Style="{StaticResource PrimaryButtonStyle}" Click="WriteButton_Click" Content="写入" />
+                        <Button Margin="0,0,8,8" Padding="10" Background="#0891B2" Foreground="White" BorderThickness="0" Click="ReadButton_Click" Content="读取" />
+                        <Button Margin="8,0,0,8" Padding="10" Background="#059669" Foreground="White" BorderThickness="0" Click="WriteButton_Click" Content="写入" />
                     </UniformGrid>
-                    <Border Grid.Row="5" Grid.ColumnSpan="2" Margin="0,12,0,0" Padding="12" CornerRadius="12" Background="{StaticResource PanelBrush}" BorderBrush="{StaticResource PanelStrokeBrush}" BorderThickness="1">
+                    <Border Grid.Row="5" Grid.ColumnSpan="2" Margin="0,12,0,0" Padding="12" CornerRadius="12" Background="#F8FAFC" BorderBrush="#D8E2EE" BorderThickness="1">
                         <StackPanel>
-                            <TextBlock FontWeight="SemiBold" Foreground="{StaticResource TextBrush}" Text="结果" />
-                            <TextBlock x:Name="ResultTextBlock" Margin="0,8,0,0" TextWrapping="Wrap" Foreground="{StaticResource TextBrush}" Text="等待中..." />
+                            <TextBlock FontWeight="SemiBold" Foreground="#17324D" Text="结果" />
+                            <TextBlock x:Name="ResultTextBlock" Margin="0,8,0,0" TextWrapping="Wrap" Foreground="#334155" Text="等待中..." />
                         </StackPanel>
                     </Border>
                 </Grid>
@@ -112,23 +112,23 @@
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
-                    <TextBlock Grid.Row="0" Grid.Column="0" Style="{StaticResource FieldLabelStyle}" Text="字符串地址" />
+                    <TextBlock Grid.Row="0" Grid.Column="0" Margin="0,8" VerticalAlignment="Center" Text="字符串地址" />
                     <TextBox x:Name="S7NativeStringAddressTextBox" Grid.Row="0" Grid.Column="1" Margin="0,6,0,6"
                              Text="DB2000.DBX6.0" />
-                    <TextBlock Grid.Row="1" Grid.Column="0" Style="{StaticResource FieldLabelStyle}" Text="STRING 最大长度 n" />
+                    <TextBlock Grid.Row="1" Grid.Column="0" Margin="0,8" VerticalAlignment="Center" Text="STRING 最大长度 n" />
                     <TextBox x:Name="S7NativeStringLengthTextBox" Grid.Row="1" Grid.Column="1" Margin="0,6,0,6"
                              Text="60" />
-                    <TextBlock Grid.Row="2" Grid.ColumnSpan="2" Margin="0,4,0,8" TextWrapping="Wrap" Foreground="{StaticResource TextSecondaryBrush}"
+                    <TextBlock Grid.Row="2" Grid.ColumnSpan="2" Margin="0,4,0,8" TextWrapping="Wrap" Foreground="#5B6F82"
                                Text="地址填写 STRING 头部的绝对字节地址，例如 DB2000.DBX6.0；DBX 后面的位必须是 0。n 填博图中的 STRING[n] 最大字符数。" />
                     <StackPanel Grid.Row="3" Grid.ColumnSpan="2">
-                        <Button Width="170" HorizontalAlignment="Left" Margin="0,4,0,10"
-                                Style="{StaticResource PrimaryButtonStyle}"
+                        <Button Width="170" HorizontalAlignment="Left" Margin="0,4,0,10" Padding="10"
+                                Background="#7C3AED" Foreground="White" BorderThickness="0"
                                 Click="ReadNativeStringButton_Click" Content="读取 STRING[n]" />
-                        <Border Padding="12" CornerRadius="12" Background="{StaticResource PanelBrush}" BorderBrush="{StaticResource PanelStrokeBrush}" BorderThickness="1">
+                        <Border Padding="12" CornerRadius="12" Background="#F8FAFC" BorderBrush="#D8E2EE" BorderThickness="1">
                             <StackPanel>
-                                <TextBlock FontWeight="SemiBold" Foreground="{StaticResource TextBrush}" Text="STRING 结果" />
+                                <TextBlock FontWeight="SemiBold" Foreground="#17324D" Text="STRING 结果" />
                                 <TextBlock x:Name="NativeStringResultTextBlock" Margin="0,8,0,0" TextWrapping="Wrap"
-                                           Foreground="{StaticResource TextBrush}" Text="等待读取..." />
+                                           Foreground="#334155" Text="等待读取..." />
                             </StackPanel>
                         </Border>
                     </StackPanel>
@@ -150,13 +150,13 @@
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
-                    <TextBlock Grid.Row="0" Grid.Column="0" Style="{StaticResource FieldLabelStyle}" Text="监听地址" />
+                    <TextBlock Grid.Row="0" Grid.Column="0" Margin="0,8" VerticalAlignment="Center" Text="监听地址" />
                     <TextBox x:Name="Snap7ServerAddressTextBox" Grid.Row="0" Grid.Column="1" Margin="0,6,0,6" Text="0.0.0.0" />
-                    <TextBlock Grid.Row="1" Grid.Column="0" Style="{StaticResource FieldLabelStyle}" Text="端口（S7 默认）" />
+                    <TextBlock Grid.Row="1" Grid.Column="0" Margin="0,8" VerticalAlignment="Center" Text="端口（S7 默认）" />
                     <TextBox x:Name="Snap7ServerPortTextBox" Grid.Row="1" Grid.Column="1" Margin="0,6,0,6" IsReadOnly="True" Text="102" />
-                    <TextBlock Grid.Row="2" Grid.Column="0" Style="{StaticResource FieldLabelStyle}" Text="DB1.DBD8 REAL" />
+                    <TextBlock Grid.Row="2" Grid.Column="0" Margin="0,8" VerticalAlignment="Center" Text="DB1.DBD8 REAL" />
                     <TextBox x:Name="Snap7ServerFloatTextBox" Grid.Row="2" Grid.Column="1" Margin="0,6,0,6" Text="10.0" />
-                    <TextBlock Grid.Row="3" Grid.Column="0" Style="{StaticResource FieldLabelStyle}" Text="DB1.DBX0.0 BOOL" />
+                    <TextBlock Grid.Row="3" Grid.Column="0" Margin="0,8" VerticalAlignment="Center" Text="DB1.DBX0.0 BOOL" />
                     <CheckBox x:Name="Snap7ServerBoolCheckBox" Grid.Row="3" Grid.Column="1" Margin="0,8,0,8" IsChecked="True" Content="TRUE" />
                     <TextBlock Grid.Row="4" Grid.Column="0" Margin="0,8" VerticalAlignment="Top" Text="额外点位" />
                     <TextBox x:Name="Snap7ServerPointsTextBox" Grid.Row="4" Grid.Column="1" Margin="0,6,0,6"
@@ -164,14 +164,14 @@
                              ToolTip="每行一个点位，例如 REAL DB1.DBD12=20.0、INT DB1.DBW2=1500 或 BOOL DB1.DBX0.1=false。也可以省略类型。"
                              Text="INT DB1.DBW2=1500&#x0A;DINT DB1.DBD4=123456&#x0A;REAL DB1.DBD12=20.0&#x0A;REAL DB1.DBD16=30.0&#x0A;BOOL DB1.DBX0.1=false&#x0A;BOOL DB1.DBX0.2=true" />
                     <StackPanel Grid.Row="5" Grid.ColumnSpan="2" Orientation="Horizontal" Margin="0,10,0,0">
-                        <Button Width="150" Margin="0,0,12,0" Style="{StaticResource SuccessButtonStyle}"
+                        <Button Width="150" Margin="0,0,12,0" Padding="10" Background="#7C3AED" Foreground="White" BorderThickness="0"
                                 Click="StartSnap7ServerButton_Click" Content="启动虚拟 PLC" />
-                        <Button Width="150" Margin="0,0,12,0" Style="{StaticResource NeutralButtonStyle}"
+                        <Button Width="150" Margin="0,0,12,0" Padding="10" Background="#334155" Foreground="White" BorderThickness="0"
                                 Click="StopSnap7ServerButton_Click" Content="停止虚拟 PLC" />
                         <TextBlock Margin="8,0,0,0" VerticalAlignment="Center" FontWeight="SemiBold" Text="状态：" />
-                        <TextBlock x:Name="Snap7ServerStatusTextBlock" Margin="8,0,0,0" VerticalAlignment="Center" Foreground="{StaticResource MutedBrush}" Text="未启动" />
+                        <TextBlock x:Name="Snap7ServerStatusTextBlock" Margin="8,0,0,0" VerticalAlignment="Center" Foreground="#64748B" Text="未启动" />
                     </StackPanel>
-                    <TextBlock Grid.Row="6" Grid.ColumnSpan="2" Margin="0,12,0,0" TextWrapping="Wrap" Foreground="{StaticResource TextSecondaryBrush}"
+                    <TextBlock Grid.Row="6" Grid.ColumnSpan="2" Margin="0,12,0,0" TextWrapping="Wrap" Foreground="#5B6F82"
                                Text="启动后，S7demo 连接 127.0.0.1，机架 0、槽位 1；快捷点位加上方列表中的点位都会写入 DB1。该服务只模拟 S7 数据通信，不执行 PLC 程序。" />
                 </Grid>
             </GroupBox>
