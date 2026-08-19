@@ -11,7 +11,7 @@ using IndustrialCommSdk.Exceptions;
 using IndustrialCommSdk.Runtime;
 using IndustrialCommSdk.Runtime.Polling;
 using IndustrialCommSdk.Protocols.Common;
-using Modbus.Device;
+using NModbus;
 
 namespace IndustrialCommSdk.Protocols.Modbus
 {
@@ -50,7 +50,7 @@ namespace IndustrialCommSdk.Protocols.Modbus
         }
 
         /// <summary>获取当前活跃的 NModbus 主站实例。子类在连接后赋值，断开后置 null。</summary>
-        protected abstract ModbusMaster Master { get; }
+        protected abstract IModbusMaster Master { get; }
 
         /// <summary>从 Modbus 设备读取数据的核心异步方法。</summary>
         protected override async Task<DataValue> ReadCoreAsync(ReadRequest request, CancellationToken cancellationToken)

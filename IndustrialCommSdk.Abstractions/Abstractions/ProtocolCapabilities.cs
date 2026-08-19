@@ -31,7 +31,8 @@ namespace IndustrialCommSdk.Abstractions
             int maxPduBytes = 0,
             TimeSpan? recommendedMinPollingInterval = null,
             TimeSpan? defaultOperationTimeout = null,
-            IReadOnlyDictionary<string, string> extensions = null)
+            IReadOnlyDictionary<string, string> extensions = null,
+            bool supportsNativeSubscriptions = false)
         {
             if (string.IsNullOrWhiteSpace(displayName)) throw new ArgumentException("Display name cannot be null or empty.", nameof(displayName));
             if (maxReadItems <= 0) throw new ArgumentOutOfRangeException(nameof(maxReadItems));
@@ -56,6 +57,7 @@ namespace IndustrialCommSdk.Abstractions
             SupportsRawTransport = supportsRawTransport;
             SupportsConnectionDiagnostics = supportsConnectionDiagnostics;
             SupportsNativeAsync = supportsNativeAsync;
+            SupportsNativeSubscriptions = supportsNativeSubscriptions;
             MaxReadItems = maxReadItems;
             MaxWriteItems = maxWriteItems;
             MaxAddressSpan = maxAddressSpan;
@@ -80,6 +82,7 @@ namespace IndustrialCommSdk.Abstractions
         public bool SupportsRawTransport { get; private set; }
         public bool SupportsConnectionDiagnostics { get; private set; }
         public bool SupportsNativeAsync { get; private set; }
+        public bool SupportsNativeSubscriptions { get; private set; }
         public int MaxReadItems { get; private set; }
         public int MaxWriteItems { get; private set; }
         public int MaxAddressSpan { get; private set; }
@@ -172,7 +175,8 @@ namespace IndustrialCommSdk.Abstractions
                         maxReadItems: 1000,
                         maxWriteItems: 1000,
                         maxAddressSpan: int.MaxValue,
-                        recommendedMinPollingInterval: TimeSpan.FromMilliseconds(100));
+                        recommendedMinPollingInterval: TimeSpan.FromMilliseconds(100),
+                        supportsNativeSubscriptions: true);
 
                 case ProtocolKind.Mqtt:
                     return new ProtocolCapabilities(kind, "MQTT",

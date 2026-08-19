@@ -63,6 +63,25 @@ namespace IndustrialCommSdk.Abstractions
     }
 
     /// <summary>
+    /// Optional protocol extension for subscriptions backed by the protocol's native event stream.
+    /// Clients that do not implement this interface continue to use the shared polling scheduler.
+    /// </summary>
+    public interface INativeSubscriptionClient
+    {
+        /// <summary>Creates a native subscription for the requested addresses.</summary>
+        Task<string> SubscribeNativeAsync(
+            SubscriptionRequest request,
+            EventHandler<SubscriptionEvent> handler,
+            CancellationToken cancellationToken);
+
+        /// <summary>
+        /// Attempts to remove a native subscription. Returns false when the identifier belongs to
+        /// the polling scheduler and should be handled by the caller's fallback path.
+        /// </summary>
+        Task<bool> TryUnsubscribeNativeAsync(string subscriptionId, CancellationToken cancellationToken);
+    }
+
+    /// <summary>
     /// 将用户输入的协议地址字符串解析为协议专用地址对象的接口。
     /// </summary>
     public interface IAddressParser

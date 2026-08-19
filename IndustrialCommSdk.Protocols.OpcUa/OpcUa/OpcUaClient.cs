@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
@@ -17,6 +18,9 @@ using UaDataValue = Opc.Ua.DataValue;
 using DataValue = IndustrialCommSdk.Abstractions.DataValue;
 using ReadRequest = IndustrialCommSdk.Abstractions.ReadRequest;
 using WriteRequest = IndustrialCommSdk.Abstractions.WriteRequest;
+using UaMonitoredItem = Opc.Ua.Client.MonitoredItem;
+using UaSubscription = Opc.Ua.Client.Subscription;
+using UaMonitoredItemNotificationEventArgs = Opc.Ua.Client.MonitoredItemNotificationEventArgs;
 
 namespace IndustrialCommSdk.Protocols.OpcUa
 {
@@ -37,9 +41,13 @@ namespace IndustrialCommSdk.Protocols.OpcUa
     /// OPC UA client based on the OPC Foundation reference stack. Addresses are standard NodeId strings,
     /// for example ns=2;s=Machine/Temperature or ns=2;i=1001.
     /// </summary>
-    public sealed class OpcUaClient : IndustrialClientBase
+    public sealed class OpcUaClient : IndustrialClientBase, INativeSubscriptionClient
     {
+        private const string NativeSubscriptionPrefix = "opcua:";
         private readonly OpcUaClientOptions _options;
+        private readonly ConcurrentDictionary<string, NativeSubscriptionRegistration> _nativeSubscriptions =
+            new ConcurrentDictionary<string, NativeSubscriptionRegistration>(StringComparer.OrdinalIgnoreCase);
+        private readonly SemaphoreSlim _nativeSubscriptionGate = new SemaphoreSlim(1, 1);
         private ISession _session;
 
         public OpcUaClient(OpcUaClientOptions options, IIndustrialLogger logger = null,
@@ -77,9 +85,10 @@ namespace IndustrialCommSdk.Protocols.OpcUa
 
         protected override async Task ConnectCoreAsync(CancellationToken cancellationToken)
         {
-            await CloseSessionAsync(cancellationToken).ConfigureAwait(false);
+            await _nativeSubscriptionGate.WaitAsync(cancellationToken).ConfigureAwait(false);
             try
             {
+                await CloseSessionAsync(cancellationToken).ConfigureAwait(false);
                 var configuration = await CreateConfigurationAsync(cancellationToken).ConfigureAwait(false);
                 var selected = await CoreClientUtils.SelectEndpointAsync(
                     configuration,
@@ -92,21 +101,33 @@ namespace IndustrialCommSdk.Protocols.OpcUa
                 IUserIdentity identity = string.IsNullOrWhiteSpace(_options.Username)
                     ? (IUserIdentity)new UserIdentity(new AnonymousIdentityToken())
                     : new UserIdentity(_options.Username, Encoding.UTF8.GetBytes(_options.Password ?? string.Empty));
-                _session = await new DefaultSessionFactory(null).CreateAsync(configuration, endpoint, false, false,
+                var session = await new DefaultSessionFactory(null).CreateAsync(configuration, endpoint, false, false,
                     "IndustrialCommSdk-" + DeviceId, (uint)_options.SessionTimeoutMilliseconds,
                     identity, null, cancellationToken).ConfigureAwait(false);
+                session.KeepAlive += OnSessionKeepAlive;
+                _session = session;
+                await RestoreNativeSubscriptionsAsync(session, cancellationToken).ConfigureAwait(false);
             }
-            catch (OperationCanceledException) { throw; }
+            catch (OperationCanceledException)
+            {
+                await CloseSessionAsync(CancellationToken.None).ConfigureAwait(false);
+                throw;
+            }
             catch (Exception ex)
             {
                 await CloseSessionAsync(CancellationToken.None).ConfigureAwait(false);
                 throw new IndustrialConnectionException("Failed to connect OPC UA endpoint.", ex);
+            }
+            finally
+            {
+                _nativeSubscriptionGate.Release();
             }
         }
 
         protected override async Task DisconnectCoreAsync(CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            await _nativeSubscriptionGate.WaitAsync(cancellationToken).ConfigureAwait(false);
             try
             {
                 await CloseSessionAsync(cancellationToken).ConfigureAwait(false);
@@ -115,6 +136,100 @@ namespace IndustrialCommSdk.Protocols.OpcUa
             {
                 // The session has already been detached and disposed. Treat the committed
                 // disconnect as complete so the base class can publish Disconnected state.
+            }
+            finally
+            {
+                _nativeSubscriptionGate.Release();
+            }
+        }
+
+        public async Task<string> SubscribeNativeAsync(
+            SubscriptionRequest request,
+            EventHandler<SubscriptionEvent> handler,
+            CancellationToken cancellationToken)
+        {
+            if (request == null) throw new ArgumentNullException(nameof(request));
+            if (!string.Equals(DeviceId, request.DeviceId, StringComparison.OrdinalIgnoreCase))
+                throw new ArgumentException("Subscription device ID does not match the client device ID.", nameof(request));
+            if (request.Items == null || request.Items.Count == 0)
+                throw new ArgumentException("Subscription must contain at least one read request.", nameof(request));
+            foreach (var item in request.Items)
+            {
+                if (!string.Equals(DeviceId, item.DeviceId, StringComparison.OrdinalIgnoreCase))
+                    throw new ArgumentException("Subscription item device ID does not match the client device ID.", nameof(request));
+            }
+
+            var subscriptionId = NativeSubscriptionPrefix + request.SubscriptionKey;
+            var registration = new NativeSubscriptionRegistration(subscriptionId, request, handler);
+            if (!_nativeSubscriptions.TryAdd(subscriptionId, registration))
+                throw new InvalidOperationException("Subscription '" + request.SubscriptionKey + "' already exists.");
+
+            await _nativeSubscriptionGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+            try
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var session = GetConnectedSession();
+                await InstallNativeSubscriptionAsync(session, registration, cancellationToken).ConfigureAwait(false);
+                Logger.Info(string.Format(
+                    "OPC UA native subscription started | Key={0} | Device={1} | Items={2} | Interval={3}ms",
+                    request.SubscriptionKey,
+                    DeviceId,
+                    request.Items.Count,
+                    request.Interval.TotalMilliseconds));
+                return subscriptionId;
+            }
+            catch
+            {
+                NativeSubscriptionRegistration ignored;
+                _nativeSubscriptions.TryRemove(subscriptionId, out ignored);
+                DisposeSubscription(registration.DetachSubscription());
+                throw;
+            }
+            finally
+            {
+                _nativeSubscriptionGate.Release();
+            }
+        }
+
+        public async Task<bool> TryUnsubscribeNativeAsync(string subscriptionId, CancellationToken cancellationToken)
+        {
+            if (string.IsNullOrWhiteSpace(subscriptionId) ||
+                !subscriptionId.StartsWith(NativeSubscriptionPrefix, StringComparison.OrdinalIgnoreCase))
+                return false;
+
+            await _nativeSubscriptionGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+            try
+            {
+                NativeSubscriptionRegistration registration;
+                if (!_nativeSubscriptions.TryRemove(subscriptionId, out registration))
+                    return true;
+
+                var subscription = registration.DetachSubscription();
+                var session = Volatile.Read(ref _session);
+                try
+                {
+                    if (session != null && subscription != null && session.Connected)
+                        await session.RemoveSubscriptionAsync(subscription, cancellationToken).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    Logger.Warn("OPC UA native subscription removal failed; local registration was removed. " + ex.Message);
+                }
+                finally
+                {
+                    DisposeSubscription(subscription);
+                }
+
+                Logger.Info("OPC UA native subscription stopped | Key=" + subscriptionId);
+                return true;
+            }
+            finally
+            {
+                _nativeSubscriptionGate.Release();
             }
         }
 
@@ -266,12 +381,126 @@ namespace IndustrialCommSdk.Protocols.OpcUa
         }
 
         protected override void OnOperationTimeout() { AbortSession(); }
-        protected override void DisposeCore() { AbortSession(); }
+
+        protected override void DisposeCore()
+        {
+            AbortSession();
+            foreach (var pair in _nativeSubscriptions)
+            {
+                NativeSubscriptionRegistration removed;
+                if (_nativeSubscriptions.TryRemove(pair.Key, out removed))
+                    DisposeSubscription(removed.DetachSubscription());
+            }
+        }
+
+        private async Task RestoreNativeSubscriptionsAsync(ISession session, CancellationToken cancellationToken)
+        {
+            foreach (var registration in _nativeSubscriptions.Values.ToArray())
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                await InstallNativeSubscriptionAsync(session, registration, cancellationToken).ConfigureAwait(false);
+            }
+        }
+
+        private async Task InstallNativeSubscriptionAsync(
+            ISession session,
+            NativeSubscriptionRegistration registration,
+            CancellationToken cancellationToken)
+        {
+            var subscription = new UaSubscription(null, new SubscriptionOptions());
+            subscription.DisplayName = "IndustrialCommSdk-" + registration.Id;
+            subscription.PublishingInterval = (int)Math.Min(int.MaxValue,
+                Math.Max(50d, registration.Request.Interval.TotalMilliseconds));
+            subscription.KeepAliveCount = 10;
+            subscription.LifetimeCount = 30;
+            subscription.TimestampsToReturn = TimestampsToReturn.Both;
+            subscription.SequentialPublishing = true;
+
+            var items = new List<NativeSubscriptionItem>();
+            try
+            {
+                foreach (var request in registration.Request.Items)
+                {
+                    var monitoredItem = new UaMonitoredItem(null, new MonitoredItemOptions());
+                    monitoredItem.DisplayName = request.Address;
+                    monitoredItem.StartNodeId = ParseNodeId(request.Address);
+                    monitoredItem.AttributeId = Attributes.Value;
+                    monitoredItem.SamplingInterval = (int)Math.Min(int.MaxValue,
+                        Math.Max(0d, registration.Request.Interval.TotalMilliseconds));
+                    monitoredItem.QueueSize = 1;
+                    monitoredItem.DiscardOldest = true;
+                    monitoredItem.Notification += (item, args) => OnMonitoredItemNotification(registration, item, args);
+                    subscription.AddItem(monitoredItem);
+                    items.Add(new NativeSubscriptionItem(monitoredItem, request));
+                }
+
+                session.AddSubscription(subscription);
+                registration.AttachSubscription(subscription, items);
+                await subscription.CreateAsync(cancellationToken).ConfigureAwait(false);
+            }
+            catch
+            {
+                registration.DetachSubscription(subscription);
+                try { await session.RemoveSubscriptionAsync(subscription, CancellationToken.None).ConfigureAwait(false); }
+                catch { }
+                DisposeSubscription(subscription);
+                throw;
+            }
+        }
+
+        private void OnMonitoredItemNotification(
+            NativeSubscriptionRegistration registration,
+            UaMonitoredItem monitoredItem,
+            UaMonitoredItemNotificationEventArgs args)
+        {
+            try
+            {
+                ReadRequest request;
+                if (!registration.TryGetRequest(monitoredItem, out request))
+                    return;
+
+                var values = monitoredItem.DequeueValues();
+                if (values == null)
+                    return;
+
+                foreach (var value in values)
+                {
+                    var handler = registration.Handler;
+                    if (handler == null)
+                        continue;
+
+                    var converted = ConvertValue(request, value);
+                    IReadOnlyList<DataValue> snapshot;
+                    if (!registration.TryBuildSnapshot(monitoredItem, converted, out snapshot))
+                        continue;
+
+                    handler(this, new SubscriptionEvent(
+                        registration.Id,
+                        snapshot,
+                        converted.Timestamp));
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Error("OPC UA native subscription handler failed | Key=" + registration.Id, ex);
+            }
+        }
+
+        private void OnSessionKeepAlive(ISession sender, KeepAliveEventArgs e)
+        {
+            if (e == null || e.Status == null || !StatusCode.IsBad(e.Status.StatusCode))
+                return;
+
+            Logger.Warn("OPC UA KeepAlive failed; detaching the session so the host reconnect loop can rebuild it. " + e.Status);
+            AbortSession();
+        }
 
         private async Task CloseSessionAsync(CancellationToken cancellationToken)
         {
             var session = Interlocked.Exchange(ref _session, null);
+            DetachNativeSubscriptions();
             if (session == null) return;
+            session.KeepAlive -= OnSessionKeepAlive;
             try
             {
                 await session.CloseAsync(cancellationToken).ConfigureAwait(false);
@@ -294,8 +523,124 @@ namespace IndustrialCommSdk.Protocols.OpcUa
         private void AbortSession()
         {
             var session = Interlocked.Exchange(ref _session, null);
+            DetachNativeSubscriptions();
             if (session == null) return;
+            session.KeepAlive -= OnSessionKeepAlive;
             try { session.Dispose(); } catch { }
+        }
+
+        private void DetachNativeSubscriptions()
+        {
+            foreach (var registration in _nativeSubscriptions.Values)
+                DisposeSubscription(registration.DetachSubscription());
+        }
+
+        private static void DisposeSubscription(UaSubscription subscription)
+        {
+            if (subscription == null) return;
+            try { subscription.Dispose(); }
+            catch { }
+        }
+
+        private sealed class NativeSubscriptionRegistration
+        {
+            private readonly object _sync = new object();
+            private UaSubscription _subscription;
+            private List<NativeSubscriptionItem> _items = new List<NativeSubscriptionItem>();
+            private Dictionary<UaMonitoredItem, ReadRequest> _requestsByItem =
+                new Dictionary<UaMonitoredItem, ReadRequest>();
+            private Dictionary<UaMonitoredItem, DataValue> _latestValues =
+                new Dictionary<UaMonitoredItem, DataValue>();
+
+            public NativeSubscriptionRegistration(
+                string id,
+                SubscriptionRequest request,
+                EventHandler<SubscriptionEvent> handler)
+            {
+                Id = id;
+                Request = request;
+                Handler = handler;
+            }
+
+            public string Id { get; private set; }
+            public SubscriptionRequest Request { get; private set; }
+            public EventHandler<SubscriptionEvent> Handler { get; private set; }
+
+            public void AttachSubscription(
+                UaSubscription subscription,
+                List<NativeSubscriptionItem> items)
+            {
+                lock (_sync)
+                {
+                    _subscription = subscription;
+                    _items = items;
+                    _requestsByItem = items.ToDictionary(item => item.MonitoredItem, item => item.Request);
+                    _latestValues = new Dictionary<UaMonitoredItem, DataValue>();
+                }
+            }
+
+            public UaSubscription DetachSubscription(UaSubscription expected = null)
+            {
+                lock (_sync)
+                {
+                    if (expected != null && !ReferenceEquals(_subscription, expected))
+                        return null;
+
+                    var subscription = _subscription;
+                    _subscription = null;
+                    _items = new List<NativeSubscriptionItem>();
+                    _requestsByItem = new Dictionary<UaMonitoredItem, ReadRequest>();
+                    _latestValues = new Dictionary<UaMonitoredItem, DataValue>();
+                    return subscription;
+                }
+            }
+
+            public bool TryGetRequest(UaMonitoredItem item, out ReadRequest request)
+            {
+                lock (_sync)
+                    return _requestsByItem.TryGetValue(item, out request);
+            }
+
+            public bool TryBuildSnapshot(
+                UaMonitoredItem item,
+                DataValue value,
+                out IReadOnlyList<DataValue> snapshot)
+            {
+                lock (_sync)
+                {
+                    if (!_requestsByItem.ContainsKey(item))
+                    {
+                        snapshot = null;
+                        return false;
+                    }
+
+                    _latestValues[item] = value;
+                    if (_latestValues.Count < _items.Count)
+                    {
+                        snapshot = null;
+                        return false;
+                    }
+
+                    var ordered = new List<DataValue>(_items.Count);
+                    foreach (var entry in _items)
+                        ordered.Add(_latestValues[entry.MonitoredItem]);
+
+                    snapshot = ordered;
+                    return true;
+                }
+            }
+        }
+
+        private sealed class NativeSubscriptionItem
+        {
+            public NativeSubscriptionItem(UaMonitoredItem monitoredItem, ReadRequest request)
+            {
+                MonitoredItem = monitoredItem;
+                Request = request;
+            }
+
+            public UaMonitoredItem MonitoredItem { get; private set; }
+            public ReadRequest Request { get; private set; }
         }
     }
 }

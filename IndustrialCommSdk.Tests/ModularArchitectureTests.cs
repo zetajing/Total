@@ -137,7 +137,7 @@ namespace IndustrialCommSdk.Tests
         {
             var owners = new Dictionary<Type, string[]>
             {
-                [typeof(ModbusTcpClient)] = new[] { "NModbus4" },
+                [typeof(ModbusTcpClient)] = new[] { "NModbus" },
                 [typeof(SiemensS7Client)] = new[] { "S7.Net" },
                 [typeof(OpcUaClient)] = new[] { "Opc.Ua.Client", "Opc.Ua.Core", "Opc.Ua.Types" },
                 [typeof(MqttClient)] = new[] { "MQTTnet" },

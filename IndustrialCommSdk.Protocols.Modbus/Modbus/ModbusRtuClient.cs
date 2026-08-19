@@ -9,7 +9,7 @@ using IndustrialCommSdk.Abstractions;
 using IndustrialCommSdk.Diagnostics;
 using IndustrialCommSdk.Exceptions;
 using IndustrialCommSdk.Runtime.Polling;
-using Modbus.Device;
+using NModbus;
 
 namespace IndustrialCommSdk.Protocols.Modbus
 {
@@ -20,7 +20,7 @@ namespace IndustrialCommSdk.Protocols.Modbus
     {
         private readonly ModbusRtuClientOptions _options;
         private SerialPort _serialPort;
-        private ModbusMaster _master;
+        private IModbusMaster _master;
 
         /// <summary>实际写入或从串口组装完成的标准 Modbus RTU 帧。</summary>
         public event EventHandler<ModbusRtuFrameEventArgs> FrameTraced;
@@ -178,7 +178,7 @@ namespace IndustrialCommSdk.Protocols.Modbus
         /// <summary>
         /// 获取当前活跃的 NModbus 主站实例。
         /// </summary>
-        protected override ModbusMaster Master => _master;
+        protected override IModbusMaster Master => _master;
 
         /// <summary>
         /// 获取一个值，指示当前串口是否处于打开状态。
@@ -213,7 +213,8 @@ namespace IndustrialCommSdk.Protocols.Modbus
                     _options.ReadTimeout, _options.WriteTimeout, _options.SlaveId, _options.Retries));
                 cancellationToken.ThrowIfCancellationRequested();
                 var tracingResource = new ModbusRtuTracingStreamResource(_serialPort, Logger, OnFrameTraced);
-                _master = ModbusSerialMaster.CreateRtu(tracingResource);
+                var factory = new ModbusFactory();
+                _master = factory.CreateMaster(factory.CreateRtuTransport(tracingResource));
                 _master.Transport.Retries = _options.Retries;
                 _master.Transport.WaitToRetryMilliseconds = _options.WaitToRetryMilliseconds;
             }

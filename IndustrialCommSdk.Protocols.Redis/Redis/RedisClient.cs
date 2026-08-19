@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Security.Cryptography;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using IndustrialCommSdk.Abstractions;
@@ -30,14 +32,17 @@ namespace IndustrialCommSdk.Protocols.Redis
     public sealed class RedisClient : IndustrialClientBase
     {
         private readonly RedisClientOptions _options;
+        private readonly IRedisConnectionProvider _connectionProvider;
         private ConnectionMultiplexer _connection;
         private IDatabase _database;
 
-        public RedisClient(RedisClientOptions options, IIndustrialLogger logger = null, IPollingScheduler pollingScheduler = null)
+        public RedisClient(RedisClientOptions options, IIndustrialLogger logger = null,
+            IPollingScheduler pollingScheduler = null, IRedisConnectionProvider connectionProvider = null)
             : base(GetDeviceId(options), ProtocolKind.Redis, pollingScheduler ?? new PollingScheduler(logger),
                 logger ?? NullIndustrialLogger.Instance, options.OperationTimeoutMilliseconds)
         {
             _options = options;
+            _connectionProvider = connectionProvider ?? RedisConnectionProvider.Shared;
             if (string.IsNullOrWhiteSpace(options.Host)) throw new ArgumentException("Redis host is required.", nameof(options));
             if (options.Port <= 0 || options.Port > 65535) throw new ArgumentOutOfRangeException(nameof(options.Port));
             if (options.Database < 0) throw new ArgumentOutOfRangeException(nameof(options.Database));
@@ -56,26 +61,31 @@ namespace IndustrialCommSdk.Protocols.Redis
 
         protected override async Task ConnectCoreAsync(CancellationToken cancellationToken)
         {
-            CloseConnection();
+            DetachConnection();
             var configuration = new ConfigurationOptions
             {
-                AbortOnConnectFail = true, ConnectTimeout = _options.ConnectTimeoutMilliseconds,
+                // Let the multiplexer reconnect internally while the host remains the single
+                // owner of the higher-level client reconnect lifecycle.
+                AbortOnConnectFail = false, ConnectTimeout = _options.ConnectTimeoutMilliseconds,
                 SyncTimeout = _options.OperationTimeoutMilliseconds, AsyncTimeout = _options.OperationTimeoutMilliseconds,
                 User = _options.Username, Password = _options.Password, Ssl = _options.Ssl
             };
             configuration.EndPoints.Add(_options.Host, _options.Port);
             try
             {
-                _connection = await ConnectionMultiplexer.ConnectAsync(configuration).ConfigureAwait(false);
-                cancellationToken.ThrowIfCancellationRequested();
-                _database = _connection.GetDatabase(_options.Database);
+                var connection = await _connectionProvider.GetOrCreateAsync(
+                    BuildConnectionKey(_options),
+                    () => ConnectionMultiplexer.ConnectAsync(configuration),
+                    cancellationToken).ConfigureAwait(false);
+                _connection = connection;
+                _database = connection.GetDatabase(_options.Database);
             }
-            catch (OperationCanceledException) { CloseConnection(); throw; }
-            catch (Exception ex) { CloseConnection(); throw new IndustrialConnectionException("Failed to connect Redis.", ex); }
+            catch (OperationCanceledException) { DetachConnection(); throw; }
+            catch (Exception ex) { DetachConnection(); throw new IndustrialConnectionException("Failed to connect Redis.", ex); }
         }
 
         protected override Task DisconnectCoreAsync(CancellationToken cancellationToken)
-        { cancellationToken.ThrowIfCancellationRequested(); CloseConnection(); return Task.CompletedTask; }
+        { cancellationToken.ThrowIfCancellationRequested(); DetachConnection(); return Task.CompletedTask; }
 
         protected override async Task<DataValue> ReadCoreAsync(ReadRequest request, CancellationToken cancellationToken)
         {
@@ -122,12 +132,37 @@ namespace IndustrialCommSdk.Protocols.Redis
         }
 
         private void EnsureConnected() { if (!IsConnected || _database == null) throw new IndustrialConnectionException("Redis client is not connected."); }
-        protected override void OnOperationTimeout() { CloseConnection(); }
-        protected override void DisposeCore() { CloseConnection(); }
-        private void CloseConnection()
+        protected override void OnOperationTimeout()
         {
-            _database = null; var connection = Interlocked.Exchange(ref _connection, null);
-            if (connection != null) connection.Dispose();
+            Logger.Warn("Redis operation timed out; keeping the shared ConnectionMultiplexer for its reconnect loop.");
+        }
+
+        protected override void DisposeCore() { DetachConnection(); }
+
+        private void DetachConnection()
+        {
+            _database = null;
+            Interlocked.Exchange(ref _connection, null);
+            // The provider owns the shared multiplexer. A client disconnect must not
+            // tear down connections used by other RedisClient instances.
+        }
+
+        private static string BuildConnectionKey(RedisClientOptions options)
+        {
+            using (var sha = SHA256.Create())
+            {
+                var passwordBytes = Encoding.UTF8.GetBytes(options.Password ?? string.Empty);
+                var passwordHash = Convert.ToBase64String(sha.ComputeHash(passwordBytes));
+                return string.Format(
+                    "{0}:{1}|{2}|ssl={3}|connect={4}|operation={5}|password={6}",
+                    options.Host,
+                    options.Port,
+                    options.Username ?? string.Empty,
+                    options.Ssl,
+                    options.ConnectTimeoutMilliseconds,
+                    options.OperationTimeoutMilliseconds,
+                    passwordHash);
+            }
         }
     }
 }

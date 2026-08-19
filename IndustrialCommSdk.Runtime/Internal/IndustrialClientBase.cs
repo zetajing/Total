@@ -298,16 +298,24 @@ namespace IndustrialCommSdk.Runtime
             }
         }
 
-        public Task<string> SubscribeAsync(SubscriptionRequest request, EventHandler<SubscriptionEvent> handler, CancellationToken cancellationToken)
+        public async Task<string> SubscribeAsync(SubscriptionRequest request, EventHandler<SubscriptionEvent> handler, CancellationToken cancellationToken)
         {
             if (request == null) throw new ArgumentNullException(nameof(request));
             ValidateDeviceId(request.DeviceId);
-            return _pollingScheduler.SubscribeAsync(this, request, handler, cancellationToken);
+            var native = this as INativeSubscriptionClient;
+            if (native != null)
+                return await native.SubscribeNativeAsync(request, handler, cancellationToken).ConfigureAwait(false);
+
+            return await _pollingScheduler.SubscribeAsync(this, request, handler, cancellationToken).ConfigureAwait(false);
         }
 
-        public Task UnsubscribeAsync(string subscriptionId, CancellationToken cancellationToken)
+        public async Task UnsubscribeAsync(string subscriptionId, CancellationToken cancellationToken)
         {
-            return _pollingScheduler.UnsubscribeAsync(subscriptionId, cancellationToken);
+            var native = this as INativeSubscriptionClient;
+            if (native != null && await native.TryUnsubscribeNativeAsync(subscriptionId, cancellationToken).ConfigureAwait(false))
+                return;
+
+            await _pollingScheduler.UnsubscribeAsync(subscriptionId, cancellationToken).ConfigureAwait(false);
         }
 
         protected Task ExecuteExclusiveAsync(Func<CancellationToken, Task> operation, CancellationToken cancellationToken)

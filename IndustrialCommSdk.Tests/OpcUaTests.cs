@@ -22,6 +22,7 @@ namespace IndustrialCommSdk.Tests
                 Assert.AreEqual("ua-plc", client.DeviceId);
                 Assert.IsTrue(client.Capabilities.SupportsOptimizedBatchRead);
                 Assert.IsTrue(client.Capabilities.SupportsString);
+                Assert.IsTrue(client.Capabilities.SupportsNativeSubscriptions);
             }
         }
 
