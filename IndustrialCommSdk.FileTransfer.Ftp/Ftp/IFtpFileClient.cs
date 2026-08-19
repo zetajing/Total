@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using IndustrialCommSdk.Abstractions;
 
 namespace IndustrialCommSdk.FileTransfer.Ftp
 {
@@ -9,22 +10,22 @@ namespace IndustrialCommSdk.FileTransfer.Ftp
     /// Standard FTP/FTPS file-transfer client. This contract deliberately does not model SFTP (SSH)
     /// and does not implement the address-based industrial device client abstraction.
     /// </summary>
-    public interface IFtpFileClient : IDisposable
+    public interface IFtpFileClient : IFileTransferClient
     {
         /// <summary>Current local lifecycle state.</summary>
         FtpConnectionState State { get; }
 
         /// <summary>Whether the underlying FTP control connection is currently available.</summary>
-        bool IsConnected { get; }
+        new bool IsConnected { get; }
 
         /// <summary>Capabilities discovered during the latest successful connection/probe.</summary>
         FtpServerCapabilities Capabilities { get; }
 
         /// <summary>Connect and authenticate, then capture the server capability set.</summary>
-        Task ConnectAsync(CancellationToken cancellationToken);
+        new Task ConnectAsync(CancellationToken cancellationToken);
 
         /// <summary>Gracefully close the FTP control connection.</summary>
-        Task DisconnectAsync(CancellationToken cancellationToken);
+        new Task DisconnectAsync(CancellationToken cancellationToken);
 
         /// <summary>Issue a lightweight command to verify the current authenticated session.</summary>
         Task<FtpClientHealth> CheckHealthAsync(CancellationToken cancellationToken);

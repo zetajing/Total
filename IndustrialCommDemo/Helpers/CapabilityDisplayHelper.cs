@@ -23,7 +23,8 @@ namespace IndustrialCommDemo.Helpers
             if (capabilities.SupportsBatchRead) tags.Add("批量读");
             if (capabilities.SupportsBatchWrite) tags.Add("批量写");
             if (capabilities.SupportsOptimizedBatchRead) tags.Add("优化批量读");
-            if (capabilities.SupportsSubscriptions) tags.Add("轮询订阅");
+            if (capabilities.SupportsNativeSubscriptions) tags.Add("原生订阅");
+            else if (capabilities.SupportsSubscriptions) tags.Add("轮询订阅");
             if (capabilities.SupportsBitAddress) tags.Add("位地址");
             if (capabilities.SupportsString) tags.Add("字符串");
             if (capabilities.SupportsByteArray) tags.Add("ByteArray");

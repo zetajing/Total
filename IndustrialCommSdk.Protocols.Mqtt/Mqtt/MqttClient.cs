@@ -86,7 +86,7 @@ namespace IndustrialCommSdk.Protocols.Mqtt
     }
 
     /// <summary>MQTT 客户端。地址映射为 Topic；写入发布消息，读取返回订阅到的最新消息。</summary>
-    public sealed class MqttClient : IndustrialClientBase
+    public sealed class MqttClient : IndustrialClientBase, IKeyValueClient
     {
         private readonly MqttClientOptions _options;
         private readonly IMqttClient _client;
@@ -142,6 +142,63 @@ namespace IndustrialCommSdk.Protocols.Mqtt
                 await _client.UnsubscribeAsync(options, token).ConfigureAwait(false);
                 MqttQualityOfServiceLevel ignored;
                 _subscriptions.TryRemove(topicFilter, out ignored);
+            }, cancellationToken);
+        }
+
+        public Task<KeyValueValue> GetAsync(string key, CancellationToken cancellationToken)
+        {
+            ValidateKey(key);
+            return ExecuteExclusiveAsync(async token =>
+            {
+                EnsureConnected();
+                var payload = await GetPayloadAsync(key, token).ConfigureAwait(false);
+                return new KeyValueValue(key, payload, true, DateTimeOffset.UtcNow);
+            }, cancellationToken);
+        }
+
+        public Task<IReadOnlyList<KeyValueValue>> GetManyAsync(
+            IReadOnlyCollection<string> keys,
+            CancellationToken cancellationToken)
+        {
+            if (keys == null) throw new ArgumentNullException(nameof(keys));
+            var requestedKeys = keys.ToArray();
+            foreach (var key in requestedKeys) ValidateKey(key);
+
+            return ExecuteExclusiveAsync(async token =>
+            {
+                EnsureConnected();
+                var values = new List<KeyValueValue>(requestedKeys.Length);
+                foreach (var key in requestedKeys)
+                {
+                    var payload = await GetPayloadAsync(key, token).ConfigureAwait(false);
+                    values.Add(new KeyValueValue(key, payload, true, DateTimeOffset.UtcNow));
+                }
+                return (IReadOnlyList<KeyValueValue>)values;
+            }, cancellationToken);
+        }
+
+        public Task SetAsync(string key, byte[] value, CancellationToken cancellationToken)
+        {
+            ValidateKey(key);
+            if (value == null) throw new ArgumentNullException(nameof(value));
+            return ExecuteExclusiveAsync(token => PublishKeyValueAsync(key, value, token), cancellationToken);
+        }
+
+        public Task SetManyAsync(IReadOnlyCollection<KeyValueWrite> entries, CancellationToken cancellationToken)
+        {
+            if (entries == null) throw new ArgumentNullException(nameof(entries));
+            var requestedEntries = entries.ToArray();
+            foreach (var entry in requestedEntries)
+            {
+                if (entry == null) throw new ArgumentException("Key/value entries cannot contain null entries.", nameof(entries));
+                ValidateKey(entry.Key);
+            }
+
+            return ExecuteExclusiveAsync(async token =>
+            {
+                EnsureConnected();
+                foreach (var entry in requestedEntries)
+                    await PublishKeyValueAsync(entry.Key, entry.Value, token).ConfigureAwait(false);
             }, cancellationToken);
         }
 
@@ -228,24 +285,7 @@ namespace IndustrialCommSdk.Protocols.Mqtt
         protected override async Task<DataValue> ReadCoreAsync(ReadRequest request, CancellationToken cancellationToken)
         {
             EnsureConnected();
-            byte[] payload;
-            if (!_latest.TryGetValue(request.Address, out payload))
-            {
-                var waiter = new TaskCompletionSource<byte[]>(TaskCreationOptions.RunContinuationsAsynchronously);
-                _waiters[request.Address] = waiter;
-                try
-                {
-                    await SubscribeInternalAsync(request.Address, ToQos(), cancellationToken).ConfigureAwait(false);
-                    _subscriptions[request.Address] = ToQos();
-                    using (cancellationToken.Register(() => waiter.TrySetCanceled()))
-                        payload = await waiter.Task.ConfigureAwait(false);
-                }
-                finally
-                {
-                    TaskCompletionSource<byte[]> ignored;
-                    _waiters.TryRemove(request.Address, out ignored);
-                }
-            }
+            var payload = await GetPayloadAsync(request.Address, cancellationToken).ConfigureAwait(false);
             return new DataValue(request.Address, request.DataType, TextValueCodec.Decode(request.DataType, payload), payload,
                 QualityStatus.Good, DateTimeOffset.UtcNow, null);
         }
@@ -253,16 +293,50 @@ namespace IndustrialCommSdk.Protocols.Mqtt
         protected override async Task WriteCoreAsync(WriteRequest request, CancellationToken cancellationToken)
         {
             EnsureConnected();
-            var payload = TextValueCodec.Encode(request.DataType, request.Value);
-            if (payload != null && payload.Length > _options.MaxApplicationMessagePayloadBytes)
-                throw new ArgumentException("MQTT application message payload exceeds the configured limit.", nameof(request));
+            await PublishKeyValueAsync(request.Address, TextValueCodec.Encode(request.DataType, request.Value), cancellationToken)
+                .ConfigureAwait(false);
+        }
 
-            var message = new MqttApplicationMessageBuilder().WithTopic(request.Address)
-                .WithPayload(payload).WithQualityOfServiceLevel(ToQos())
+        private async Task<byte[]> GetPayloadAsync(string key, CancellationToken cancellationToken)
+        {
+            byte[] payload;
+            if (_latest.TryGetValue(key, out payload)) return (byte[])payload.Clone();
+
+            var waiter = new TaskCompletionSource<byte[]>(TaskCreationOptions.RunContinuationsAsynchronously);
+            _waiters[key] = waiter;
+            try
+            {
+                await SubscribeInternalAsync(key, ToQos(), cancellationToken).ConfigureAwait(false);
+                _subscriptions[key] = ToQos();
+                using (cancellationToken.Register(() => waiter.TrySetCanceled()))
+                    payload = await waiter.Task.ConfigureAwait(false);
+                return (byte[])payload.Clone();
+            }
+            finally
+            {
+                TaskCompletionSource<byte[]> ignored;
+                _waiters.TryRemove(key, out ignored);
+            }
+        }
+
+        private async Task PublishKeyValueAsync(string key, byte[] value, CancellationToken cancellationToken)
+        {
+            ValidateKey(key);
+            if (value == null) throw new ArgumentNullException(nameof(value));
+            if (value.Length > _options.MaxApplicationMessagePayloadBytes)
+                throw new ArgumentException("MQTT application message payload exceeds the configured limit.", nameof(value));
+
+            var message = new MqttApplicationMessageBuilder().WithTopic(key)
+                .WithPayload(value).WithQualityOfServiceLevel(ToQos())
                 .WithRetainFlag(_options.Retain).Build();
             var result = await _client.PublishAsync(message, cancellationToken).ConfigureAwait(false);
             if (result.ReasonCode >= MqttClientPublishReasonCode.UnspecifiedError)
                 throw new IndustrialProtocolException("MQTT publish failed: " + result.ReasonCode);
+        }
+
+        private static void ValidateKey(string key)
+        {
+            if (string.IsNullOrWhiteSpace(key)) throw new ArgumentException("MQTT topic/key is required.", nameof(key));
         }
 
         private MQTTnet.Client.MqttClientOptions BuildClientOptions()

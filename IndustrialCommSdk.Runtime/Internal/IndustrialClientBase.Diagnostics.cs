@@ -75,7 +75,7 @@ namespace IndustrialCommSdk.Runtime
         {
             Interlocked.Increment(ref _totalOperations);
             Interlocked.Increment(ref _failedOperations);
-            if (ex is IndustrialTimeoutException) Interlocked.Increment(ref _timeoutCount);
+            if (IsTimeoutFailure(ex)) Interlocked.Increment(ref _timeoutCount);
             Interlocked.Exchange(ref _lastOperationElapsedMilliseconds, elapsedMilliseconds);
             lock (_diagnosticSync) { _lastFailureCategory = ClassifyFailure(ex); _lastOperationUtc = DateTimeOffset.UtcNow; }
             Interlocked.Increment(ref _consecutiveFailures);
@@ -122,6 +122,23 @@ namespace IndustrialCommSdk.Runtime
                    ex is System.IO.IOException ||
                    ex is System.Net.Sockets.SocketException ||
                    IsConnectionFailure(ex.InnerException);
+        }
+
+        private static bool IsTimeoutFailure(Exception ex)
+        {
+            if (ex == null) return false;
+            return ex is IndustrialTimeoutException || ex is TimeoutException || IsTimeoutFailure(ex.InnerException);
+        }
+
+        private static bool IsWriteOutcomeUncertain(Exception ex)
+        {
+            if (ex == null) return false;
+            if (ex is IndustrialWriteUncertainException) return false;
+            if (ex is IndustrialTimeoutException || ex is TimeoutException ||
+                ex is IndustrialConnectionException || ex is System.IO.IOException ||
+                ex is System.Net.Sockets.SocketException)
+                return true;
+            return IsWriteOutcomeUncertain(ex.InnerException);
         }
 
         private void ValidateDeviceId(string requestDeviceId)

@@ -1,4 +1,6 @@
 using System;
+using System.Threading;
+using System.Threading.Tasks;
 using IndustrialCommSdk;
 using IndustrialCommSdk.Abstractions;
 using IndustrialCommSdk.Runtime.Configuration;
@@ -6,6 +8,7 @@ using IndustrialCommSdk.Protocols.Common;
 using IndustrialCommSdk.Protocols.Mqtt;
 using IndustrialCommSdk.Protocols.Redis;
 using NUnit.Framework;
+using StackExchange.Redis;
 
 namespace IndustrialCommSdk.Tests
 {
@@ -18,6 +21,8 @@ namespace IndustrialCommSdk.Tests
             using (var mqtt = new MqttClient(new MqttClientOptions { DeviceId = "mqtt-device", Host = "127.0.0.1" }))
             using (var redis = new RedisClient(new RedisClientOptions { DeviceId = "redis-device", Host = "127.0.0.1" }))
             {
+                Assert.IsInstanceOf<IKeyValueClient>(mqtt);
+                Assert.IsInstanceOf<IKeyValueClient>(redis);
                 Assert.AreEqual(ProtocolKind.Mqtt, mqtt.Kind);
                 Assert.AreEqual(ProtocolKind.Redis, redis.Kind);
                 Assert.IsTrue(redis.Capabilities.SupportsOptimizedBatchRead);
@@ -54,6 +59,27 @@ namespace IndustrialCommSdk.Tests
                 Settings = new MqttSettings { Host = "localhost", QualityOfService = 3 },
             };
             Assert.Throws<ArgumentException>(() => sdk.CreateClient(device));
+        }
+
+        [Test]
+        public async Task RedisConnectionProvider_CoalescesConnectionCreationByKey()
+        {
+            using (var provider = new RedisConnectionProvider())
+            {
+                var calls = 0;
+                Func<Task<ConnectionMultiplexer>> factory = async () =>
+                {
+                    Interlocked.Increment(ref calls);
+                    await Task.Delay(25).ConfigureAwait(false);
+                    return null;
+                };
+
+                await Task.WhenAll(
+                    provider.GetOrCreateAsync("redis:test", factory, CancellationToken.None),
+                    provider.GetOrCreateAsync("redis:test", factory, CancellationToken.None));
+
+                Assert.AreEqual(1, calls);
+            }
         }
     }
 }

@@ -17,6 +17,26 @@ namespace IndustrialCommSdk.Tests
     public sealed class ProtocolBatchReadTests
     {
         [Test]
+        public void MitsubishiMc_ZrAddressUsesHexadecimalDeviceNumberAndB0Code()
+        {
+            var address = new McAddressParser().ParseTyped("zr1a");
+            Assert.AreEqual(McDeviceType.ZR, address.DeviceType);
+            Assert.AreEqual(0x1A, address.Index);
+            Assert.IsFalse(address.IsBitDevice);
+
+            var frame = McFrame3E.BuildReadWordsRequest(address, 1);
+            CollectionAssert.AreEqual(new byte[] { 0x1A, 0x00, 0x00 }, frame.Skip(15).Take(3));
+            Assert.AreEqual(0xB0, frame[18]);
+        }
+
+        [Test]
+        public void MitsubishiMc_ZrDecimalLookingAddressIsNotSilentlyReinterpreted()
+        {
+            var address = new McAddressParser().ParseTyped("ZR1000");
+            Assert.AreEqual(0x1000, address.Index);
+        }
+
+        [Test]
         public void SiemensS7PlanRead_MergesAdjacentDifferentDataTypes()
         {
             using (var client = new SiemensS7Client(new SiemensS7ClientOptions

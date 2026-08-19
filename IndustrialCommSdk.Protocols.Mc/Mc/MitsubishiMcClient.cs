@@ -43,8 +43,8 @@ namespace IndustrialCommSdk.Protocols.Mc
                 [McDeviceType.R] = new McDeviceMetadata(0xAF, 10, false),
                 [McDeviceType.SD] = new McDeviceMetadata(0xA9, 10, false),
                 [McDeviceType.Z] = new McDeviceMetadata(0xCC, 10, false),
-                // ZR device numbers are decimal in Mitsubishi device notation.
-                [McDeviceType.ZR] = new McDeviceMetadata(0xB0, 10, false),
+                // MC/SLMP 3E serial-number file-register access uses hexadecimal ZR numbers.
+                [McDeviceType.ZR] = new McDeviceMetadata(0xB0, 16, false),
                 [McDeviceType.M] = new McDeviceMetadata(0x90, 10, true),
                 [McDeviceType.X] = new McDeviceMetadata(0x9C, 16, true),
                 [McDeviceType.Y] = new McDeviceMetadata(0x9D, 16, true),
@@ -156,7 +156,7 @@ namespace IndustrialCommSdk.Protocols.Mc
         public int OperationTimeoutMilliseconds { get; set; } = 5000;
     }
 
-    public sealed class MitsubishiMcClient : IndustrialClientBase, IBatchOperationPlanner
+    public sealed class MitsubishiMcClient : IndustrialClientBase, IBatchOperationPlanner, IRegisterClient, IEventSubscriptionClient
     {
         private readonly ITransportClient _transport;
         private readonly McAddressParser _parser;

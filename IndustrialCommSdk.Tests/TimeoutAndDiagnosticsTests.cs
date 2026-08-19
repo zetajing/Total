@@ -51,12 +51,13 @@ namespace IndustrialCommSdk.Tests
         }
 
         [Test]
-        public void WriteTimeout_ThrowsIndustrialTimeout()
+        public void WriteTimeout_ThrowsUncertainWriteAndCountsTimeout()
         {
             using (var client = new DelayedClient(30, 200))
             {
-                Assert.ThrowsAsync<IndustrialTimeoutException>(async () =>
+                Assert.ThrowsAsync<IndustrialWriteUncertainException>(async () =>
                     await client.WriteAsync(new WriteRequest(client.DeviceId, "A", DataType.Int16, (short)1), CancellationToken.None));
+                Assert.AreEqual(1, client.GetDiagnosticSnapshot().TimeoutCount);
             }
         }
 

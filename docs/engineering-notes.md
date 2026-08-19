@@ -37,7 +37,7 @@
 - Modbus TCP/RTU、S7、MC、OPC UA、MQTT、Redis 均有直接客户端入口和最小示例。
 - Modbus TCP Options 会在构造阶段校验设备 ID、主机、端口、站号、连接超时和设备 Profile。
 - S7 加固连接生命周期、失效连接清理、DB/DBX/M/I/Q 地址校验和明确 bit 地址要求。
-- MC 地址解析使用集中元数据，`ZR` 按十进制，`X/Y/W` 等协议语义地址按十六进制；后续扩设备类型应继续扩展元数据表。
+- MC 地址解析使用集中元数据，`ZR` 按 MC 3E/SLMP 规范使用十六进制，`X/Y/W` 等协议语义地址按十六进制；后续扩设备类型应继续扩展元数据表。
 - 原始 TCP 支持固定长度、分隔符、2/4 字节大端长度头，以及半包/粘包缓存。
 - WinForms 最小程序隔离验证 Modbus TCP、Modbus RTU、S7、MC、原始 TCP 和开放式 MES HTTP JSON；WPF Demo 负责配置驱动运行和综合展示。
 - MES 保持开放 JSON，不内置 FACHECK、FATRACK、FANUM 等业务流程；5xx 重试有界，响应及时释放，并支持注入 `HttpMessageHandler` / 外部 `HttpClient`。

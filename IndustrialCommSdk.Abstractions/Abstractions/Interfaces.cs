@@ -6,26 +6,11 @@ using System.Threading.Tasks;
 namespace IndustrialCommSdk.Abstractions
 {
     /// <summary>
-    /// 工业设备客户端的统一接口，封装连接、读写、订阅和健康检查能力。
-    /// 所有协议客户端实现均遵循此接口，提供一致的工业通讯抽象。
+    /// 兼容性门面接口，保留历史上的连接、寄存器读写和订阅入口。
+    /// 新代码应优先依赖 IRegisterClient、IEventSubscriptionClient 或 IKeyValueClient 等窄能力接口。
     /// </summary>
-    public interface IIndustrialClient : IDisposable
+    public interface IIndustrialClient : IIndustrialConnection
     {
-        /// <summary>获取客户端所对应的设备标识。</summary>
-        string DeviceId { get; }
-        /// <summary>获取客户端使用的通信协议类型。</summary>
-        ProtocolKind Kind { get; }
-        /// <summary>获取底层连接当前是否可用。</summary>
-        bool IsConnected { get; }
-
-        /// <summary>异步连接设备。</summary>
-        /// <param name="cancellationToken">取消令牌。</param>
-        /// <returns>表示异步连接操作的任务。</returns>
-        Task ConnectAsync(CancellationToken cancellationToken);
-        /// <summary>异步断开设备连接。</summary>
-        /// <param name="cancellationToken">取消令牌。</param>
-        /// <returns>表示异步断开操作的任务。</returns>
-        Task DisconnectAsync(CancellationToken cancellationToken);
         /// <summary>读取单个地址；通信失败时实现可返回质量为 Bad 的值。</summary>
         /// <param name="request">读取请求。</param>
         /// <param name="cancellationToken">取消令牌。</param>
@@ -57,9 +42,25 @@ namespace IndustrialCommSdk.Abstractions
         /// <param name="cancellationToken">取消令牌。</param>
         /// <returns>表示异步取消订阅操作的任务。</returns>
         Task UnsubscribeAsync(string subscriptionId, CancellationToken cancellationToken);
-        /// <summary>获取客户端最近一次操作形成的健康快照。</summary>
-        /// <returns>包含连接状态和错误信息的快照。</returns>
-        HealthSnapshot GetHealth();
+    }
+
+    /// <summary>
+    /// Optional protocol extension for subscriptions backed by the protocol's native event stream.
+    /// Clients that do not implement this interface continue to use the shared polling scheduler.
+    /// </summary>
+    public interface INativeSubscriptionClient
+    {
+        /// <summary>Creates a native subscription for the requested addresses.</summary>
+        Task<string> SubscribeNativeAsync(
+            SubscriptionRequest request,
+            EventHandler<SubscriptionEvent> handler,
+            CancellationToken cancellationToken);
+
+        /// <summary>
+        /// Attempts to remove a native subscription. Returns false when the identifier belongs to
+        /// the polling scheduler and should be handled by the caller's fallback path.
+        /// </summary>
+        Task<bool> TryUnsubscribeNativeAsync(string subscriptionId, CancellationToken cancellationToken);
     }
 
     /// <summary>

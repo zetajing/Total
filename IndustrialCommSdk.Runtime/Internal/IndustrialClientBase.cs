@@ -224,7 +224,9 @@ namespace IndustrialCommSdk.Runtime
                     }
                     catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
                     {
-                        var ex = new IndustrialTimeoutException("Industrial write operation timed out.");
+                        var timeoutException = new IndustrialTimeoutException("Industrial write operation timed out.");
+                        var ex = new IndustrialWriteUncertainException(
+                            "Industrial write outcome is unknown; the write was not replayed.", timeoutException);
                         HandleOperationTimeoutSafely();
                         if (RetainOperationLockUntilCoreCompletes(coreTask, "write"))
                             releaseOperationLock = false;
@@ -237,8 +239,12 @@ namespace IndustrialCommSdk.Runtime
                         if (cancelled != null && cancellationToken.IsCancellationRequested &&
                             RetainOperationLockUntilCoreCompletes(coreTask, "write"))
                             releaseOperationLock = false;
-                        RecordFailure(ex, IsConnectionFailure(ex), stopwatch.ElapsedMilliseconds);
-                        throw;
+                        var reported = cancelled == null && IsWriteOutcomeUncertain(ex)
+                            ? new IndustrialWriteUncertainException(
+                                "Industrial write outcome is unknown; the write was not replayed.", ex)
+                            : ex;
+                        RecordFailure(reported, IsConnectionFailure(reported), stopwatch.ElapsedMilliseconds);
+                        throw reported;
                     }
                 }
             }
@@ -273,7 +279,9 @@ namespace IndustrialCommSdk.Runtime
                     }
                     catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
                     {
-                        var ex = new IndustrialTimeoutException("Industrial batch write operation timed out.");
+                        var timeoutException = new IndustrialTimeoutException("Industrial batch write operation timed out.");
+                        var ex = new IndustrialWriteUncertainException(
+                            "Industrial batch write outcome is unknown; the writes were not replayed.", timeoutException);
                         HandleOperationTimeoutSafely();
                         if (RetainOperationLockUntilCoreCompletes(coreTask, "batch write"))
                             releaseOperationLock = false;
@@ -286,8 +294,12 @@ namespace IndustrialCommSdk.Runtime
                         if (cancelled != null && cancellationToken.IsCancellationRequested &&
                             RetainOperationLockUntilCoreCompletes(coreTask, "batch write"))
                             releaseOperationLock = false;
-                        RecordFailure(ex, IsConnectionFailure(ex), stopwatch.ElapsedMilliseconds);
-                        throw;
+                        var reported = cancelled == null && IsWriteOutcomeUncertain(ex)
+                            ? new IndustrialWriteUncertainException(
+                                "Industrial batch write outcome is unknown; the writes were not replayed.", ex)
+                            : ex;
+                        RecordFailure(reported, IsConnectionFailure(reported), stopwatch.ElapsedMilliseconds);
+                        throw reported;
                     }
                 }
             }
@@ -298,16 +310,24 @@ namespace IndustrialCommSdk.Runtime
             }
         }
 
-        public Task<string> SubscribeAsync(SubscriptionRequest request, EventHandler<SubscriptionEvent> handler, CancellationToken cancellationToken)
+        public async Task<string> SubscribeAsync(SubscriptionRequest request, EventHandler<SubscriptionEvent> handler, CancellationToken cancellationToken)
         {
             if (request == null) throw new ArgumentNullException(nameof(request));
             ValidateDeviceId(request.DeviceId);
-            return _pollingScheduler.SubscribeAsync(this, request, handler, cancellationToken);
+            var native = this as INativeSubscriptionClient;
+            if (native != null)
+                return await native.SubscribeNativeAsync(request, handler, cancellationToken).ConfigureAwait(false);
+
+            return await _pollingScheduler.SubscribeAsync(this, request, handler, cancellationToken).ConfigureAwait(false);
         }
 
-        public Task UnsubscribeAsync(string subscriptionId, CancellationToken cancellationToken)
+        public async Task UnsubscribeAsync(string subscriptionId, CancellationToken cancellationToken)
         {
-            return _pollingScheduler.UnsubscribeAsync(subscriptionId, cancellationToken);
+            var native = this as INativeSubscriptionClient;
+            if (native != null && await native.TryUnsubscribeNativeAsync(subscriptionId, cancellationToken).ConfigureAwait(false))
+                return;
+
+            await _pollingScheduler.UnsubscribeAsync(subscriptionId, cancellationToken).ConfigureAwait(false);
         }
 
         protected Task ExecuteExclusiveAsync(Func<CancellationToken, Task> operation, CancellationToken cancellationToken)

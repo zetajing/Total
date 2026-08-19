@@ -333,24 +333,7 @@ namespace IndustrialCommSdk.Protocols.Mc
         /// <exception cref="IndustrialProtocolException">遇到不受支持的设备类型时引发。</exception>
         private static byte GetDeviceCode(McDeviceType type)
         {
-            switch (type)
-            {
-                case McDeviceType.D: return 0xA8;
-                case McDeviceType.W: return 0xB4;
-                case McDeviceType.R: return 0xAF;
-                case McDeviceType.SD: return 0xA9;
-                case McDeviceType.Z: return 0xCC;
-                case McDeviceType.ZR: return 0xB0;
-                case McDeviceType.M: return 0x90;
-                case McDeviceType.X: return 0x9C;
-                case McDeviceType.Y: return 0x9D;
-                case McDeviceType.L: return 0x92;
-                case McDeviceType.TN: return 0xC2;
-                case McDeviceType.SS: return 0xC7;
-                case McDeviceType.SN: return 0xC8;
-                case McDeviceType.CN: return 0xC5;
-                default: throw new IndustrialProtocolException("Unsupported MC device type.");
-            }
+            return McDeviceCatalog.Get(type).Code;
         }
     }
 }

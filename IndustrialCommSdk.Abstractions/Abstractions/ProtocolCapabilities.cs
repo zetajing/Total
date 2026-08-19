@@ -3,6 +3,18 @@ using System.Collections.Generic;
 
 namespace IndustrialCommSdk.Abstractions
 {
+    /// <summary>Independent protocol capabilities exposed by the SDK.</summary>
+    [Flags]
+    public enum ProtocolCapability
+    {
+        None = 0,
+        RegisterRead = 1,
+        RegisterWrite = 2,
+        EventSubscription = 4,
+        KeyValue = 8,
+        FileTransfer = 16,
+    }
+
     /// <summary>
     /// Describes what a protocol client can do. This is intentionally protocol-neutral so Demo, DeviceHost,
     /// polling, validation, and documentation can make decisions without knowing concrete PLC implementations.
@@ -31,7 +43,9 @@ namespace IndustrialCommSdk.Abstractions
             int maxPduBytes = 0,
             TimeSpan? recommendedMinPollingInterval = null,
             TimeSpan? defaultOperationTimeout = null,
-            IReadOnlyDictionary<string, string> extensions = null)
+            IReadOnlyDictionary<string, string> extensions = null,
+            bool supportsNativeSubscriptions = false,
+            ProtocolCapability? capabilityFlags = null)
         {
             if (string.IsNullOrWhiteSpace(displayName)) throw new ArgumentException("Display name cannot be null or empty.", nameof(displayName));
             if (maxReadItems <= 0) throw new ArgumentOutOfRangeException(nameof(maxReadItems));
@@ -56,6 +70,7 @@ namespace IndustrialCommSdk.Abstractions
             SupportsRawTransport = supportsRawTransport;
             SupportsConnectionDiagnostics = supportsConnectionDiagnostics;
             SupportsNativeAsync = supportsNativeAsync;
+            SupportsNativeSubscriptions = supportsNativeSubscriptions;
             MaxReadItems = maxReadItems;
             MaxWriteItems = maxWriteItems;
             MaxAddressSpan = maxAddressSpan;
@@ -63,6 +78,7 @@ namespace IndustrialCommSdk.Abstractions
             RecommendedMinPollingInterval = recommendedMinPollingInterval ?? TimeSpan.FromMilliseconds(250);
             DefaultOperationTimeout = defaultOperationTimeout ?? TimeSpan.FromSeconds(3);
             Extensions = extensions ?? new Dictionary<string, string>();
+            CapabilityFlags = capabilityFlags ?? DeriveCapabilityFlags(supportsRead, supportsWrite, supportsSubscriptions);
         }
 
         public ProtocolKind Kind { get; private set; }
@@ -80,6 +96,7 @@ namespace IndustrialCommSdk.Abstractions
         public bool SupportsRawTransport { get; private set; }
         public bool SupportsConnectionDiagnostics { get; private set; }
         public bool SupportsNativeAsync { get; private set; }
+        public bool SupportsNativeSubscriptions { get; private set; }
         public int MaxReadItems { get; private set; }
         public int MaxWriteItems { get; private set; }
         public int MaxAddressSpan { get; private set; }
@@ -87,6 +104,21 @@ namespace IndustrialCommSdk.Abstractions
         public TimeSpan RecommendedMinPollingInterval { get; private set; }
         public TimeSpan DefaultOperationTimeout { get; private set; }
         public IReadOnlyDictionary<string, string> Extensions { get; private set; }
+        public ProtocolCapability CapabilityFlags { get; private set; }
+        public bool SupportsRegisterRead { get { return (CapabilityFlags & ProtocolCapability.RegisterRead) != 0; } }
+        public bool SupportsRegisterWrite { get { return (CapabilityFlags & ProtocolCapability.RegisterWrite) != 0; } }
+        public bool SupportsEventSubscription { get { return (CapabilityFlags & ProtocolCapability.EventSubscription) != 0; } }
+        public bool SupportsKeyValue { get { return (CapabilityFlags & ProtocolCapability.KeyValue) != 0; } }
+        public bool SupportsFileTransfer { get { return (CapabilityFlags & ProtocolCapability.FileTransfer) != 0; } }
+
+        private static ProtocolCapability DeriveCapabilityFlags(bool supportsRead, bool supportsWrite, bool supportsSubscriptions)
+        {
+            var flags = ProtocolCapability.None;
+            if (supportsRead) flags |= ProtocolCapability.RegisterRead;
+            if (supportsWrite) flags |= ProtocolCapability.RegisterWrite;
+            if (supportsSubscriptions) flags |= ProtocolCapability.EventSubscription;
+            return flags;
+        }
 
         /// <summary>Returns conservative defaults for the built-in protocols.</summary>
         public static ProtocolCapabilities ForProtocol(ProtocolKind kind)
@@ -105,7 +137,8 @@ namespace IndustrialCommSdk.Abstractions
                         maxWriteItems: 120,
                         maxAddressSpan: 125,
                         maxPduBytes: 253,
-                        recommendedMinPollingInterval: TimeSpan.FromMilliseconds(100));
+                        recommendedMinPollingInterval: TimeSpan.FromMilliseconds(100),
+                        capabilityFlags: ProtocolCapability.RegisterRead | ProtocolCapability.RegisterWrite | ProtocolCapability.EventSubscription);
 
                 case ProtocolKind.ModbusRtu:
                     return new ProtocolCapabilities(
@@ -119,7 +152,8 @@ namespace IndustrialCommSdk.Abstractions
                         maxWriteItems: 120,
                         maxAddressSpan: 125,
                         maxPduBytes: 253,
-                        recommendedMinPollingInterval: TimeSpan.FromMilliseconds(200));
+                        recommendedMinPollingInterval: TimeSpan.FromMilliseconds(200),
+                        capabilityFlags: ProtocolCapability.RegisterRead | ProtocolCapability.RegisterWrite | ProtocolCapability.EventSubscription);
 
                 case ProtocolKind.SiemensS7:
                     return new ProtocolCapabilities(
@@ -133,7 +167,8 @@ namespace IndustrialCommSdk.Abstractions
                         maxWriteItems: 200,
                         maxAddressSpan: 960,
                         maxPduBytes: 960,
-                        recommendedMinPollingInterval: TimeSpan.FromMilliseconds(100));
+                        recommendedMinPollingInterval: TimeSpan.FromMilliseconds(100),
+                        capabilityFlags: ProtocolCapability.RegisterRead | ProtocolCapability.RegisterWrite | ProtocolCapability.EventSubscription);
 
                 case ProtocolKind.MitsubishiMc:
                     return new ProtocolCapabilities(
@@ -145,7 +180,8 @@ namespace IndustrialCommSdk.Abstractions
                         maxWriteItems: 256,
                         maxAddressSpan: 960,
                         maxPduBytes: 2048,
-                        recommendedMinPollingInterval: TimeSpan.FromMilliseconds(100));
+                        recommendedMinPollingInterval: TimeSpan.FromMilliseconds(100),
+                        capabilityFlags: ProtocolCapability.RegisterRead | ProtocolCapability.RegisterWrite | ProtocolCapability.EventSubscription);
 
                 case ProtocolKind.TcpSocket:
                     return new ProtocolCapabilities(
@@ -159,7 +195,8 @@ namespace IndustrialCommSdk.Abstractions
                         maxReadItems: 1,
                         maxWriteItems: 1,
                         maxAddressSpan: 1,
-                        maxPduBytes: 0);
+                        maxPduBytes: 0,
+                        capabilityFlags: ProtocolCapability.None);
 
                 case ProtocolKind.OpcUa:
                     return new ProtocolCapabilities(
@@ -172,19 +209,25 @@ namespace IndustrialCommSdk.Abstractions
                         maxReadItems: 1000,
                         maxWriteItems: 1000,
                         maxAddressSpan: int.MaxValue,
-                        recommendedMinPollingInterval: TimeSpan.FromMilliseconds(100));
+                        recommendedMinPollingInterval: TimeSpan.FromMilliseconds(100),
+                        supportsNativeSubscriptions: true,
+                        capabilityFlags: ProtocolCapability.RegisterRead | ProtocolCapability.RegisterWrite | ProtocolCapability.EventSubscription);
 
                 case ProtocolKind.Mqtt:
                     return new ProtocolCapabilities(kind, "MQTT",
+                        supportsRead: false, supportsWrite: false, supportsSubscriptions: false,
                         supportsString: true, supportsByteArray: true, maxReadItems: 1000,
                         maxWriteItems: 1000, maxAddressSpan: int.MaxValue,
-                        recommendedMinPollingInterval: TimeSpan.FromMilliseconds(100));
+                        recommendedMinPollingInterval: TimeSpan.FromMilliseconds(100),
+                        capabilityFlags: ProtocolCapability.KeyValue);
 
                 case ProtocolKind.Redis:
-                    return new ProtocolCapabilities(kind, "Redis", supportsOptimizedBatchRead: true,
+                    return new ProtocolCapabilities(kind, "Redis", supportsRead: false, supportsWrite: false,
+                        supportsSubscriptions: false, supportsOptimizedBatchRead: true,
                         supportsOptimizedBatchWrite: true, supportsString: true, supportsByteArray: true,
                         maxReadItems: 1000, maxWriteItems: 1000, maxAddressSpan: int.MaxValue,
-                        recommendedMinPollingInterval: TimeSpan.FromMilliseconds(50));
+                        recommendedMinPollingInterval: TimeSpan.FromMilliseconds(50),
+                        capabilityFlags: ProtocolCapability.KeyValue);
 
                 default:
                     return new ProtocolCapabilities(kind, kind.ToString());

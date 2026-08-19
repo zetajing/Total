@@ -11,6 +11,6 @@
     <ProjectReference Include="..\IndustrialCommSdk.Protocols.Common\IndustrialCommSdk.Protocols.Common.csproj" />
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="NModbus4" Version="2.1.0" />
+    <PackageReference Include="NModbus" Version="3.0.83" />
   </ItemGroup>
 </Project>

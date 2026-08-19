@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO.Ports;
 using IndustrialCommSdk.Diagnostics;
-using Modbus.IO;
+using NModbus.IO;
 
 namespace IndustrialCommSdk.Protocols.Modbus
 {

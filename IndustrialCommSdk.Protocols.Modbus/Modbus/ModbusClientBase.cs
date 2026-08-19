@@ -11,7 +11,7 @@ using IndustrialCommSdk.Exceptions;
 using IndustrialCommSdk.Runtime;
 using IndustrialCommSdk.Runtime.Polling;
 using IndustrialCommSdk.Protocols.Common;
-using Modbus.Device;
+using NModbus;
 
 namespace IndustrialCommSdk.Protocols.Modbus
 {
@@ -19,7 +19,7 @@ namespace IndustrialCommSdk.Protocols.Modbus
     /// Modbus 协议客户端的公共基类，封装所有传输无关的 Modbus 读写逻辑。
     /// TCP 和 RTU 子类只需实现连接/断开和 <see cref="Master"/> 属性即可复用完整的协议能力。
     /// </summary>
-    public abstract class ModbusClientBase : IndustrialClientBase, IBatchOperationPlanner
+    public abstract class ModbusClientBase : IndustrialClientBase, IBatchOperationPlanner, IRegisterClient, IEventSubscriptionClient
     {
         /// <summary>设备配置文件，用于处理寄存器规范化和字节序。</summary>
         protected readonly IModbusDeviceProfile DeviceProfile;
@@ -50,7 +50,7 @@ namespace IndustrialCommSdk.Protocols.Modbus
         }
 
         /// <summary>获取当前活跃的 NModbus 主站实例。子类在连接后赋值，断开后置 null。</summary>
-        protected abstract ModbusMaster Master { get; }
+        protected abstract IModbusMaster Master { get; }
 
         /// <summary>从 Modbus 设备读取数据的核心异步方法。</summary>
         protected override async Task<DataValue> ReadCoreAsync(ReadRequest request, CancellationToken cancellationToken)

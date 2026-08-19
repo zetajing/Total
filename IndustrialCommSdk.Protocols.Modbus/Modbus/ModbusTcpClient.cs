@@ -6,7 +6,7 @@ using IndustrialCommSdk.Abstractions;
 using IndustrialCommSdk.Diagnostics;
 using IndustrialCommSdk.Exceptions;
 using IndustrialCommSdk.Runtime.Polling;
-using Modbus.Device;
+using NModbus;
 
 namespace IndustrialCommSdk.Protocols.Modbus
 {
@@ -56,7 +56,7 @@ namespace IndustrialCommSdk.Protocols.Modbus
     {
         private readonly ModbusTcpClientOptions _options;
         private TcpClient _tcpClient;
-        private ModbusMaster _master;
+        private IModbusMaster _master;
 
         /// <summary>
         /// 初始化 <see cref="ModbusTcpClient"/> 类的新实例。
@@ -101,7 +101,7 @@ namespace IndustrialCommSdk.Protocols.Modbus
         /// <summary>
         /// 获取当前活跃的 NModbus 主站实例。
         /// </summary>
-        protected override ModbusMaster Master => _master;
+        protected override IModbusMaster Master => _master;
 
         /// <summary>
         /// 获取一个值，指示当前是否已成功连接到 Modbus TCP 设备。
@@ -133,7 +133,7 @@ namespace IndustrialCommSdk.Protocols.Modbus
                 }
 
                 await connectTask.ConfigureAwait(false);
-                var master = ModbusIpMaster.CreateIp(client);
+                var master = new ModbusFactory().CreateMaster(client);
                 _tcpClient = client;
                 _master = master;
             }

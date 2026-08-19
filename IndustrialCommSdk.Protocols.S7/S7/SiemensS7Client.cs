@@ -37,7 +37,7 @@ namespace IndustrialCommSdk.Protocols.S7
     /// serializes access through IndustrialClientBase, and retries reads one time after a stale session.
     /// Writes are never replayed by default.
     /// </summary>
-    public sealed class SiemensS7Client : IndustrialClientBase, IBatchOperationPlanner
+    public sealed class SiemensS7Client : IndustrialClientBase, IBatchOperationPlanner, IRegisterClient, IEventSubscriptionClient
     {
         private readonly SiemensS7ClientOptions _options;
         private readonly S7AddressParser _parser;
