@@ -21,6 +21,7 @@ namespace IndustrialCommSdk.Tests
                 Assert.AreEqual(ProtocolKind.Mqtt, mqtt.Kind);
                 Assert.AreEqual(ProtocolKind.Redis, redis.Kind);
                 Assert.IsTrue(redis.Capabilities.SupportsOptimizedBatchRead);
+                Assert.IsFalse(mqtt.Capabilities.SupportsOptimizedBatchWrite);
                 Assert.IsTrue(mqtt.Capabilities.SupportsByteArray);
             }
         }

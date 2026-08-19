@@ -98,7 +98,6 @@ namespace IndustrialCommSdk.Abstractions
                         kind,
                         "Modbus TCP",
                         supportsOptimizedBatchRead: true,
-                        supportsOptimizedBatchWrite: true,
                         supportsBitAddress: true,
                         supportsString: true,
                         supportsByteArray: true,
@@ -112,6 +111,7 @@ namespace IndustrialCommSdk.Abstractions
                     return new ProtocolCapabilities(
                         kind,
                         "Modbus RTU",
+                        supportsOptimizedBatchRead: true,
                         supportsBitAddress: true,
                         supportsString: true,
                         supportsByteArray: true,
@@ -125,6 +125,7 @@ namespace IndustrialCommSdk.Abstractions
                     return new ProtocolCapabilities(
                         kind,
                         "Siemens S7",
+                        supportsOptimizedBatchRead: true,
                         supportsBitAddress: true,
                         supportsString: true,
                         supportsByteArray: true,
@@ -174,7 +175,7 @@ namespace IndustrialCommSdk.Abstractions
                         recommendedMinPollingInterval: TimeSpan.FromMilliseconds(100));
 
                 case ProtocolKind.Mqtt:
-                    return new ProtocolCapabilities(kind, "MQTT", supportsOptimizedBatchWrite: true,
+                    return new ProtocolCapabilities(kind, "MQTT",
                         supportsString: true, supportsByteArray: true, maxReadItems: 1000,
                         maxWriteItems: 1000, maxAddressSpan: int.MaxValue,
                         recommendedMinPollingInterval: TimeSpan.FromMilliseconds(100));

@@ -22,14 +22,20 @@ namespace IndustrialCommSdk.Protocols.S7
         public short Rack { get; set; }
         public short Slot { get; set; } = 1;
         public CpuType CpuType { get; set; } = CpuType.S71200;
+        /// <summary>读取失败后是否允许自动重连并重试一次读取。</summary>
         public bool AutoReconnect { get; set; } = true;
+        /// <summary>
+        /// 写入失败后是否允许重连并重放写入。默认关闭，因为网络中断时设备可能已经执行了原写入。
+        /// </summary>
+        public bool AutoReconnectWrites { get; set; } = false;
         public int ConnectTimeoutMilliseconds { get; set; } = 5000;
         public int OperationTimeoutMilliseconds { get; set; } = 5000;
     }
 
     /// <summary>
     /// Siemens S7 client built on S7.NetPlus. The wrapper owns connection lifecycle,
-    /// serializes access through IndustrialClientBase, and retries one time after a stale session.
+    /// serializes access through IndustrialClientBase, and retries reads one time after a stale session.
+    /// Writes are never replayed by default.
     /// </summary>
     public sealed class SiemensS7Client : IndustrialClientBase, IBatchOperationPlanner
     {
@@ -240,24 +246,44 @@ namespace IndustrialCommSdk.Protocols.S7
             {
                 await WriteValueAsync(address, request, token).ConfigureAwait(false);
                 return true;
-            }, cancellationToken);
+            }, cancellationToken, _options.AutoReconnectWrites, true);
         }
 
-        private async Task<T> ExecuteWithReconnectAsync<T>(Func<CancellationToken, Task<T>> operation, CancellationToken cancellationToken)
+        private async Task<T> ExecuteWithReconnectAsync<T>(
+            Func<CancellationToken, Task<T>> operation,
+            CancellationToken cancellationToken,
+            bool allowRetry = true,
+            bool writeOperation = false)
         {
             EnsureConnected();
             try
             {
                 return await operation(cancellationToken).ConfigureAwait(false);
             }
-            catch (OperationCanceledException) { throw; }
+            catch (OperationCanceledException ex)
+            {
+                if (writeOperation)
+                {
+                    ClosePlc();
+                    throw new IndustrialWriteUncertainException(
+                        "S7 write outcome is unknown; the write was not replayed.", ex);
+                }
+                throw;
+            }
             catch (IndustrialAddressParseException) { throw; }
             catch (IndustrialDataConversionException) { throw; }
             catch (Exception first)
             {
                 ClosePlc();
-                if (!_options.AutoReconnect)
+                if (!_options.AutoReconnect || !allowRetry)
+                {
+                    if (writeOperation)
+                    {
+                        throw new IndustrialWriteUncertainException(
+                            "S7 write outcome is unknown; the write was not replayed.", first);
+                    }
                     throw new IndustrialConnectionException("S7 communication failed.", first);
+                }
 
                 try
                 {
@@ -374,7 +400,7 @@ namespace IndustrialCommSdk.Protocols.S7
             {
                 await _plc.WriteClassAsync(value, dbNumber, startByteAddress, inner).ConfigureAwait(false);
                 return true;
-            }, token), cancellationToken);
+            }, token, _options.AutoReconnectWrites, true), cancellationToken);
         }
 
         protected override void DisposeCore()

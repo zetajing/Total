@@ -107,6 +107,7 @@ namespace IndustrialCommSdk.Runtime
             if (ex is IndustrialTimeoutException || ex is TimeoutException) return IndustrialFailureCategory.Timeout;
             if (ex is IndustrialAddressParseException) return IndustrialFailureCategory.Address;
             if (ex is IndustrialDataConversionException) return IndustrialFailureCategory.DataConversion;
+            if (ex is IndustrialWriteUncertainException) return IndustrialFailureCategory.Connection;
             if (ex is IndustrialProtocolException) return IndustrialFailureCategory.Protocol;
             if (ex is IndustrialConnectionException || ex is System.IO.IOException || ex is System.Net.Sockets.SocketException) return IndustrialFailureCategory.Connection;
             return ex.InnerException == null ? IndustrialFailureCategory.Unknown : ClassifyFailure(ex.InnerException);
@@ -116,6 +117,7 @@ namespace IndustrialCommSdk.Runtime
         {
             if (ex == null) return false;
             return ex is IndustrialConnectionException ||
+                   ex is IndustrialWriteUncertainException ||
                    ex is IndustrialTimeoutException ||
                    ex is System.IO.IOException ||
                    ex is System.Net.Sockets.SocketException ||

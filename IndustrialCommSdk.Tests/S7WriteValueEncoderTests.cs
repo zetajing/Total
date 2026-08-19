@@ -8,6 +8,12 @@ namespace IndustrialCommSdk.Tests
     public sealed class S7WriteValueEncoderTests
     {
         [Test]
+        public void Options_DefaultToNoAutomaticWriteReplay()
+        {
+            Assert.IsFalse(new SiemensS7ClientOptions().AutoReconnectWrites);
+        }
+
+        [Test]
         public void EncodeString_PadsToConfiguredLength()
         {
             var encoded = S7WriteValueEncoder.EncodeString("AB", 4);

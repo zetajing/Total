@@ -86,30 +86,57 @@ namespace IndustrialCommSdk.Protocols.Modbus
             var parsed = AddressParser.ParseTyped(request.Address);
             var normalizedRequest = NormalizeWriteRequest(request, parsed);
             var master = Master;
-            switch (parsed.Area)
+            var originalRetries = master.Transport.Retries;
+            master.Transport.Retries = 0;
+            try
             {
-                case ModbusArea.Coil:
-                    var bits = RegisterValueCodec.EncodeBits(normalizedRequest);
-                    if (bits.Length == 1)
-                        await master.WriteSingleCoilAsync(SlaveId, parsed.ZeroBasedAddress, bits[0]).ConfigureAwait(false);
-                    else
-                        await master.WriteMultipleCoilsAsync(SlaveId, parsed.ZeroBasedAddress, bits).ConfigureAwait(false);
-                    break;
-                case ModbusArea.DiscreteInput:
-                    throw new IndustrialProtocolException("Discrete inputs are read-only.");
-                case ModbusArea.InputRegister:
-                    throw new IndustrialProtocolException("Input registers are read-only.");
-                case ModbusArea.HoldingRegister:
-                    var registers = DeviceProfile.NormalizeRegistersForWrite(
-                        normalizedRequest.DataType,
-                        RegisterValueCodec.EncodeRegisters(normalizedRequest));
-                    if (registers.Length == 1)
-                        await master.WriteSingleRegisterAsync(SlaveId, parsed.ZeroBasedAddress, registers[0]).ConfigureAwait(false);
-                    else
-                        await master.WriteMultipleRegistersAsync(SlaveId, parsed.ZeroBasedAddress, registers).ConfigureAwait(false);
-                    break;
-                default:
-                    throw new IndustrialProtocolException("Unsupported Modbus area.");
+                switch (parsed.Area)
+                {
+                    case ModbusArea.Coil:
+                        var bits = RegisterValueCodec.EncodeBits(normalizedRequest);
+                        if (bits.Length == 1)
+                            await master.WriteSingleCoilAsync(SlaveId, parsed.ZeroBasedAddress, bits[0]).ConfigureAwait(false);
+                        else
+                            await master.WriteMultipleCoilsAsync(SlaveId, parsed.ZeroBasedAddress, bits).ConfigureAwait(false);
+                        break;
+                    case ModbusArea.DiscreteInput:
+                        throw new IndustrialProtocolException("Discrete inputs are read-only.");
+                    case ModbusArea.InputRegister:
+                        throw new IndustrialProtocolException("Input registers are read-only.");
+                    case ModbusArea.HoldingRegister:
+                        var registers = DeviceProfile.NormalizeRegistersForWrite(
+                            normalizedRequest.DataType,
+                            RegisterValueCodec.EncodeRegisters(normalizedRequest));
+                        if (registers.Length == 1)
+                            await master.WriteSingleRegisterAsync(SlaveId, parsed.ZeroBasedAddress, registers[0]).ConfigureAwait(false);
+                        else
+                            await master.WriteMultipleRegistersAsync(SlaveId, parsed.ZeroBasedAddress, registers).ConfigureAwait(false);
+                        break;
+                    default:
+                        throw new IndustrialProtocolException("Unsupported Modbus area.");
+                }
+            }
+            catch (IndustrialAddressParseException)
+            {
+                throw;
+            }
+            catch (IndustrialDataConversionException)
+            {
+                throw;
+            }
+            catch (IndustrialProtocolException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                throw new IndustrialWriteUncertainException(
+                    "Modbus write outcome is unknown; the write was not replayed.", ex);
+            }
+            finally
+            {
+                // A lost write response is ambiguous: never let the driver replay it automatically.
+                master.Transport.Retries = originalRetries;
             }
         }
 

@@ -45,6 +45,20 @@ namespace IndustrialCommSdk.Exceptions
     }
 
     /// <summary>
+    ///     工业通信写入结果不确定异常。
+    ///     当写请求可能已经到达设备，但响应在传输过程中丢失或操作被取消时抛出。
+    ///     调用方不应在未确认设备状态前自动重放该写入。
+    /// </summary>
+    public sealed class IndustrialWriteUncertainException : IndustrialCommunicationException
+    {
+        /// <summary>使用指定的错误消息和内部异常初始化异常。</summary>
+        public IndustrialWriteUncertainException(string message, Exception innerException) : base(message, innerException) { }
+
+        /// <summary>使用指定的错误消息初始化异常。</summary>
+        public IndustrialWriteUncertainException(string message) : base(message) { }
+    }
+
+    /// <summary>
     ///     工业通信超时异常。
     ///     当通信操作（如读取、写入或握手）在预期的时间限制内未能完成时抛出。
     /// </summary>

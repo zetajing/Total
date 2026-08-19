@@ -52,7 +52,7 @@ namespace IndustrialCommSdk.Protocols.Modbus
         public int OperationTimeoutMilliseconds { get; set; } = 5000;
 
         /// <summary>
-        /// 获取或设置通信失败后的重试次数。默认值为 2。
+        /// 获取或设置读取通信失败后的重试次数。写入操作始终临时禁用驱动层重试，避免丢失响应时重复写入。默认值为 2。
         /// </summary>
         public int Retries { get; set; } = 2;
 
