@@ -111,6 +111,7 @@ namespace IndustrialCommDemo.SocketDebug
         public async Task ConnectAsync(string host, int port, CancellationToken cancellationToken)
         {
             ThrowIfDisposed();
+            cancellationToken.ThrowIfCancellationRequested();
             await DisconnectAsync(CancellationToken.None).ConfigureAwait(false);
 
             var client = new TcpClient();
@@ -124,6 +125,7 @@ namespace IndustrialCommDemo.SocketDebug
                 if (completedTask != connectTask)
                 {
                     client.Close();
+                    cancellationToken.ThrowIfCancellationRequested();
                     throw new TimeoutException("TCP client connect timeout.");
                 }
 

@@ -84,25 +84,38 @@ namespace IndustrialCommDemo
 
             try
             {
-                SaveAllUiState();
-                await ModbusControlTag.ResetClientAsync();
-                await S7ControlTag.ResetClientAsync();
-                await S7ControlTag.ResetSnap7ServerAsync();
-                await McControlTag.ResetClientAsync();
-                await OpcUaControlTag.ResetClientAsync();
-                await SocketControlTag.ResetAllAsync();
-                await MesControlTag.ResetClientAsync();
-                await NetworkServicesControlTag.ResetAsync();
-                await DatabaseControlTag.StopRecorderAsync();
-                await _runtime.StopAsync();
-
-                if (_ctx.DatabaseRecorder != null) { _ctx.DatabaseRecorder.Dispose(); _ctx.DatabaseRecorder = null; }
-                _networkServices.Dispose();
-                _runtime.Dispose();
-            }
-            catch (Exception ex)
-            {
-                try { _demoLogger.Error("程序关闭清理失败。", ex); } catch { }
+                await RunCleanupStepAsync("保存界面状态", () =>
+                {
+                    SaveAllUiState();
+                    return System.Threading.Tasks.Task.CompletedTask;
+                });
+                await RunCleanupStepAsync("关闭 Modbus 客户端", () => ModbusControlTag.ResetClientAsync());
+                await RunCleanupStepAsync("关闭 Siemens S7 客户端", () => S7ControlTag.ResetClientAsync());
+                await RunCleanupStepAsync("关闭 Snap7 虚拟 PLC", () => S7ControlTag.ResetSnap7ServerAsync());
+                await RunCleanupStepAsync("关闭 Mitsubishi MC 客户端", () => McControlTag.ResetClientAsync());
+                await RunCleanupStepAsync("关闭 OPC UA 客户端", () => OpcUaControlTag.ResetClientAsync());
+                await RunCleanupStepAsync("关闭 Socket 调试连接", () => SocketControlTag.ResetAllAsync());
+                await RunCleanupStepAsync("关闭 MES 客户端和接收器", () => MesControlTag.ResetAllAsync());
+                await RunCleanupStepAsync("关闭网络服务", () => NetworkServicesControlTag.ResetAsync());
+                await RunCleanupStepAsync("停止历史数据记录", () => DatabaseControlTag.StopRecorderAsync());
+                await RunCleanupStepAsync("停止工业通信运行时", () => _runtime.StopAsync());
+                await RunCleanupStepAsync("释放历史数据记录器", () =>
+                {
+                    var recorder = _ctx.DatabaseRecorder;
+                    _ctx.DatabaseRecorder = null;
+                    if (recorder != null) recorder.Dispose();
+                    return System.Threading.Tasks.Task.CompletedTask;
+                });
+                await RunCleanupStepAsync("释放网络服务运行时", () =>
+                {
+                    _networkServices.Dispose();
+                    return System.Threading.Tasks.Task.CompletedTask;
+                });
+                await RunCleanupStepAsync("释放工业通信运行时", () =>
+                {
+                    _runtime.Dispose();
+                    return System.Threading.Tasks.Task.CompletedTask;
+                });
             }
             finally
             {
@@ -110,6 +123,20 @@ namespace IndustrialCommDemo
                 try { _sdkLogger.Dispose(); } catch { }
                 _closeCleanupCompleted = true;
                 _ = Dispatcher.BeginInvoke(new Action(() => Close()));
+            }
+        }
+
+        private async System.Threading.Tasks.Task RunCleanupStepAsync(
+            string stepName,
+            Func<System.Threading.Tasks.Task> cleanup)
+        {
+            try
+            {
+                await cleanup();
+            }
+            catch (Exception ex)
+            {
+                try { _demoLogger.Error(stepName + "失败。", ex); } catch { }
             }
         }
 
@@ -165,8 +192,8 @@ namespace IndustrialCommDemo
         private void ToggleLogButton_Click(object sender, RoutedEventArgs e)
         {
             _logPanelVisible = !_logPanelVisible;
-            LogPanelRow.Height = _logPanelVisible ? new GridLength(132) : new GridLength(0);
-            LogPanelBorder.Visibility = _logPanelVisible ? Visibility.Visible : Visibility.Collapsed;
+            LogPanelRow.Height = _logPanelVisible ? new GridLength(132) : GridLength.Auto;
+            LogTabControl.Visibility = _logPanelVisible ? Visibility.Visible : Visibility.Collapsed;
             ToggleLogButton.Content = _logPanelVisible ? "隐藏日志" : "显示日志";
         }
     }

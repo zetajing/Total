@@ -210,9 +210,8 @@ namespace IndustrialCommDemo.Views
             }
         }
 
-        public async Task ResetClientAsync()
+        public Task ResetClientAsync()
         {
-            await StopReceiverAsync();
             var client = _httpClient;
             _httpClient = null;
             _endpoint = null;
@@ -221,6 +220,14 @@ namespace IndustrialCommDemo.Views
                 try { client.Dispose(); } catch { }
             }
             if (_initialized) UpdateClientState(false, "配置未应用");
+            return Task.CompletedTask;
+        }
+
+        public async Task ResetAllAsync()
+        {
+            await StopReceiverAsync();
+            if (_initialized) UpdateReceiverState(false, "已停止");
+            await ResetClientAsync();
         }
 
         private async Task StopReceiverAsync()

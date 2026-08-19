@@ -433,11 +433,11 @@ namespace IndustrialCommSdk.Protocols.S7
                     return;
                 case Abstractions.DataType.String:
                     await _plc.WriteBytesAsync(ToPlcArea(address.Area), address.DbNumber, address.ByteOffset,
-                        Encoding.ASCII.GetBytes((request.Value ?? string.Empty).ToString()), token).ConfigureAwait(false);
+                        S7WriteValueEncoder.EncodeString(request.Value, request.Length), token).ConfigureAwait(false);
                     return;
                 case Abstractions.DataType.ByteArray:
                     await _plc.WriteBytesAsync(ToPlcArea(address.Area), address.DbNumber, address.ByteOffset,
-                        (byte[])request.Value, token).ConfigureAwait(false);
+                        S7WriteValueEncoder.EncodeByteArray(request.Value, request.Length), token).ConfigureAwait(false);
                     return;
                 case Abstractions.DataType.Char:
                     var text = (request.Value ?? string.Empty).ToString();

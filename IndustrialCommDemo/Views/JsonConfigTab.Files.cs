@@ -8,6 +8,7 @@ using IndustrialCommSdk;
 using IndustrialCommSdk.Abstractions;
 using IndustrialCommSdk.Runtime.Configuration;
 using IndustrialCommSdk.Runtime;
+using IndustrialCommDemo.Services;
 
 namespace IndustrialCommDemo.Views
 {
@@ -110,23 +111,32 @@ namespace IndustrialCommDemo.Views
         private void LoadSelectedPointConfig(bool forceReload = false, bool saveCurrent = true)
         {
             var selectedPath = ResolveSelectedPointConfigPath();
-            if (!forceReload && string.Equals(selectedPath, _pointConfigPath, StringComparison.OrdinalIgnoreCase)) return;
+            if (!forceReload && string.Equals(selectedPath, _pointConfigPath, StringComparison.OrdinalIgnoreCase))
+            {
+                _loadedPointDeviceName = GetSelectedDeviceName();
+                return;
+            }
             if (saveCurrent && !string.IsNullOrWhiteSpace(_pointConfigPath) && File.Exists(_pointConfigPath))
             {
                 if (PointEditorTabControl.SelectedIndex == 0) ApplyPointRowsToJson();
-                File.WriteAllText(_pointConfigPath, PointJsonTextBox.Text);
+                JsonPointConfigStore.Save(_jsonValidation, _pointConfigPath, PointJsonTextBox.Text);
             }
             if (!File.Exists(selectedPath))
             {
                 _pointConfigPath = selectedPath;
+                _loadedPointDeviceName = GetSelectedDeviceName();
                 _pointRows.Clear();
                 _pointRows.Add(new PointEditorRow());
                 PointJsonTextBox.Text = "{\r\n  \"tags\": []\r\n}";
                 PointConfigGroupBox.Header = GetPointConfigDisplayName(_pointConfigPath) + "（待创建）";
                 return;
             }
+
+            var selectedJson = File.ReadAllText(selectedPath);
+            TagTable.FromJson(selectedJson);
             _pointConfigPath = selectedPath;
-            PointJsonTextBox.Text = File.ReadAllText(_pointConfigPath);
+            _loadedPointDeviceName = GetSelectedDeviceName();
+            PointJsonTextBox.Text = selectedJson;
             LoadPointRows();
             PointConfigGroupBox.Header = GetPointConfigDisplayName(_pointConfigPath);
         }

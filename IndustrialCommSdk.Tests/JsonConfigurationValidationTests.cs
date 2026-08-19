@@ -99,6 +99,26 @@ namespace IndustrialCommSdk.Tests
             StringAssert.Contains("\"tags\"", File.ReadAllText(pointPath));
         }
 
+        [Test]
+        public void PointConfigStore_InvalidDraftDoesNotOverwriteExistingFile()
+        {
+            var pointPath = Path.Combine(
+                TestContext.CurrentContext.WorkDirectory,
+                "invalid-point-draft-" + Guid.NewGuid().ToString("N") + ".json");
+            const string original = "{\"tags\":[]}";
+            File.WriteAllText(pointPath, original);
+            try
+            {
+                Assert.Throws<InvalidOperationException>(() =>
+                    JsonPointConfigStore.Save(_service, pointPath, "{\"tags\":["));
+                Assert.AreEqual(original, File.ReadAllText(pointPath));
+            }
+            finally
+            {
+                if (File.Exists(pointPath)) File.Delete(pointPath);
+            }
+        }
+
         private static string FindConfigDirectory()
         {
             var directory = new DirectoryInfo(TestContext.CurrentContext.TestDirectory);

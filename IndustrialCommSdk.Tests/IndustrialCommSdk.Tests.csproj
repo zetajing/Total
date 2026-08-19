@@ -16,4 +16,7 @@
     <ProjectReference Include="..\IndustrialCommSdk\IndustrialCommSdk.csproj" />
     <ProjectReference Include="..\IndustrialCommSdk.Storage.MySql\IndustrialCommSdk.Storage.MySql.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <Reference Include="WindowsBase" />
+  </ItemGroup>
 </Project>

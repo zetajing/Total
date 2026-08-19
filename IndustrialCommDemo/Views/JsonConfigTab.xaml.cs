@@ -26,6 +26,7 @@ namespace IndustrialCommDemo.Views
         private JsonConfigurationValidationService _jsonValidation;
         private bool _isRefreshingDeviceList;
         private bool _isLoadingDeviceForm;
+        private string _loadedPointDeviceName;
 
         private IndustrialSdk Sdk { get { return _ctx.Runtime.Sdk; } }
 
@@ -68,13 +69,27 @@ namespace IndustrialCommDemo.Views
         private void DeviceNameComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             if (_isRefreshingDeviceList) return;
+            var previousDeviceName = _loadedPointDeviceName;
             try
             {
-                LoadDeviceForm();
                 LoadSelectedPointConfig();
+                LoadDeviceForm();
                 SetStatus("已切换点位表：" + _pointConfigPath, Brushes.ForestGreen);
             }
-            catch (Exception ex) { SetStatus("切换设备失败：" + ex.Message, Brushes.IndianRed); }
+            catch (Exception ex)
+            {
+                RestoreDeviceSelection(previousDeviceName);
+                SetStatus("切换设备失败，已保留当前点位草稿：" + ex.Message, Brushes.IndianRed);
+            }
+        }
+
+        private void RestoreDeviceSelection(string deviceName)
+        {
+            if (string.IsNullOrWhiteSpace(deviceName)) return;
+            _isRefreshingDeviceList = true;
+            try { DeviceNameComboBox.SelectedItem = deviceName; }
+            finally { _isRefreshingDeviceList = false; }
+            LoadDeviceForm();
         }
 
         private void ProtocolComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -132,6 +147,7 @@ namespace IndustrialCommDemo.Views
                 DeviceJsonTextBox.Text = Sdk.SerializeConfiguration(config);
                 RefreshDeviceList(config);
                 DeviceNameComboBox.SelectedItem = newName;
+                LoadSelectedPointConfig();
                 SetStatus("公共参数和 settings 已应用，请保存配置。", Brushes.ForestGreen);
             }
             catch (Exception ex) { _ctx.HandleError("应用设备参数失败。", ex, true); }
@@ -159,6 +175,7 @@ namespace IndustrialCommDemo.Views
                 DeviceJsonTextBox.Text = Sdk.SerializeConfiguration(config);
                 RefreshDeviceList(config);
                 DeviceNameComboBox.SelectedItem = name;
+                LoadSelectedPointConfig();
                 LoadDeviceForm();
                 SetStatus("已新增 " + name + "，请完善 settings 和点位文件后保存。", Brushes.ForestGreen);
             }
@@ -219,6 +236,7 @@ namespace IndustrialCommDemo.Views
                 DeviceNameComboBox.SelectedItem = config.Devices[0].Name;
                 LoadDeviceForm();
                 _pointConfigPath = ResolveSelectedPointConfigPath();
+                _loadedPointDeviceName = GetSelectedDeviceName();
                 LoadPointTemplateButton_Click(sender, e);
                 SetStatus("已加载设备和点位模板，保存后生效。", Brushes.DarkGoldenrod);
             }

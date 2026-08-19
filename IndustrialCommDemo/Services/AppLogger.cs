@@ -35,6 +35,7 @@ namespace IndustrialCommDemo.Services
         /// 线程安全的队列，用于暂存待刷新到 UI 的日志消息行。
         /// </summary>
         private readonly ConcurrentQueue<string> _pendingUiMessages = new ConcurrentQueue<string>();
+        private readonly object _lifetimeGate = new object();
 
         /// <summary>
         /// 标记是否已安排了 UI 刷新任务。0 表示未安排，1 表示已安排。
@@ -45,7 +46,7 @@ namespace IndustrialCommDemo.Services
         /// <summary>
         /// 指示当前实例是否已被释放。
         /// </summary>
-        private bool _disposed;
+        private volatile bool _disposed;
 
         /// <summary>
         /// 初始化 <see cref="AppLogger"/> 类的新实例。
@@ -105,12 +106,16 @@ namespace IndustrialCommDemo.Services
         /// </summary>
         public void Dispose()
         {
-            if (_disposed)
+            lock (_lifetimeGate)
             {
-                return;
+                if (_disposed)
+                {
+                    return;
+                }
+
+                _disposed = true;
             }
 
-            _disposed = true;
             try
             {
                 if (!_dispatcher.CheckAccess())
@@ -137,18 +142,21 @@ namespace IndustrialCommDemo.Services
         /// <param name="exception">与日志关联的异常；可为 null。若提供，会附加其堆栈跟踪信息。</param>
         private void Write(string level, string message, Exception exception)
         {
-            if (_disposed)
-            {
-                return;
-            }
-
             var line = string.Format("[{0:HH:mm:ss}] [{1}] {2} {3}", DateTime.Now, _channel, level, message ?? string.Empty);
             if (exception != null && !string.IsNullOrWhiteSpace(exception.StackTrace))
             {
                 line = line + Environment.NewLine + exception.StackTrace;
             }
 
-            _pendingUiMessages.Enqueue(line);
+            lock (_lifetimeGate)
+            {
+                if (_disposed)
+                {
+                    return;
+                }
+
+                _pendingUiMessages.Enqueue(line);
+            }
             LogDisplayHelper.ShowMsg(_channel, line);
             ScheduleUiFlush();
         }
@@ -194,12 +202,6 @@ namespace IndustrialCommDemo.Services
         /// </summary>
         private void FlushUiQueue()
         {
-            if (_disposed)
-            {
-                Interlocked.Exchange(ref _flushScheduled, 0);
-                return;
-            }
-
             var batch = new List<string>();
             string line;
             while (_pendingUiMessages.TryDequeue(out line))
