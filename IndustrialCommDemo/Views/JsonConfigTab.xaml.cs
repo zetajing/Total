@@ -2,6 +2,7 @@ using System;
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
@@ -26,6 +27,7 @@ namespace IndustrialCommDemo.Views
         private JsonConfigurationValidationService _jsonValidation;
         private bool _isRefreshingDeviceList;
         private bool _isLoadingDeviceForm;
+        private bool _hostFieldSupported;
         private string _loadedPointDeviceName;
 
         private IndustrialSdk Sdk { get { return _ctx.Runtime.Sdk; } }
@@ -98,7 +100,9 @@ namespace IndustrialCommDemo.Views
             try
             {
                 var provider = Sdk.Protocols.Get(GetSelectedProtocol());
-                SettingsJsonTextBox.Text = Sdk.Configuration.SerializeSettings(provider.CreateDefaultSettings());
+                var settings = provider.CreateDefaultSettings();
+                SettingsJsonTextBox.Text = Sdk.Configuration.SerializeSettings(settings);
+                LoadHostField(settings);
                 SetStatus("已加载协议默认 settings，请应用到 JSON。", Brushes.DarkGoldenrod);
             }
             catch (Exception ex) { SetStatus("加载协议 settings 失败：" + ex.Message, Brushes.IndianRed); }
@@ -115,6 +119,20 @@ namespace IndustrialCommDemo.Views
             catch (Exception ex) { _ctx.HandleError("协议 settings JSON 无效。", ex, true); }
         }
 
+        private void SettingsJsonTextBox_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            if (_ctx == null || _isLoadingDeviceForm || ProtocolComboBox.SelectedItem == null) return;
+            try
+            {
+                var settings = Sdk.Configuration.ParseSettings(GetSelectedProtocol(), SettingsJsonTextBox.Text);
+                LoadHostField(settings);
+            }
+            catch
+            {
+                // JSON is temporarily invalid while the user is typing; validation happens on apply.
+            }
+        }
+
         private void ApplyDeviceFormButton_Click(object sender, RoutedEventArgs e)
         {
             try
@@ -128,6 +146,7 @@ namespace IndustrialCommDemo.Views
 
                 var protocol = GetSelectedProtocol();
                 var settings = Sdk.Configuration.ParseSettings(protocol, SettingsJsonTextBox.Text);
+                ApplyHostField(settings);
                 var errors = Sdk.Protocols.Get(protocol).Validate(settings);
                 if (errors.Count > 0) throw new InvalidOperationException(string.Join(Environment.NewLine, errors));
 
@@ -366,6 +385,7 @@ namespace IndustrialCommDemo.Views
         {
             DeviceJsonTextBox.IsEnabled = enabled;
             SettingsJsonTextBox.IsEnabled = enabled;
+            HostTextBox.IsEnabled = enabled && _hostFieldSupported;
             PointJsonTextBox.IsEnabled = enabled;
             DeviceNameComboBox.IsEnabled = enabled;
         }
@@ -375,6 +395,40 @@ namespace IndustrialCommDemo.Views
             JsonConfigStatusTextBlock.Text = text;
             JsonConfigStatusTextBlock.Foreground = foreground;
             _ctx.SetHeaderStatus(text, foreground);
+        }
+
+        private void LoadHostField(IProtocolSettings settings)
+        {
+            var property = GetHostProperty(settings);
+            _hostFieldSupported = property != null;
+            HostLabelTextBlock.Text = property != null && string.Equals(property.Name, "EndpointUrl", StringComparison.Ordinal)
+                ? "Endpoint URL"
+                : "主机/IP";
+            HostTextBox.IsEnabled = _hostFieldSupported;
+            HostTextBox.ToolTip = _hostFieldSupported
+                ? (property.Name == "EndpointUrl" ? "填写完整 OPC UA Endpoint URL。" : "填写协议连接主机或 IP 地址。")
+                : "当前协议不使用主机/IP字段。";
+            HostTextBox.Text = property == null ? string.Empty : (property.GetValue(settings, null) as string ?? string.Empty);
+        }
+
+        private void ApplyHostField(IProtocolSettings settings)
+        {
+            var property = GetHostProperty(settings);
+            if (property == null)
+            {
+                if (!string.IsNullOrWhiteSpace(HostTextBox.Text))
+                    throw new InvalidOperationException("当前协议不支持主机/IP配置。");
+                return;
+            }
+
+            property.SetValue(settings, EmptyToNull(HostTextBox.Text), null);
+        }
+
+        private static PropertyInfo GetHostProperty(IProtocolSettings settings)
+        {
+            if (settings == null) return null;
+            var type = settings.GetType();
+            return type.GetProperty("Host") ?? type.GetProperty("EndpointUrl");
         }
     }
 }

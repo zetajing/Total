@@ -1,10 +1,10 @@
 {
   "devices": [
     {
-      "name": "plc-template",
+      "name": "plc1",
       "protocol": "modbus-tcp",
-      "deviceId": "plc-template",
-      "pointsFile": "points/template.json",
+      "deviceId": "plc1",
+      "pointsFile": "points/plc1.json",
       "enabled": false,
       "runtime": {
         "pollingIntervalMilliseconds": 1000,

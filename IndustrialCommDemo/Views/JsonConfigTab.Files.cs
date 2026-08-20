@@ -69,6 +69,7 @@ namespace IndustrialCommDemo.Views
                 OperationTimeoutTextBox.Text = device.Runtime.OperationTimeoutMilliseconds.ToString();
                 EnabledCheckBox.IsChecked = device.Enabled;
                 SettingsJsonTextBox.Text = Sdk.Configuration.SerializeSettings(device.Settings);
+                LoadHostField(device.Settings);
             }
             finally { _isLoadingDeviceForm = false; }
         }

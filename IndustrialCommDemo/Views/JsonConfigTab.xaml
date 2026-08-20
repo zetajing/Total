@@ -37,6 +37,7 @@
                                     <RowDefinition Height="Auto" />
                                     <RowDefinition Height="Auto" />
                                     <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
                                 </Grid.RowDefinitions>
 
                                 <TextBlock VerticalAlignment="Center" Text="设备名称" />
@@ -65,14 +66,19 @@
                                 <TextBlock Grid.Row="3" Grid.Column="2" VerticalAlignment="Center" Text="重连(ms)" />
                                 <TextBox x:Name="ReconnectDelayTextBox" Grid.Row="3" Grid.Column="3" Margin="4" />
 
-                                <CheckBox x:Name="EnabledCheckBox" Grid.Row="4" Grid.ColumnSpan="4" Margin="4,8" VerticalAlignment="Center" Content="启用并由运行中心管理" />
+                                <TextBlock x:Name="HostLabelTextBlock" Grid.Row="4" VerticalAlignment="Center" Text="主机/IP" />
+                                <TextBox x:Name="HostTextBox" Grid.Row="4" Grid.Column="1" Grid.ColumnSpan="3" Margin="4"
+                                         ToolTip="填写协议连接主机；OPC UA 协议填写完整 Endpoint URL。" />
 
-                                <TextBlock Grid.Row="5" VerticalAlignment="Top" Margin="0,8,0,0" Text="协议 settings" />
-                                <TextBox x:Name="SettingsJsonTextBox" Grid.Row="5" Grid.Column="1" Grid.ColumnSpan="3" Height="150" Margin="4"
+                                <CheckBox x:Name="EnabledCheckBox" Grid.Row="5" Grid.ColumnSpan="4" Margin="4,8" VerticalAlignment="Center" Content="启用并由运行中心管理" />
+
+                                <TextBlock Grid.Row="6" VerticalAlignment="Top" Margin="0,8,0,0" Text="协议 settings" />
+                                <TextBox x:Name="SettingsJsonTextBox" Grid.Row="6" Grid.Column="1" Grid.ColumnSpan="3" Height="150" Margin="4"
                                          AcceptsReturn="True" AcceptsTab="True" FontFamily="Consolas" FontSize="12"
-                                         HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" TextWrapping="NoWrap" />
+                                         HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" TextWrapping="NoWrap"
+                                         TextChanged="SettingsJsonTextBox_TextChanged" />
 
-                                <WrapPanel Grid.Row="6" Grid.ColumnSpan="4" HorizontalAlignment="Right">
+                                <WrapPanel Grid.Row="7" Grid.ColumnSpan="4" HorizontalAlignment="Right">
                                     <Button Margin="4" Click="AddDeviceButton_Click" Content="新增设备" />
                                     <Button Margin="4" Click="DeleteDeviceButton_Click" Content="删除设备" />
                                     <Button Margin="4" Click="FormatSettingsButton_Click" Content="格式化 settings" />
