@@ -30,6 +30,8 @@ namespace IndustrialCommDemo.Views
         private bool _hostFieldSupported;
         private string _loadedPointDeviceName;
 
+        private const string EditorDefaultHost = "127.0.0.1";
+
         private IndustrialSdk Sdk { get { return _ctx.Runtime.Sdk; } }
 
         public JsonConfigTab()
@@ -100,7 +102,7 @@ namespace IndustrialCommDemo.Views
             try
             {
                 var provider = Sdk.Protocols.Get(GetSelectedProtocol());
-                var settings = provider.CreateDefaultSettings();
+                var settings = CreateEditorDefaultSettings(provider);
                 SettingsJsonTextBox.Text = Sdk.Configuration.SerializeSettings(settings);
                 LoadHostField(settings);
                 SetStatus("已加载协议默认 settings，请应用到 JSON。", Brushes.DarkGoldenrod);
@@ -148,7 +150,17 @@ namespace IndustrialCommDemo.Views
                 var settings = Sdk.Configuration.ParseSettings(protocol, SettingsJsonTextBox.Text);
                 ApplyHostField(settings);
                 var errors = Sdk.Protocols.Get(protocol).Validate(settings);
-                if (errors.Count > 0) throw new InvalidOperationException(string.Join(Environment.NewLine, errors));
+                if (errors.Count > 0)
+                {
+                    var hostError = errors.Any(error => string.Equals(error, "host is required.", StringComparison.OrdinalIgnoreCase));
+                    if (hostError)
+                    {
+                        HostTextBox.Focus();
+                        HostTextBox.SelectAll();
+                        throw new InvalidOperationException("请填写主机/IP（例如 192.168.1.20）。");
+                    }
+                    throw new InvalidOperationException(string.Join(Environment.NewLine, errors));
+                }
 
                 device.Name = newName;
                 device.Protocol = protocol;
@@ -189,7 +201,7 @@ namespace IndustrialCommDemo.Views
                     PointsFile = "points/" + name + ".json",
                     Enabled = false,
                     Runtime = new IndustrialDeviceRuntimeOptions(),
-                    Settings = provider.CreateDefaultSettings(),
+                    Settings = CreateEditorDefaultSettings(provider),
                 });
                 DeviceJsonTextBox.Text = Sdk.SerializeConfiguration(config);
                 RefreshDeviceList(config);
@@ -429,6 +441,20 @@ namespace IndustrialCommDemo.Views
             if (settings == null) return null;
             var type = settings.GetType();
             return type.GetProperty("Host") ?? type.GetProperty("EndpointUrl");
+        }
+
+        private static IProtocolSettings CreateEditorDefaultSettings(IIndustrialProtocolProvider provider)
+        {
+            if (provider == null) throw new ArgumentNullException(nameof(provider));
+            var settings = provider.CreateDefaultSettings();
+            var hostProperty = GetHostProperty(settings);
+            if (hostProperty != null && string.Equals(hostProperty.Name, "Host", StringComparison.Ordinal) &&
+                hostProperty.PropertyType == typeof(string) &&
+                string.IsNullOrWhiteSpace(hostProperty.GetValue(settings, null) as string))
+            {
+                hostProperty.SetValue(settings, EditorDefaultHost, null);
+            }
+            return settings;
         }
     }
 }
