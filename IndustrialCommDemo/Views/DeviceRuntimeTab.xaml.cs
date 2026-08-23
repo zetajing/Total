@@ -34,6 +34,7 @@ namespace IndustrialCommDemo.Views
         private async void ReloadButton_Click(object sender, RoutedEventArgs e)
         {
             _values.Clear();
+            UpdateSummary();
             await RunAsync("重新加载设备配置", () => _ctx.Runtime.ReloadAsync());
         }
 
@@ -53,6 +54,7 @@ namespace IndustrialCommDemo.Views
             {
                 _devices.Clear();
                 foreach (var device in e.Devices) _devices.Add(device);
+                UpdateSummary();
             });
         }
 
@@ -71,6 +73,7 @@ namespace IndustrialCommDemo.Views
                     State = e.State,
                     Error = e.Error,
                 };
+                UpdateSummary();
             });
         }
 
@@ -86,7 +89,22 @@ namespace IndustrialCommDemo.Views
                     if (old == null) _values.Add(value);
                     else _values[_values.IndexOf(old)] = value;
                 }
+                UpdateSummary();
             });
+        }
+
+        private void UpdateSummary()
+        {
+            var connectedCount = _devices.Count(device =>
+                string.Equals(device.State, "Connected", StringComparison.OrdinalIgnoreCase));
+            var issueCount = _devices.Count(device =>
+                !string.IsNullOrWhiteSpace(device.Error) ||
+                string.Equals(device.State, "Faulted", StringComparison.OrdinalIgnoreCase));
+
+            DeviceCountTextBlock.Text = _devices.Count.ToString();
+            ConnectedCountTextBlock.Text = connectedCount.ToString();
+            IssueCountTextBlock.Text = issueCount.ToString();
+            PointCountTextBlock.Text = _values.Count.ToString();
         }
 
         private async Task RunAsync(string actionName, Func<Task> action)
@@ -97,6 +115,7 @@ namespace IndustrialCommDemo.Views
                 RuntimeStatusTextBlock.Text = actionName + "...";
                 RuntimeStatusTextBlock.Foreground = Brushes.DarkGoldenrod;
                 await action();
+                UpdateSummary();
                 RuntimeStatusTextBlock.Text = actionName + "完成，共 " + _devices.Count + " 台启用设备。";
                 RuntimeStatusTextBlock.Foreground = Brushes.ForestGreen;
                 _ctx.SetHeaderStatus(actionName + "完成", Brushes.LightGreen);

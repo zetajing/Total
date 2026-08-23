@@ -45,9 +45,9 @@
             </Border>
 
             <StackPanel Grid.Row="1" Margin="0,10,0,0" Orientation="Horizontal">
-                <Button x:Name="StartButton" Width="150" Padding="12,8" Background="#2563EB" Foreground="White" BorderThickness="0"
+                <Button x:Name="StartButton" Width="150" Style="{StaticResource PrimaryButtonStyle}"
                         Click="StartButton_Click" Content="测试并启用" />
-                <Button x:Name="StopButton" Width="110" Margin="10,0,0,0" Padding="12,8" Background="#E2E8F0" BorderBrush="#CBD5E1"
+                <Button x:Name="StopButton" Width="110" Margin="10,0,0,0" Style="{StaticResource SubtleDangerButtonStyle}"
                         Click="StopButton_Click" Content="停止记录" />
             </StackPanel>
 

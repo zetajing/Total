@@ -70,8 +70,8 @@
                         <TextBlock x:Name="CapabilityTextBlock" TextWrapping="Wrap" Foreground="#475569" Text="协议能力：等待初始化。" />
                     </Border>
                     <StackPanel Grid.Row="12" Grid.ColumnSpan="2" Orientation="Horizontal" Margin="0,16,0,0">
-                        <Button Width="120" Margin="0,0,12,0" Padding="10" Background="#1D4ED8" Foreground="White" BorderThickness="0" Click="ConnectButton_Click" Content="连接" />
-                        <Button Width="120" Margin="0,0,12,0" Padding="10" Background="#334155" Foreground="White" BorderThickness="0" Click="DisconnectButton_Click" Content="断开" />
+                        <Button Width="120" Margin="0,0,12,0" Style="{StaticResource PrimaryButtonStyle}" Click="ConnectButton_Click" Content="连接" />
+                        <Button Width="120" Margin="0,0,12,0" Style="{StaticResource SubtleDangerButtonStyle}" Click="DisconnectButton_Click" Content="断开" />
                         <TextBlock Margin="8,0,0,0" VerticalAlignment="Center" FontWeight="SemiBold" Text="状态：" />
                         <TextBlock x:Name="StatusTextBlock" Margin="8,0,0,0" VerticalAlignment="Center" Foreground="#0F766E" Text="未连接" />
                     </StackPanel>
@@ -115,10 +115,10 @@
                     <TextBlock Grid.Row="4" Grid.Column="0" Margin="0,8" VerticalAlignment="Center" Text="轮询间隔（毫秒）" />
                     <TextBox x:Name="PollIntervalTextBox" Grid.Row="4" Grid.Column="1" Margin="0,6,0,6" Text="1000" />
                     <UniformGrid Grid.Row="5" Grid.ColumnSpan="2" Margin="0,8,0,0" Columns="4">
-                        <Button Margin="0,0,8,8" Padding="10" Background="#0891B2" Foreground="White" BorderThickness="0" Click="ReadButton_Click" Content="读取" />
-                        <Button Margin="0,0,8,8" Padding="10" Background="#059669" Foreground="White" BorderThickness="0" Click="WriteButton_Click" Content="写入" />
-                        <Button Margin="0,0,8,8" Padding="10" Background="#7C3AED" Foreground="White" BorderThickness="0" Click="SubscribeButton_Click" Content="订阅" />
-                        <Button Margin="0,0,0,8" Padding="10" Background="#9F1239" Foreground="White" BorderThickness="0" Click="UnsubscribeButton_Click" Content="停止" />
+                        <Button Margin="0,0,8,8" Style="{StaticResource PrimaryButtonStyle}" Click="ReadButton_Click" Content="读取" />
+                        <Button Margin="0,0,8,8" Click="WriteButton_Click" Content="写入" />
+                        <Button Margin="0,0,8,8" Click="SubscribeButton_Click" Content="订阅" />
+                        <Button Margin="0,0,0,8" Style="{StaticResource SubtleDangerButtonStyle}" Click="UnsubscribeButton_Click" Content="停止" />
                     </UniformGrid>
                     <TextBlock Grid.Row="6" Grid.ColumnSpan="2" Margin="0,4,0,0" TextWrapping="Wrap" Foreground="#64748B"
                                Text="地址会按当前 Profile 解析。通用 Modbus 支持 HR0、IR0、C0、DI0 以及 40001、30001、00001、10001 等写法；位地址只能选择 Bool，寄存器地址可选择 16/32 位、浮点、字符串和字节数组。地址框支持逗号、分号、换行，多地址点击「读取」会自动走批量读取。" />
@@ -133,7 +133,7 @@
                                     <TextBox x:Name="RtuRawRequestTextBox" Margin="0,3,0,0" FontFamily="Consolas" Text="01 03 00 00 00 01" />
                                     <StackPanel Margin="0,7,0,2" Orientation="Horizontal">
                                         <CheckBox x:Name="RtuAutoCrcCheckBox" VerticalAlignment="Center" IsChecked="True" Content="自动追加 CRC16" />
-                                        <Button Margin="14,0,0,0" Padding="14,6" Background="#2563EB" Foreground="White" BorderThickness="0" Click="RtuRawSendButton_Click" Content="发送原始报文" />
+                                        <Button Margin="14,0,0,0" Style="{StaticResource PrimaryButtonStyle}" Click="RtuRawSendButton_Click" Content="发送原始报文" />
                                     </StackPanel>
                                     <TextBlock Margin="0,7,0,0" Foreground="#0369A1" Text="发送 TX" />
                                     <TextBox x:Name="RtuTxTextBox" Margin="0,3,0,0" IsReadOnly="True" FontFamily="Consolas" Text="等待发送..." />

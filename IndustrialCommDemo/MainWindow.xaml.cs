@@ -158,7 +158,52 @@ namespace IndustrialCommDemo
         private void SetHeaderStatus(string text, Brush foreground)
         {
             HeaderStatusTextBlock.Text = text;
-            HeaderStatusTextBlock.Foreground = foreground;
+
+            string backgroundKey;
+            string borderKey;
+            string foregroundKey;
+
+            if (ReferenceEquals(foreground, Brushes.OrangeRed) ||
+                ReferenceEquals(foreground, Brushes.IndianRed) ||
+                ReferenceEquals(foreground, Brushes.Red))
+            {
+                backgroundKey = "DangerSubtleBrush";
+                borderKey = "DangerStrokeBrush";
+                foregroundKey = "DangerBrush";
+            }
+            else if (ReferenceEquals(foreground, Brushes.Khaki) ||
+                     ReferenceEquals(foreground, Brushes.DarkGoldenrod) ||
+                     ReferenceEquals(foreground, Brushes.Orange))
+            {
+                backgroundKey = "WarningSubtleBrush";
+                borderKey = "WarningStrokeBrush";
+                foregroundKey = "WarningBrush";
+            }
+            else if (ReferenceEquals(foreground, Brushes.LightGreen) ||
+                     ReferenceEquals(foreground, Brushes.ForestGreen) ||
+                     ReferenceEquals(foreground, Brushes.Green))
+            {
+                backgroundKey = "SuccessSubtleBrush";
+                borderKey = "SuccessStrokeBrush";
+                foregroundKey = "SuccessBrush";
+            }
+            else
+            {
+                backgroundKey = "AccentSubtleBrush";
+                borderKey = "AccentStrokeBrush";
+                foregroundKey = "AccentBrush";
+            }
+
+            var statusForeground = ResolveBrush(foregroundKey, foreground ?? Brushes.SteelBlue);
+            HeaderStatusBorder.Background = ResolveBrush(backgroundKey, Brushes.WhiteSmoke);
+            HeaderStatusBorder.BorderBrush = ResolveBrush(borderKey, statusForeground);
+            HeaderStatusDot.Fill = statusForeground;
+            HeaderStatusTextBlock.Foreground = statusForeground;
+        }
+
+        private Brush ResolveBrush(string key, Brush fallback)
+        {
+            return TryFindResource(key) as Brush ?? fallback;
         }
 
         // ── Log panel ──
@@ -192,7 +237,8 @@ namespace IndustrialCommDemo
         private void ToggleLogButton_Click(object sender, RoutedEventArgs e)
         {
             _logPanelVisible = !_logPanelVisible;
-            LogPanelRow.Height = _logPanelVisible ? new GridLength(132) : GridLength.Auto;
+            LogPanelRow.Height = _logPanelVisible ? new GridLength(150) : GridLength.Auto;
+            LogPanelSplitter.Visibility = _logPanelVisible ? Visibility.Visible : Visibility.Collapsed;
             LogTabControl.Visibility = _logPanelVisible ? Visibility.Visible : Visibility.Collapsed;
             ToggleLogButton.Content = _logPanelVisible ? "隐藏日志" : "显示日志";
         }

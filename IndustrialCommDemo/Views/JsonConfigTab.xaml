@@ -80,9 +80,9 @@
 
                                 <WrapPanel Grid.Row="7" Grid.ColumnSpan="4" HorizontalAlignment="Right">
                                     <Button Margin="4" Click="AddDeviceButton_Click" Content="新增设备" />
-                                    <Button Margin="4" Click="DeleteDeviceButton_Click" Content="删除设备" />
+                                    <Button Margin="4" Style="{StaticResource SubtleDangerButtonStyle}" Click="DeleteDeviceButton_Click" Content="删除设备" />
                                     <Button Margin="4" Click="FormatSettingsButton_Click" Content="格式化 settings" />
-                                    <Button Margin="4" Background="#2563EB" Foreground="White" Click="ApplyDeviceFormButton_Click" Content="应用到 JSON" />
+                                    <Button Margin="4" Style="{StaticResource PrimaryButtonStyle}" Click="ApplyDeviceFormButton_Click" Content="应用到 JSON" />
                                 </WrapPanel>
                             </Grid>
                         </ScrollViewer>
@@ -159,13 +159,13 @@
                              SelectionChanged="DeviceNameComboBox_SelectionChanged" />
                     <WrapPanel Grid.Row="2" Grid.ColumnSpan="2" Margin="0,12,0,0">
                         <Button Width="100" Margin="0,0,8,8" Click="ReloadConfigButton_Click" Content="重新加载" />
-                        <Button Width="100" Margin="0,0,8,8" Click="SaveConfigButton_Click" Content="保存配置" />
+                        <Button Width="100" Margin="0,0,8,8" Style="{StaticResource PrimaryButtonStyle}" Click="SaveConfigButton_Click" Content="保存配置" />
                         <Button Width="100" Margin="0,0,8,8" Click="ValidateConfigButton_Click" Content="校验配置" />
                         <Button Width="100" Margin="0,0,8,8" Click="ValidateAllConfigButton_Click" Content="校验全部" />
                         <Button Width="100" Margin="0,0,8,8" Click="LoadDeviceTemplateButton_Click" Content="设备模板" />
                         <Button Width="100" Margin="0,0,8,8" Click="LoadPointTemplateButton_Click" Content="点位模板" />
-                        <Button Width="100" Margin="0,0,8,8" Background="#2563EB" Foreground="White" BorderThickness="0" Click="TestConnectionButton_Click" Content="测试连接" />
-                        <Button Width="100" Margin="0,0,8,8" Background="#0F766E" Foreground="White" BorderThickness="0" Click="ReadPointsButton_Click" Content="批量读取" />
+                        <Button Width="100" Margin="0,0,8,8" Click="TestConnectionButton_Click" Content="测试连接" />
+                        <Button Width="100" Margin="0,0,8,8" Style="{StaticResource PrimaryButtonStyle}" Click="ReadPointsButton_Click" Content="批量读取" />
                     </WrapPanel>
                 </Grid>
             </Border>

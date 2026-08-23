@@ -49,8 +49,8 @@
                                    Text="协议能力：等待初始化。" />
                     </Border>
                     <StackPanel Grid.Row="7" Grid.ColumnSpan="2" Orientation="Horizontal" Margin="0,16,0,0">
-                        <Button Width="120" Margin="0,0,12,0" Padding="10" Background="#1D4ED8" Foreground="White" BorderThickness="0" Click="ConnectButton_Click" Content="连接" />
-                        <Button Width="120" Margin="0,0,12,0" Padding="10" Background="#334155" Foreground="White" BorderThickness="0" Click="DisconnectButton_Click" Content="断开" />
+                        <Button Width="120" Margin="0,0,12,0" Style="{StaticResource PrimaryButtonStyle}" Click="ConnectButton_Click" Content="连接" />
+                        <Button Width="120" Margin="0,0,12,0" Style="{StaticResource SubtleDangerButtonStyle}" Click="DisconnectButton_Click" Content="断开" />
                         <TextBlock Margin="8,0,0,0" VerticalAlignment="Center" FontWeight="SemiBold" Text="状态：" />
                         <TextBlock x:Name="StatusTextBlock" Margin="8,0,0,0" VerticalAlignment="Center" Foreground="#0F766E" Text="未连接" />
                     </StackPanel>
@@ -88,8 +88,8 @@
                     <TextBlock Grid.Row="3" Grid.Column="0" Margin="0,8" VerticalAlignment="Center" Text="写入值" />
                     <TextBox x:Name="S7WriteValueTextBox" Grid.Row="3" Grid.Column="1" Margin="0,6,0,6" Text="123" />
                     <UniformGrid Grid.Row="4" Grid.ColumnSpan="2" Margin="0,14,0,0" Columns="2">
-                        <Button Margin="0,0,8,8" Padding="10" Background="#0891B2" Foreground="White" BorderThickness="0" Click="ReadButton_Click" Content="读取" />
-                        <Button Margin="8,0,0,8" Padding="10" Background="#059669" Foreground="White" BorderThickness="0" Click="WriteButton_Click" Content="写入" />
+                        <Button Margin="0,0,8,8" Style="{StaticResource PrimaryButtonStyle}" Click="ReadButton_Click" Content="读取" />
+                        <Button Margin="8,0,0,8" Click="WriteButton_Click" Content="写入" />
                     </UniformGrid>
                     <Border Grid.Row="5" Grid.ColumnSpan="2" Margin="0,12,0,0" Padding="12" CornerRadius="12" Background="#F8FAFC" BorderBrush="#D8E2EE" BorderThickness="1">
                         <StackPanel>
@@ -121,8 +121,8 @@
                     <TextBlock Grid.Row="2" Grid.ColumnSpan="2" Margin="0,4,0,8" TextWrapping="Wrap" Foreground="#5B6F82"
                                Text="地址填写 STRING 头部的绝对字节地址，例如 DB2000.DBX6.0；DBX 后面的位必须是 0。n 填博图中的 STRING[n] 最大字符数。" />
                     <StackPanel Grid.Row="3" Grid.ColumnSpan="2">
-                        <Button Width="170" HorizontalAlignment="Left" Margin="0,4,0,10" Padding="10"
-                                Background="#7C3AED" Foreground="White" BorderThickness="0"
+                        <Button Width="170" HorizontalAlignment="Left" Margin="0,4,0,10"
+                                Style="{StaticResource PrimaryButtonStyle}"
                                 Click="ReadNativeStringButton_Click" Content="读取 STRING[n]" />
                         <Border Padding="12" CornerRadius="12" Background="#F8FAFC" BorderBrush="#D8E2EE" BorderThickness="1">
                             <StackPanel>
@@ -164,9 +164,9 @@
                              ToolTip="每行一个点位，例如 REAL DB1.DBD12=20.0、INT DB1.DBW2=1500 或 BOOL DB1.DBX0.1=false。也可以省略类型。"
                              Text="INT DB1.DBW2=1500&#x0A;DINT DB1.DBD4=123456&#x0A;REAL DB1.DBD12=20.0&#x0A;REAL DB1.DBD16=30.0&#x0A;BOOL DB1.DBX0.1=false&#x0A;BOOL DB1.DBX0.2=true" />
                     <StackPanel Grid.Row="5" Grid.ColumnSpan="2" Orientation="Horizontal" Margin="0,10,0,0">
-                        <Button Width="150" Margin="0,0,12,0" Padding="10" Background="#7C3AED" Foreground="White" BorderThickness="0"
+                        <Button Width="150" Margin="0,0,12,0" Style="{StaticResource PrimaryButtonStyle}"
                                 Click="StartSnap7ServerButton_Click" Content="启动虚拟 PLC" />
-                        <Button Width="150" Margin="0,0,12,0" Padding="10" Background="#334155" Foreground="White" BorderThickness="0"
+                        <Button Width="150" Margin="0,0,12,0" Style="{StaticResource SubtleDangerButtonStyle}"
                                 Click="StopSnap7ServerButton_Click" Content="停止虚拟 PLC" />
                         <TextBlock Margin="8,0,0,0" VerticalAlignment="Center" FontWeight="SemiBold" Text="状态：" />
                         <TextBlock x:Name="Snap7ServerStatusTextBlock" Margin="8,0,0,0" VerticalAlignment="Center" Foreground="#64748B" Text="未启动" />
