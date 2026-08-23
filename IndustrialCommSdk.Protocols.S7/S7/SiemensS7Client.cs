@@ -419,6 +419,12 @@ namespace IndustrialCommSdk.Protocols.S7
 
             switch (request.DataType)
             {
+                case Abstractions.DataType.S7String:
+                    S7StringCodec.ValidateReservedLength(request.Length);
+                    var nativeStringBytes = await _plc.ReadBytesAsync(
+                        ToPlcArea(address.Area), address.DbNumber, address.ByteOffset,
+                        S7StringCodec.GetByteLength(request.Length), token).ConfigureAwait(false);
+                    return S7StringCodec.Decode(nativeStringBytes, request.Length);
                 case Abstractions.DataType.String:
                     if (request.Length == 0)
                         throw new IndustrialDataConversionException("S7 string read length must be greater than zero.");
@@ -460,6 +466,13 @@ namespace IndustrialCommSdk.Protocols.S7
                 case Abstractions.DataType.String:
                     await _plc.WriteBytesAsync(ToPlcArea(address.Area), address.DbNumber, address.ByteOffset,
                         S7WriteValueEncoder.EncodeString(request.Value, request.Length), token).ConfigureAwait(false);
+                    return;
+                case Abstractions.DataType.S7String:
+                    if (address.Area != S7Area.Db || (address.IsBitAddress && address.BitOffset != 0))
+                        throw new IndustrialAddressParseException(
+                            "S7 STRING[n] writes must start at a byte-aligned DB address: " + address.Normalized);
+                    await _plc.WriteBytesAsync(ToPlcArea(address.Area), address.DbNumber, address.ByteOffset,
+                        S7WriteValueEncoder.EncodeS7String(request.Value, request.Length), token).ConfigureAwait(false);
                     return;
                 case Abstractions.DataType.ByteArray:
                     await _plc.WriteBytesAsync(ToPlcArea(address.Area), address.DbNumber, address.ByteOffset,
@@ -560,6 +573,8 @@ namespace IndustrialCommSdk.Protocols.S7
                 case Abstractions.DataType.String:
                 case Abstractions.DataType.ByteArray:
                     return count;
+                case Abstractions.DataType.S7String:
+                    return S7StringCodec.GetByteLength(length);
                 case Abstractions.DataType.Int16:
                 case Abstractions.DataType.UInt16:
                     return count * 2;

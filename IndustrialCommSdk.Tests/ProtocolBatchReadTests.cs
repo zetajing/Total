@@ -163,6 +163,50 @@ namespace IndustrialCommSdk.Tests
         }
 
         [Test]
+        public void SiemensS7BatchDecoder_DecodesNativeS7StringWithoutChangingRawString()
+        {
+            var text = "TP2024071897%";
+            var bytes = new byte[52];
+            bytes[0] = 50;
+            bytes[1] = (byte)text.Length;
+            Array.Copy(System.Text.Encoding.ASCII.GetBytes(text), 0, bytes, 2, text.Length);
+
+            var native = S7BatchValueDecoder.Decode(
+                new ReadRequest("s7-test", "DB1.DBX262.0", DataType.S7String, 50),
+                new S7Address(S7Area.Db, 1, 262, 0, "DB1.DBX262.0"),
+                bytes,
+                262);
+
+            var raw = S7BatchValueDecoder.Decode(
+                new ReadRequest("s7-test", "DB1.DBX262.0", DataType.String, 1),
+                new S7Address(S7Area.Db, 1, 262, 0, "DB1.DBX262.0"),
+                new byte[] { 0x32 },
+                262);
+
+            Assert.AreEqual(text, native.Value);
+            Assert.AreEqual("2", raw.Value);
+        }
+
+        [Test]
+        public void SiemensS7PlanRead_ReservesNativeStringHeaders()
+        {
+            using (var client = new SiemensS7Client(new SiemensS7ClientOptions
+            {
+                DeviceId = "s7-test",
+                Host = "127.0.0.1"
+            }))
+            {
+                var plan = client.PlanRead(
+                    new[] { new ReadRequest("s7-test", "DB1.DBX262.0", DataType.S7String, 50) },
+                    new BatchReadOptions(maxItemsPerBatch: 8, maxAddressSpan: 64),
+                    client.Capabilities);
+
+                Assert.AreEqual(262, plan.Groups[0].StartOffset);
+                Assert.AreEqual(313, plan.Groups[0].EndOffset);
+            }
+        }
+
+        [Test]
         public async Task MitsubishiMcReadMany_MergesDifferentWordTypesIntoOneFrame()
         {
             var response = BuildWordResponse(10, 20);

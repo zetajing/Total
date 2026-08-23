@@ -287,6 +287,12 @@ namespace IndustrialCommSdk.Runtime
             return new IndustrialTag<string>(address, DataType.String, length, name);
         }
 
+        /// <summary>创建指定最大长度的西门子 S7 原生 STRING[n] 点位。</summary>
+        public static IndustrialTag<string> S7String(string address, ushort reservedLength, string name = null)
+        {
+            return new IndustrialTag<string>(address, DataType.S7String, reservedLength, name);
+        }
+
         /// <summary>创建指定长度的字节数组点位。</summary>
         public static IndustrialTag<byte[]> Bytes(string address, ushort length, string name = null)
         {

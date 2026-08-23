@@ -36,7 +36,7 @@
   </PropertyGroup>
 
   <!-- Keep the optional x86 Snap7 sidecar next to the Demo executable so the
-       Siemens S7 page can start it without requiring a separate install step. -->
+       virtual PLC page can start it without requiring a separate install step. -->
   <Target Name="BuildAndCopySnap7Server" AfterTargets="Build" Condition="Exists('$(Snap7ServerProject)')">
     <MSBuild Projects="$(Snap7ServerProject)" Targets="Restore;Build" Properties="Configuration=$(Configuration);Platform=x86" />
     <ItemGroup>

@@ -145,6 +145,8 @@ public static class SiemensS7Example
 
 常用地址包括 `DB1.DBX0.0`、`DB1.DBB0`、`DB1.DBW0`、`DB1.DBD2`、`DB1.DBL4`，以及 `MX0.0`、`MW0`、`IX0.0`、`QX0.0`。位地址必须带 `0–7` 的 bit 索引；`DBW` 应搭配 16 位类型，32 位值通常使用 `DBD`，双精度值使用 `DBL`，字符串和字节数组需要显式长度。
 
+点位表读取西门子原生字符串时，可使用 `"type": "STRING[50]"`。其中地址指向 STRING 的两个字节头部，长度 `50` 是声明的最大字符数；现有 `"type": "String"` 仍表示原始 ASCII 字节串，不会改变其语义。
+
 S7-1200/1500 使用绝对 DB 地址时，通常需要在 TIA Portal 中关闭对应 DB 的优化块访问，并允许所需的 PUT/GET 访问。Rack/Slot 必须按实际 CPU 设置。生产环境应限制 TCP 102 的来源和 DB 写权限；`AutoReconnect` 会在通信失败后重试，业务侧写入必须考虑幂等性。
 
 ## Mitsubishi MC 3E

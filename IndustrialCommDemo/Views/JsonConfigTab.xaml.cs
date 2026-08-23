@@ -39,7 +39,10 @@ namespace IndustrialCommDemo.Views
             InitializeComponent();
             JsonReadResultGrid.ItemsSource = _rows;
             PointEditorGrid.ItemsSource = _pointRows;
-            PointTypeColumn.ItemsSource = Enum.GetNames(typeof(DataType));
+            PointTypeColumn.ItemsSource = Enum.GetNames(typeof(DataType))
+                .Where(type => !string.Equals(type, nameof(DataType.S7String), StringComparison.Ordinal))
+                .Concat(new[] { "STRING[n]" })
+                .ToArray();
         }
 
         public void Initialize(DemoAppContext ctx)

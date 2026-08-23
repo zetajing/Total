@@ -65,6 +65,11 @@ namespace IndustrialCommSdk.Protocols.S7
         {
             if (request == null) throw new ArgumentNullException(nameof(request));
             if (address == null) throw new ArgumentNullException(nameof(address));
+            if (request.DataType == DataType.S7String && address.Area != S7Area.Db)
+            {
+                throw new IndustrialAddressParseException(
+                    "S7 STRING[n] reads must point to a data block: " + request.Address);
+            }
             if (request.DataType != DataType.Bool && address.IsBitAddress && address.BitOffset != 0)
             {
                 throw new IndustrialAddressParseException(
@@ -96,6 +101,8 @@ namespace IndustrialCommSdk.Protocols.S7
         {
             switch (request.DataType)
             {
+                case DataType.S7String:
+                    return S7StringCodec.Decode(bytes, request.Length);
                 case DataType.String:
                     return Encoding.ASCII.GetString(bytes).TrimEnd('\0');
                 case DataType.ByteArray:
@@ -140,6 +147,8 @@ namespace IndustrialCommSdk.Protocols.S7
             var count = Math.Max(1, (int)request.Length);
             switch (request.DataType)
             {
+                case DataType.S7String:
+                    return S7StringCodec.GetByteLength(request.Length);
                 case DataType.String:
                 case DataType.ByteArray:
                     return request.Length;

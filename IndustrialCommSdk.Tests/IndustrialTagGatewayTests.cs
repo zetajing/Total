@@ -30,6 +30,24 @@ namespace IndustrialCommSdk.Tests
         }
 
         [Test]
+        public void TagTable_SupportsNativeS7StringSyntaxWithoutChangingRawString()
+        {
+            var table = TagTable.FromJson(
+                "{\"tags\":[" +
+                "{\"name\":\"Native\",\"address\":\"DB1.DBX0.0\",\"type\":\"STRING[50]\"}," +
+                "{\"name\":\"Raw\",\"address\":\"DB1.DBB60\",\"type\":\"String\",\"length\":10}]}" );
+
+            Assert.AreEqual(DataType.S7String, table.Get("Native").DataType);
+            Assert.AreEqual((ushort)50, table.Get("Native").Length);
+            Assert.AreEqual(DataType.String, table.Get("Raw").DataType);
+            Assert.AreEqual((ushort)10, table.Get("Raw").Length);
+
+            var json = table.ToJson();
+            StringAssert.Contains("STRING[50]", json);
+            Assert.AreEqual(DataType.S7String, TagTable.FromJson(json).Get("Native").DataType);
+        }
+
+        [Test]
         public void TagTable_RejectsDuplicateNamedTagsAfterTrimming()
         {
             var error = Assert.Throws<ArgumentException>(() => TagTable.FromJson(

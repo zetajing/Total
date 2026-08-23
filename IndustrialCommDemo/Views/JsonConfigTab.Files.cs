@@ -152,7 +152,7 @@ namespace IndustrialCommDemo.Views
                 {
                     Name = tag.Name,
                     Address = tag.Address,
-                    Type = tag.DataType.ToString(),
+                    Type = tag.DataType == DataType.S7String ? "STRING[n]" : tag.DataType.ToString(),
                     Length = tag.Length,
                     Writable = tag.Writable,
                 });
@@ -170,7 +170,10 @@ namespace IndustrialCommDemo.Views
                 var name = RequireText(row.Name, "点位名称不能为空。");
                 if (!names.Add(name)) throw new InvalidOperationException("点位名称不能重复：" + name);
                 DataType dataType;
-                if (!Enum.TryParse(row.Type, true, out dataType)) throw new InvalidOperationException("不支持的点位类型：" + row.Type);
+                if (string.Equals(row.Type, "STRING[n]", StringComparison.OrdinalIgnoreCase))
+                    dataType = DataType.S7String;
+                else if (!Enum.TryParse(row.Type, true, out dataType))
+                    throw new InvalidOperationException("不支持的点位类型：" + row.Type);
                 if (row.Length == 0) throw new InvalidOperationException("点位长度必须大于 0：" + name);
                 tags.Add(new IndustrialTag(
                     RequireText(row.Address, "点位地址不能为空。"),

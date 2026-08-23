@@ -110,8 +110,10 @@ namespace IndustrialCommSdk.Runtime
                 {
                     Name = tag.Name,
                     Address = tag.Address,
-                    Type = tag.DataType.ToString(),
-                    Length = tag.Length == 1 ? (ushort?)null : tag.Length,
+                    Type = SerializeTagType(tag),
+                    Length = tag.DataType == DataType.S7String
+                        ? (ushort?)null
+                        : tag.Length == 1 ? (ushort?)null : tag.Length,
                     Writable = tag.Writable ? (bool?)true : null,
                 }).ToList(),
             };
@@ -227,30 +229,36 @@ namespace IndustrialCommSdk.Runtime
 
         private static IndustrialTag CreateTag(string address, string type, string length, string name, string writable)
         {
-            ushort parsedLength;
+            ushort? parsedLength = null;
             if (string.IsNullOrWhiteSpace(length))
             {
-                parsedLength = 1;
+                parsedLength = null;
             }
-            else if (!ushort.TryParse(length, NumberStyles.Integer, CultureInfo.InvariantCulture, out parsedLength) || parsedLength == 0)
+            else
             {
-                throw new FormatException(string.Format("Invalid tag length: {0}", length));
+                ushort value;
+                if (!ushort.TryParse(length, NumberStyles.Integer, CultureInfo.InvariantCulture, out value) || value == 0)
+                    throw new FormatException(string.Format("Invalid tag length: {0}", length));
+                parsedLength = value;
             }
 
-            return new IndustrialTag(
-                address,
-                ParseDataType(type),
-                parsedLength,
-                string.IsNullOrWhiteSpace(name) ? null : name,
-                ParseWritable(writable));
+            return CreateTag(address, type, parsedLength, name, ParseWritable(writable));
         }
 
         private static IndustrialTag CreateTag(string address, string type, ushort? length, string name, bool writable)
         {
+            ushort? inlineLength;
+            var dataType = ParseDataType(type, out inlineLength);
+            if (inlineLength.HasValue && length.HasValue && inlineLength.Value != length.Value)
+                throw new FormatException(string.Format(
+                    "Tag type length {0} does not match explicit length {1}.",
+                    inlineLength.Value,
+                    length.Value));
+
             return new IndustrialTag(
                 address,
-                ParseDataType(type),
-                length.GetValueOrDefault(1),
+                dataType,
+                inlineLength ?? length.GetValueOrDefault(1),
                 string.IsNullOrWhiteSpace(name) ? null : name,
                 writable);
         }
@@ -271,11 +279,33 @@ namespace IndustrialCommSdk.Runtime
             throw new FormatException("Invalid tag writable value: " + value);
         }
 
-        private static DataType ParseDataType(string type)
+        private static string SerializeTagType(IndustrialTag tag)
+        {
+            if (tag.DataType == DataType.S7String)
+                return string.Format(CultureInfo.InvariantCulture, "STRING[{0}]", tag.Length);
+            return tag.DataType.ToString();
+        }
+
+        private static DataType ParseDataType(string type, out ushort? inlineLength)
         {
             if (string.IsNullOrWhiteSpace(type)) throw new ArgumentException("Tag type cannot be null or empty.", nameof(type));
 
+            inlineLength = null;
             var normalized = type.Trim().Replace("-", string.Empty).Replace("_", string.Empty).ToLowerInvariant();
+            if (normalized.StartsWith("string[", StringComparison.Ordinal) && normalized.EndsWith("]", StringComparison.Ordinal))
+            {
+                var lengthText = normalized.Substring(7, normalized.Length - 8);
+                ushort length;
+                if (!ushort.TryParse(lengthText, NumberStyles.Integer, CultureInfo.InvariantCulture, out length) ||
+                    length == 0 || length > 254)
+                {
+                    throw new ArgumentException("S7 STRING[n] length must be between 1 and 254.", nameof(type));
+                }
+
+                inlineLength = length;
+                return DataType.S7String;
+            }
+
             switch (normalized)
             {
                 case "bool": return DataType.Bool;
@@ -297,6 +327,7 @@ namespace IndustrialCommSdk.Runtime
                 case "byte": return DataType.Byte;
                 case "char": return DataType.Char;
                 case "string": return DataType.String;
+                case "s7string": return DataType.S7String;
                 case "bytes":
                 case "bytearray": return DataType.ByteArray;
                 default:

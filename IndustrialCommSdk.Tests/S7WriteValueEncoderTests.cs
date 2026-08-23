@@ -29,6 +29,14 @@ namespace IndustrialCommSdk.Tests
         }
 
         [Test]
+        public void EncodeS7String_WritesHeaderAndCharacters()
+        {
+            var encoded = S7WriteValueEncoder.EncodeS7String("AB", 4);
+
+            CollectionAssert.AreEqual(new byte[] { 4, 2, 65, 66, 0, 0 }, encoded);
+        }
+
+        [Test]
         public void EncodeByteArray_PadsToConfiguredLength()
         {
             var encoded = S7WriteValueEncoder.EncodeByteArray(new byte[] { 1, 2 }, 4);

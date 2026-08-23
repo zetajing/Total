@@ -46,6 +46,8 @@ namespace IndustrialCommSdk.Abstractions
         String = 8,
         /// <summary>原始字节数组。</summary>
         ByteArray = 9,
+        /// <summary>西门子 S7 原生 STRING[n]，包含最大长度和当前长度两个头字节。</summary>
+        S7String = 12,
     }
 
     /// <summary>读取值的质量状态，用于区分有效值、错误值和过期值。</summary>

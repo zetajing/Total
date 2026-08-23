@@ -12,6 +12,23 @@ namespace IndustrialCommSdk.Protocols.S7
             return FitToConfiguredLength(bytes, length, "string");
         }
 
+        public static byte[] EncodeS7String(object value, ushort reservedLength)
+        {
+            S7StringCodec.ValidateReservedLength(reservedLength);
+            var bytes = Encoding.ASCII.GetBytes((value ?? string.Empty).ToString());
+            if (bytes.Length > reservedLength)
+                throw new IndustrialDataConversionException(string.Format(
+                    "S7 STRING payload length {0} exceeds configured maximum length {1}.",
+                    bytes.Length,
+                    reservedLength));
+
+            var output = new byte[S7StringCodec.GetByteLength(reservedLength)];
+            output[0] = (byte)reservedLength;
+            output[1] = (byte)bytes.Length;
+            Buffer.BlockCopy(bytes, 0, output, 2, bytes.Length);
+            return output;
+        }
+
         public static byte[] EncodeByteArray(object value, ushort length)
         {
             var bytes = value as byte[];
