@@ -9,45 +9,12 @@
         WindowStartupLocation="CenterScreen" UseLayoutRounding="True" SnapsToDevicePixels="True">
     <Grid Margin="20,16,20,18">
         <Grid.RowDefinitions>
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="12" />
             <RowDefinition Height="*" />
             <RowDefinition Height="6" />
             <RowDefinition x:Name="LogPanelRow" Height="150" />
         </Grid.RowDefinitions>
 
-        <Grid>
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="Auto" />
-            </Grid.ColumnDefinitions>
-            <Border Width="48" Height="48" VerticalAlignment="Center"
-                    Background="{StaticResource AccentSubtleBrush}"
-                    BorderBrush="{StaticResource AccentStrokeBrush}" BorderThickness="1" CornerRadius="12">
-                <Image Width="34" Height="34" Source="Assets/industrial-comm-icon.png" Stretch="Uniform" />
-            </Border>
-            <StackPanel Grid.Column="1" Margin="12,0,0,0" VerticalAlignment="Center">
-                <TextBlock Style="{StaticResource EyebrowTextStyle}" Text="INDUSTRIAL COMMUNICATION CONSOLE" />
-                <TextBlock Margin="0,2,0,0" FontFamily="Segoe UI Variable Display, Segoe UI"
-                           FontSize="26" FontWeight="SemiBold" Text="工业通信控制台" />
-                <TextBlock Margin="1,2,0,0" Foreground="{StaticResource TextSecondaryBrush}"
-                           Text="设备运行、实时监控与通信诊断" />
-            </StackPanel>
-            <Border x:Name="HeaderStatusBorder" Grid.Column="2" MinWidth="106" MaxWidth="360" Padding="12,7"
-                    VerticalAlignment="Center" Background="{StaticResource SuccessSubtleBrush}"
-                    BorderBrush="{StaticResource SuccessStrokeBrush}" BorderThickness="1" CornerRadius="18"
-                    ToolTip="{Binding Text, ElementName=HeaderStatusTextBlock}">
-                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
-                    <Ellipse x:Name="HeaderStatusDot" Width="8" Height="8" Margin="0,0,8,0"
-                             VerticalAlignment="Center" Fill="{StaticResource SuccessBrush}" />
-                    <TextBlock x:Name="HeaderStatusTextBlock" MaxWidth="320" VerticalAlignment="Center" FontWeight="SemiBold"
-                               Foreground="{StaticResource SuccessBrush}" Text="就绪" />
-                </StackPanel>
-            </Border>
-        </Grid>
-
-        <Border Grid.Row="2" Padding="8" Style="{StaticResource SurfaceCardStyle}">
+        <Border Grid.Row="0" Padding="8" Style="{StaticResource SurfaceCardStyle}">
             <TabControl x:Name="ProtocolTabControl">
                 <TabItem Style="{StaticResource MainNavigationTabItemStyle}">
                     <TabItem.Header>
@@ -136,11 +103,11 @@
             </TabControl>
         </Border>
 
-        <GridSplitter x:Name="LogPanelSplitter" Grid.Row="3" Height="6" HorizontalAlignment="Stretch"
+        <GridSplitter x:Name="LogPanelSplitter" Grid.Row="1" Height="6" HorizontalAlignment="Stretch"
                       VerticalAlignment="Center" Background="Transparent" ResizeDirection="Rows" ResizeBehavior="PreviousAndNext"
                       Cursor="SizeNS" />
 
-        <Border x:Name="LogPanelBorder" Grid.Row="4" Padding="12,9,12,11" Style="{StaticResource SurfaceCardStyle}">
+        <Border x:Name="LogPanelBorder" Grid.Row="2" Padding="12,9,12,11" Style="{StaticResource SurfaceCardStyle}">
             <Grid>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />

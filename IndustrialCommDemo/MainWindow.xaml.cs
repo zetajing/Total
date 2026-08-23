@@ -67,7 +67,6 @@ namespace IndustrialCommDemo
                     _ = NetworkControlTag.OnTabLoadedAsync();
             };
 
-            SetHeaderStatus("就绪", Brushes.LightGreen);
             _demoLogger.Info("工业设备运行中心已就绪。");
             _ = NetworkServicesControlTag.StartAutoServicesAsync();
         }
@@ -153,57 +152,12 @@ namespace IndustrialCommDemo
             _uiStateStore.Save(_uiState);
         }
 
-        // ── Header status ──
+        // ── Header status compatibility callback ──
 
         private void SetHeaderStatus(string text, Brush foreground)
         {
-            HeaderStatusTextBlock.Text = text;
-
-            string backgroundKey;
-            string borderKey;
-            string foregroundKey;
-
-            if (ReferenceEquals(foreground, Brushes.OrangeRed) ||
-                ReferenceEquals(foreground, Brushes.IndianRed) ||
-                ReferenceEquals(foreground, Brushes.Red))
-            {
-                backgroundKey = "DangerSubtleBrush";
-                borderKey = "DangerStrokeBrush";
-                foregroundKey = "DangerBrush";
-            }
-            else if (ReferenceEquals(foreground, Brushes.Khaki) ||
-                     ReferenceEquals(foreground, Brushes.DarkGoldenrod) ||
-                     ReferenceEquals(foreground, Brushes.Orange))
-            {
-                backgroundKey = "WarningSubtleBrush";
-                borderKey = "WarningStrokeBrush";
-                foregroundKey = "WarningBrush";
-            }
-            else if (ReferenceEquals(foreground, Brushes.LightGreen) ||
-                     ReferenceEquals(foreground, Brushes.ForestGreen) ||
-                     ReferenceEquals(foreground, Brushes.Green))
-            {
-                backgroundKey = "SuccessSubtleBrush";
-                borderKey = "SuccessStrokeBrush";
-                foregroundKey = "SuccessBrush";
-            }
-            else
-            {
-                backgroundKey = "AccentSubtleBrush";
-                borderKey = "AccentStrokeBrush";
-                foregroundKey = "AccentBrush";
-            }
-
-            var statusForeground = ResolveBrush(foregroundKey, foreground ?? Brushes.SteelBlue);
-            HeaderStatusBorder.Background = ResolveBrush(backgroundKey, Brushes.WhiteSmoke);
-            HeaderStatusBorder.BorderBrush = ResolveBrush(borderKey, statusForeground);
-            HeaderStatusDot.Fill = statusForeground;
-            HeaderStatusTextBlock.Foreground = statusForeground;
-        }
-
-        private Brush ResolveBrush(string key, Brush fallback)
-        {
-            return TryFindResource(key) as Brush ?? fallback;
+            // The visual header was intentionally removed. Keep this callback so
+            // protocol pages and shared error handling do not need a behavior change.
         }
 
         // ── Log panel ──
