@@ -79,6 +79,9 @@
                             <TabItem Header="Siemens S7">
                                 <views:SiemensS7Tab x:Name="S7ControlTag" />
                             </TabItem>
+                            <TabItem Header="虚拟 PLC">
+                                <views:Snap7ServerTab x:Name="Snap7ServerControlTag" />
+                            </TabItem>
                             <TabItem Header="Mitsubishi MC">
                                 <views:MitsubishiMcTab x:Name="McControlTag" />
                             </TabItem>

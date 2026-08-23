@@ -50,6 +50,7 @@ namespace IndustrialCommDemo
             RuntimeControlTag.Initialize(_ctx);
             ModbusControlTag.Initialize(_ctx);
             S7ControlTag.Initialize(_ctx);
+            Snap7ServerControlTag.Initialize(_ctx);
             McControlTag.Initialize(_ctx);
             OpcUaControlTag.Initialize(_ctx);
             JsonConfigControlTag.Initialize(_ctx);
@@ -90,7 +91,7 @@ namespace IndustrialCommDemo
                 });
                 await RunCleanupStepAsync("关闭 Modbus 客户端", () => ModbusControlTag.ResetClientAsync());
                 await RunCleanupStepAsync("关闭 Siemens S7 客户端", () => S7ControlTag.ResetClientAsync());
-                await RunCleanupStepAsync("关闭 Snap7 虚拟 PLC", () => S7ControlTag.ResetSnap7ServerAsync());
+                await RunCleanupStepAsync("关闭 Snap7 虚拟 PLC", () => Snap7ServerControlTag.ResetSnap7ServerAsync());
                 await RunCleanupStepAsync("关闭 Mitsubishi MC 客户端", () => McControlTag.ResetClientAsync());
                 await RunCleanupStepAsync("关闭 OPC UA 客户端", () => OpcUaControlTag.ResetClientAsync());
                 await RunCleanupStepAsync("关闭 Socket 调试连接", () => SocketControlTag.ResetAllAsync());
