@@ -15,6 +15,7 @@ using IndustrialCommSdk.Protocols.Mqtt;
 using IndustrialCommSdk.Protocols.OpcUa;
 using IndustrialCommSdk.Protocols.Redis;
 using IndustrialCommSdk.Protocols.S7;
+using IndustrialCommSdk.Protocols.Ads;
 using IndustrialCommSdk.Runtime;
 
 namespace IndustrialCommDemo.Services
@@ -219,6 +220,7 @@ namespace IndustrialCommDemo.Services
             if (config.Settings is ModbusRtuSettings modbusRtu) return modbusRtu.PortName;
             if (config.Settings is SiemensS7Settings s7) return s7.Host;
             if (config.Settings is MitsubishiMcSettings mc) return mc.Host + ":" + mc.Port;
+            if (config.Settings is AdsSettings ads) return (string.IsNullOrWhiteSpace(ads.AmsNetId) ? "local" : ads.AmsNetId) + ":" + ads.Port;
             if (config.Settings is OpcUaSettings opcUa) return opcUa.EndpointUrl;
             if (config.Settings is MqttSettings mqtt) return mqtt.Host + ":" + mqtt.Port;
             if (config.Settings is RedisSettings redis) return redis.Host + ":" + redis.Port;

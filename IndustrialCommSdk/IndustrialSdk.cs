@@ -9,6 +9,7 @@ using IndustrialCommSdk.Protocols.Mqtt;
 using IndustrialCommSdk.Protocols.OpcUa;
 using IndustrialCommSdk.Protocols.Redis;
 using IndustrialCommSdk.Protocols.S7;
+using IndustrialCommSdk.Protocols.Ads;
 using IndustrialCommSdk.Runtime;
 
 namespace IndustrialCommSdk
@@ -36,7 +37,8 @@ namespace IndustrialCommSdk
                 .Register(new MitsubishiMcProtocolProvider())
                 .Register(new OpcUaProtocolProvider())
                 .Register(new MqttProtocolProvider())
-                .Register(new RedisProtocolProvider()), logger);
+                .Register(new RedisProtocolProvider())
+                .Register(new AdsProtocolProvider()), logger);
         }
 
         public IndustrialSdkConfig LoadConfiguration(string filePath) { return Configuration.Load(filePath); }

@@ -48,6 +48,7 @@
                                     <ComboBoxItem Content="modbus-rtu" />
                                     <ComboBoxItem Content="siemens-s7" />
                                     <ComboBoxItem Content="mitsubishi-mc" />
+                                    <ComboBoxItem Content="ads" />
                                     <ComboBoxItem Content="opc-ua" />
                                     <ComboBoxItem Content="mqtt" />
                                     <ComboBoxItem Content="redis" />

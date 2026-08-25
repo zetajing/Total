@@ -87,7 +87,7 @@ using (var host = sdk.CreateDeviceHost(config, "Config"))
 }
 ```
 
-配置注册表只接受 canonical 小写协议键：`modbus-tcp`、`modbus-rtu`、`siemens-s7`、`mitsubishi-mc`、`opc-ua`、`mqtt`、`redis`。未知协议、旧别名、空 `settings`、类型不匹配和 Provider 字段错误在解析或离线校验阶段暴露。
+配置注册表只接受 canonical 小写协议键：`modbus-tcp`、`modbus-rtu`、`siemens-s7`、`mitsubishi-mc`、`ads`、`opc-ua`、`mqtt`、`redis`。未知协议、旧别名、空 `settings`、类型不匹配和 Provider 字段错误在解析或离线校验阶段暴露。
 
 点位文件保持独立：
 

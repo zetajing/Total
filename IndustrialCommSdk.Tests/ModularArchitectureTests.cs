@@ -4,6 +4,7 @@ using System.Linq;
 using IndustrialCommSdk.Abstractions;
 using IndustrialCommSdk.Runtime.Configuration;
 using IndustrialCommSdk.Diagnostics;
+using IndustrialCommSdk.Protocols.Ads;
 using IndustrialCommSdk.Protocols.Mc;
 using IndustrialCommSdk.Protocols.Modbus;
 using IndustrialCommSdk.Protocols.Mqtt;
@@ -23,7 +24,7 @@ namespace IndustrialCommSdk.Tests
     {
         private static readonly string[] CanonicalProtocols =
         {
-            "mitsubishi-mc", "modbus-rtu", "modbus-tcp", "mqtt", "opc-ua", "redis", "siemens-s7",
+            "ads", "mitsubishi-mc", "modbus-rtu", "modbus-tcp", "mqtt", "opc-ua", "redis", "siemens-s7",
         };
 
         [Test]
@@ -120,6 +121,7 @@ namespace IndustrialCommSdk.Tests
         [TestCase(typeof(ModbusTcpClient))]
         [TestCase(typeof(SiemensS7Client))]
         [TestCase(typeof(MitsubishiMcClient))]
+        [TestCase(typeof(AdsClient))]
         [TestCase(typeof(OpcUaClient))]
         [TestCase(typeof(MqttClient))]
         [TestCase(typeof(RedisClient))]
@@ -143,6 +145,7 @@ namespace IndustrialCommSdk.Tests
                 [typeof(MqttClient)] = new[] { "MQTTnet" },
                 [typeof(RedisClient)] = new[] { "StackExchange.Redis" },
                 [typeof(MitsubishiMcClient)] = new string[0],
+                [typeof(AdsClient)] = new[] { "TwinCAT.Ads" },
             };
             var allDrivers = owners.Values.SelectMany(item => item).Distinct(StringComparer.Ordinal).ToArray();
             foreach (var owner in owners)
@@ -172,6 +175,7 @@ namespace IndustrialCommSdk.Tests
                 typeof(ModbusTcpClient).Assembly,
                 typeof(SiemensS7Client).Assembly,
                 typeof(MitsubishiMcClient).Assembly,
+                typeof(AdsClient).Assembly,
                 typeof(OpcUaClient).Assembly,
                 typeof(MqttClient).Assembly,
                 typeof(RedisClient).Assembly,
@@ -202,6 +206,7 @@ namespace IndustrialCommSdk.Tests
             yield return new TestCaseData("modbus-rtu", new ModbusRtuSettings { PortName = "COM1" });
             yield return new TestCaseData("siemens-s7", new SiemensS7Settings { Host = "127.0.0.1" });
             yield return new TestCaseData("mitsubishi-mc", new MitsubishiMcSettings { Host = "127.0.0.1" });
+            yield return new TestCaseData("ads", new AdsSettings { AmsNetId = "127.0.0.1.1.1" });
             yield return new TestCaseData("opc-ua", new OpcUaSettings { EndpointUrl = "opc.tcp://127.0.0.1:4840" });
             yield return new TestCaseData("mqtt", new MqttSettings { Host = "127.0.0.1" });
             yield return new TestCaseData("redis", new RedisSettings { Host = "127.0.0.1" });

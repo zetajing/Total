@@ -229,6 +229,19 @@ namespace IndustrialCommSdk.Abstractions
                         recommendedMinPollingInterval: TimeSpan.FromMilliseconds(50),
                         capabilityFlags: ProtocolCapability.KeyValue);
 
+                case ProtocolKind.TwinCatAds:
+                    return new ProtocolCapabilities(
+                        kind,
+                        "TwinCAT ADS",
+                        supportsString: true,
+                        supportsByteArray: true,
+                        maxReadItems: 1000,
+                        maxWriteItems: 1000,
+                        maxAddressSpan: int.MaxValue,
+                        recommendedMinPollingInterval: TimeSpan.FromMilliseconds(100),
+                        supportsNativeSubscriptions: true,
+                        capabilityFlags: ProtocolCapability.RegisterRead | ProtocolCapability.RegisterWrite | ProtocolCapability.EventSubscription);
+
                 default:
                     return new ProtocolCapabilities(kind, kind.ToString());
             }

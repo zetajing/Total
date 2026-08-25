@@ -12,6 +12,7 @@
 | Modbus TCP/RTU | `IndustrialCommSdk.Protocols.Modbus` |
 | Siemens S7 | `IndustrialCommSdk.Protocols.S7` |
 | Mitsubishi MC 3E | `IndustrialCommSdk.Protocols.Mc` |
+| TwinCAT ADS | `IndustrialCommSdk.Protocols.Ads` |
 | OPC UA | `IndustrialCommSdk.Protocols.OpcUa` |
 | MQTT | `IndustrialCommSdk.Protocols.Mqtt` |
 | Redis Key/Value | `IndustrialCommSdk.Protocols.Redis` |
@@ -79,7 +80,7 @@ using (var host = sdk.CreateDeviceHost(config, "Config"))
 }
 ```
 
-协议键固定为 `modbus-tcp`、`modbus-rtu`、`siemens-s7`、`mitsubishi-mc`、`opc-ua`、`mqtt` 和 `redis`。设备公共字段、运行参数和协议 `settings` 分离，完整配置约定见 [架构与配置](docs/architecture.md#配置驱动运行)。
+协议键固定为 `modbus-tcp`、`modbus-rtu`、`siemens-s7`、`mitsubishi-mc`、`ads`、`opc-ua`、`mqtt` 和 `redis`。设备公共字段、运行参数和协议 `settings` 分离，完整配置约定见 [架构与配置](docs/architecture.md#配置驱动运行)。
 
 ## 文档导航
 

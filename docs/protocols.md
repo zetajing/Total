@@ -8,6 +8,7 @@
 | `modbus-rtu` | `ModbusRtuClient` | `IndustrialCommSdk.Protocols.Modbus` |
 | `siemens-s7` | `SiemensS7Client` | `IndustrialCommSdk.Protocols.S7` |
 | `mitsubishi-mc` | `MitsubishiMcClient` | `IndustrialCommSdk.Protocols.Mc` |
+| `ads` | `AdsClient` | `IndustrialCommSdk.Protocols.Ads` |
 | `opc-ua` | `OpcUaClient` | `IndustrialCommSdk.Protocols.OpcUa` |
 | `mqtt` | `MqttClient` | `IndustrialCommSdk.Protocols.Mqtt` |
 | `redis` | `RedisClient` | `IndustrialCommSdk.Protocols.Redis` |
@@ -224,6 +225,41 @@ public static class OpcUaExample
 地址必须是 OPC UA NodeId，例如 `ns=2;s=Machine/Temperature`、`ns=2;i=1001`；GUID 和 ByteString 也由底层解析。`ns=2` 可能随服务端 NamespaceArray 变化，稳定集成时应核对实际命名空间。写入值的 CLR 类型必须匹配节点 Built-in Type，否则通常返回 `Bad_TypeMismatch`。
 
 `UseSecurity = false` 只适合隔离测试。生产环境选择签名或签名加密端点，将客户端证书加入服务端信任列表，保持 `AutoAcceptUntrustedCertificates = false`，并从安全配置源注入账号密码。
+
+## TwinCAT ADS
+
+```csharp
+using System;
+using System.Threading.Tasks;
+using IndustrialCommSdk.Protocols.Ads;
+using IndustrialCommSdk.Runtime;
+
+public static class AdsExample
+{
+    public static async Task RunAsync()
+    {
+        var client = new AdsClient(new AdsClientOptions
+        {
+            DeviceId = "twincat-plc-1",
+            AmsNetId = "192.168.1.90.1.1",
+            Port = 851,
+            ConnectTimeoutMilliseconds = 10000,
+            OperationTimeoutMilliseconds = 5000,
+        });
+
+        await client.UseAsync(async connected =>
+        {
+            bool enabled = await connected.ReadBoolAsync("MAIN.bool1");
+            await connected.WriteAsync("MAIN.bool1", !enabled);
+
+            // 参考工程中的 ComplexStruct 等自定义结构体使用 ADS ReadAny/WriteAny。
+            // var value = await connected.ReadAnyAsync<ComplexStruct>("MAIN.ComplexStruct1");
+        });
+    }
+}
+```
+
+ADS 地址直接使用 PLC 符号名，例如 `MAIN.bool1`、`MAIN.str1` 和 `MAIN.ComplexStruct1`；字符串和字节数组的点位长度通过 TagTable 的 `length` 指定。`AdsClient` 的 `SubscribeAsync` 使用 ADS 原生 OnChange/Cyclic 通知，不需要 SDK 轮询。参考工程的结构体需按 TwinCAT 内存布局声明 `[StructLayout(LayoutKind.Sequential, Pack = 1)]`，再使用 `ReadAnyAsync<T>`/`WriteAnyAsync`。项目已携带参考目录中的 `TwinCAT.Ads.dll` 4.3.0.0，运行前仍需在目标机安装并配置 TwinCAT ADS Router。
 
 ## MQTT
 

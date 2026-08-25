@@ -13,6 +13,7 @@
     <ProjectReference Include="..\IndustrialCommSdk.Protocols.Modbus\IndustrialCommSdk.Protocols.Modbus.csproj" />
     <ProjectReference Include="..\IndustrialCommSdk.Protocols.S7\IndustrialCommSdk.Protocols.S7.csproj" />
     <ProjectReference Include="..\IndustrialCommSdk.Protocols.Mc\IndustrialCommSdk.Protocols.Mc.csproj" />
+    <ProjectReference Include="..\IndustrialCommSdk.Protocols.Ads\IndustrialCommSdk.Protocols.Ads.csproj" />
     <ProjectReference Include="..\IndustrialCommSdk.Protocols.OpcUa\IndustrialCommSdk.Protocols.OpcUa.csproj" />
     <ProjectReference Include="..\IndustrialCommSdk.Protocols.Mqtt\IndustrialCommSdk.Protocols.Mqtt.csproj" />
     <ProjectReference Include="..\IndustrialCommSdk.Protocols.Redis\IndustrialCommSdk.Protocols.Redis.csproj" />

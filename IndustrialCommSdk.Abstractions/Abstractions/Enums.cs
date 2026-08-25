@@ -19,6 +19,8 @@ namespace IndustrialCommSdk.Abstractions
         Mqtt = 7,
         /// <summary>Redis 键值存储协议。</summary>
         Redis = 8,
+        /// <summary>TwinCAT ADS 协议。</summary>
+        TwinCatAds = 9,
     }
 
     /// <summary>读写请求中使用的数据类型。</summary>

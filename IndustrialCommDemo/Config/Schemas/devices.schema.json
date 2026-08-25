@@ -16,7 +16,7 @@
           "name": { "type": "string", "minLength": 1 },
           "protocol": {
             "type": "string",
-            "enum": [ "modbus-tcp", "modbus-rtu", "siemens-s7", "mitsubishi-mc", "opc-ua", "mqtt", "redis" ]
+            "enum": [ "modbus-tcp", "modbus-rtu", "siemens-s7", "mitsubishi-mc", "ads", "opc-ua", "mqtt", "redis" ]
           },
           "deviceId": { "type": "string", "minLength": 1 },
           "pointsFile": { "type": "string", "minLength": 1 },
@@ -29,6 +29,7 @@
           { "properties": { "protocol": { "const": "modbus-rtu" }, "settings": { "$ref": "#/definitions/modbusRtuSettings" } } },
           { "properties": { "protocol": { "const": "siemens-s7" }, "settings": { "$ref": "#/definitions/s7Settings" } } },
           { "properties": { "protocol": { "const": "mitsubishi-mc" }, "settings": { "$ref": "#/definitions/mcSettings" } } },
+          { "properties": { "protocol": { "const": "ads" }, "settings": { "$ref": "#/definitions/adsSettings" } } },
           { "properties": { "protocol": { "const": "opc-ua" }, "settings": { "$ref": "#/definitions/opcUaSettings" } } },
           { "properties": { "protocol": { "const": "mqtt" }, "settings": { "$ref": "#/definitions/mqttSettings" } } },
           { "properties": { "protocol": { "const": "redis" }, "settings": { "$ref": "#/definitions/redisSettings" } } }
@@ -112,6 +113,15 @@
         "autoAcceptUntrustedCertificates": { "type": "boolean" },
         "connectTimeoutMilliseconds": { "type": "integer", "minimum": 1 },
         "sessionTimeoutMilliseconds": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "adsSettings": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "amsNetId": { "type": "string", "pattern": "^([0-9]{1,3}\\.){5}[0-9]{1,3}$" },
+        "port": { "type": "integer", "minimum": 1, "maximum": 65535 },
+        "connectTimeoutMilliseconds": { "type": "integer", "minimum": 1 }
       }
     },
     "mqttSettings": {

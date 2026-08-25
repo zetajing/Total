@@ -18,6 +18,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\IndustrialCommSdk\IndustrialCommSdk.csproj" />
+    <ProjectReference Include="..\IndustrialCommSdk.Protocols.Ads\IndustrialCommSdk.Protocols.Ads.csproj" />
     <ProjectReference Include="..\IndustrialCommSdk.Storage.MySql\IndustrialCommSdk.Storage.MySql.csproj" />
   </ItemGroup>
 
