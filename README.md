@@ -97,6 +97,7 @@ using (var host = sdk.CreateDeviceHost(config, "Config"))
 - `IndustrialCommDemo`：WPF 完整 Demo，包含协议页、配置页、运行中心、MES、数据库和网络服务页面。
 - `IndustrialCommDemo.Snap7Server`：x86 本地 Snap7 通信模拟器，用于在没有实体 PLC 时验证 S7 Demo 的 DB1 多个 Bool/INT/DINT/REAL 点位读写。
 - `IndustrialCommMinimal.WinForms`：直接引用所需模块的最小验证程序，不依赖聚合程序集。
+- `IndustrialCommS7TimingConsole`：控制台测量 Siemens S7 DB 读取、50ms 延时和 Bool 写入的耗时，支持 Bool、原生 STRING[n] 和 ASCII 字符串读取。
 
 ## 重要边界
 
