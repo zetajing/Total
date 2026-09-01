@@ -1,6 +1,6 @@
 # IndustrialCommSdk
 
-面向工业现场的 .NET Framework 4.7.2 通信 SDK，统一封装 PLC、工业协议、MES、网络服务和历史存储。SDK 将公共契约、运行时、传输、协议、存储拆成独立程序集；应用可以只引用需要的模块，也可以引用 `IndustrialCommSdk` 聚合入口。
+面向工业现场的 .NET 8 通信 SDK，统一封装 PLC、工业协议、MES、网络服务和历史存储。SDK 将公共契约、运行时、传输、协议、存储拆成独立程序集；应用可以只引用需要的模块，也可以引用 `IndustrialCommSdk` 聚合入口。
 
 ## 能做什么
 
@@ -26,7 +26,7 @@
 
 ## 快速开始
 
-环境要求：Windows、Visual Studio 2022 或 .NET SDK，以及 .NET Framework 4.7.2 Developer Pack。
+环境要求：Windows、Visual Studio 2022 或 .NET 8 SDK。WPF/WinForms 项目使用 `net8.0-windows`，Snap7Server 使用 x86 目标。
 
 ```powershell
 dotnet restore Total.sln
@@ -104,5 +104,5 @@ using (var host = sdk.CreateDeviceHost(config, "Config"))
 - 写入前由业务层完成权限、范围、点位和设备状态校验。
 - 数据库故障不应阻塞 PLC 实时通信；缓冲队列有界，满载时会记录丢弃计数。
 - 密码和 API Key 不应提交到源码或普通配置；生产环境接入受保护的凭据来源。
-- 当前只目标 `net472`，尚未提供独立 NuGet 发布和多目标框架。
+- 当前目标为 .NET 8；WPF/WinForms 应用使用 Windows 专用目标框架，Snap7Server 保持 x86 sidecar。
 - 本地构建/测试通过不等于真实 PLC、数据库、Broker 或 FTP 现场验收通过；现场集成需单独安排。

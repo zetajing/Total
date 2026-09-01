@@ -1,6 +1,6 @@
 # Snap7Server 本地虚拟 PLC
 
-`IndustrialCommDemo.Snap7Server` 是随解决方案构建的 x86 .NET Framework 4.7.2 控制台进程。它使用 Snap7Server 的原生通信服务注册 DB1 内存，让 `IndustrialCommDemo` 或其他 S7 客户端可以通过 TCP 102 读取和写入数据。
+`IndustrialCommDemo.Snap7Server` 是随解决方案构建的 x86 .NET 8 控制台进程。它使用 Snap7Server 的原生通信服务注册 DB1 内存，让 `IndustrialCommDemo` 或其他 S7 客户端可以通过 TCP 102 读取和写入数据。
 
 它是通信处理器模拟器，不执行 TIA Portal 的梯形图、SCL 或 MC7 程序。它适合验证 S7 地址、字节序、REAL/Bool 解码、批量读取和写入链路。
 
@@ -42,7 +42,7 @@ DB1.DBD16=30.0
 生成后可以直接运行：
 
 ```powershell
-IndustrialCommDemo.Snap7Server\bin\Release\net472\IndustrialCommDemo.Snap7Server.exe `
+IndustrialCommDemo.Snap7Server\bin\Release\net8.0\IndustrialCommDemo.Snap7Server.exe `
   --address 0.0.0.0 --port 102 --float 12.5 --bool false `
   --point "REAL DB1.DBD12=20.0" `
   --point "BOOL DB1.DBX0.1=true"
@@ -58,3 +58,5 @@ IndustrialCommDemo.Snap7Server\bin\Release\net472\IndustrialCommDemo.Snap7Server
 - `--point`：追加一个 `BOOL`、`INT`、`DINT` 或 `REAL` 点位，参数可重复；例如 `--point "REAL DB1.DBD12=20.0"`。
 
 原生 `snap7.dll` 来自 `Snap7Server.Net` NuGet 包，并随 x86 服务端输出复制。主 WPF 进程不直接加载这个 x86 DLL，避免 AnyCPU/x64 进程出现“试图加载格式不正确的程序”。
+
+发布 `IndustrialCommDemo` 时，使用 `win-x64` 自包含发布会将 x86 Snap7Server 及其运行时放到发布目录的 `snap7server` 子目录；目标电脑不需要安装 .NET Runtime。主程序和 Snap7Server 的运行库分目录保存，避免 x64 与 x86 文件冲突。

@@ -50,7 +50,7 @@ SQL Server 和 MySQL 都实现 `IIndustrialHistoryStore`；`IIndustrialDataStore
 
 ## SQL Server
 
-目标框架为 `net472`，使用框架自带 `System.Data.SqlClient`，不需要 Entity Framework。`TableName` 必须是 `schema.table`，例如 `dbo.IndustrialDataHistory`；数据库和 schema 必须已经存在，`InitializeAsync` 只创建历史表及索引。
+目标框架为 `net8.0`，使用 `System.Data.SqlClient` NuGet 包，不需要 Entity Framework。`TableName` 必须是 `schema.table`，例如 `dbo.IndustrialDataHistory`；数据库和 schema 必须已经存在，`InitializeAsync` 只创建历史表及索引。
 
 Windows 上位机优先使用 Windows 身份验证：
 

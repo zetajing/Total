@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <TargetFramework>net472</TargetFramework>
+    <TargetFramework>net8.0-windows</TargetFramework>
     <LangVersion>latest</LangVersion>
     <UseWPF>true</UseWPF>
     <ApplicationIcon>Assets\industrial-comm-icon.ico</ApplicationIcon>
@@ -28,22 +28,35 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Reference Include="System.Management" />
+    <PackageReference Include="System.Management" Version="8.0.0" />
   </ItemGroup>
 
   <PropertyGroup>
     <Snap7ServerProject>$(MSBuildThisFileDirectory)..\IndustrialCommDemo.Snap7Server\IndustrialCommDemo.Snap7Server.csproj</Snap7ServerProject>
-    <Snap7ServerOutput>$(MSBuildThisFileDirectory)..\IndustrialCommDemo.Snap7Server\bin\$(Configuration)\net472\</Snap7ServerOutput>
+    <Snap7ServerOutput>$(MSBuildThisFileDirectory)..\IndustrialCommDemo.Snap7Server\bin\$(Configuration)\net8.0\</Snap7ServerOutput>
   </PropertyGroup>
 
   <!-- Keep the optional x86 Snap7 sidecar next to the Demo executable so the
        virtual PLC page can start it without requiring a separate install step. -->
   <Target Name="BuildAndCopySnap7Server" AfterTargets="Build" Condition="Exists('$(Snap7ServerProject)')">
-    <MSBuild Projects="$(Snap7ServerProject)" Targets="Restore;Build" Properties="Configuration=$(Configuration);Platform=x86" />
+    <MSBuild Projects="$(Snap7ServerProject)" Targets="Restore;Build" Properties="Configuration=$(Configuration);Platform=x86;RuntimeIdentifier=;SelfContained=false" />
     <ItemGroup>
       <Snap7ServerFiles Include="$(Snap7ServerOutput)*.*" />
     </ItemGroup>
     <Copy SourceFiles="@(Snap7ServerFiles)" DestinationFolder="$(TargetDir)" SkipUnchangedFiles="true" />
+  </Target>
+
+  <!-- Publish the x86 helper with its own self-contained runtime in a
+       subdirectory. Keeping it separate prevents x86 and x64 runtime files
+       from colliding in the main application's publish directory. -->
+  <Target Name="PublishSnap7Server" AfterTargets="Publish" Condition="Exists('$(Snap7ServerProject)') and '$(RuntimeIdentifier)' != ''">
+    <PropertyGroup>
+      <_Snap7ServerPublishDirectory>$(PublishDir)snap7server\</_Snap7ServerPublishDirectory>
+    </PropertyGroup>
+    <MakeDir Directories="$(_Snap7ServerPublishDirectory)" />
+    <MSBuild Projects="$(Snap7ServerProject)"
+             Targets="Publish"
+             Properties="Configuration=$(Configuration);Platform=x86;RuntimeIdentifier=win-x86;SelfContained=true;PublishSingleFile=false;PublishDir=$(_Snap7ServerPublishDirectory)" />
   </Target>
 
 </Project>

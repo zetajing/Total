@@ -252,7 +252,7 @@ namespace IndustrialCommSdk.Storage
     /// <summary>
     /// 使用 ADO.NET 将工业采集值写入 SQL Server。
     /// <para>
-    /// 项目目标框架是 .NET Framework 4.7.2，因此这里直接使用框架内置的
+    /// 项目使用 .NET 8，因此这里直接使用
     /// <see cref="SqlConnection"/> 和 <see cref="SqlCommand"/>。这样依赖更少，部署到工业电脑时
     /// 也不需要额外携带 Entity Framework 运行组件。
     /// </para>

@@ -15,7 +15,7 @@
 
 ## 通用规则
 
-- 当前 SDK 目标框架是 `net472`。
+- 当前 SDK 目标框架是 `net8.0`；WPF/WinForms 应用使用 Windows 专用目标框架。
 - 项目直接引用对应协议项目即可，传递依赖会带入 `IndustrialCommSdk.Runtime`、`IndustrialCommSdk.Abstractions` 及协议自己的第三方包。
 - `IndustrialCommSdk.Runtime` 提供 `UseAsync`、强类型读取和写入扩展。
 - `UseAsync` 依次完成连接、业务操作、断开和释放；需要长连接时自行调用 `ConnectAsync`、`DisconnectAsync` 和 `Dispose`。

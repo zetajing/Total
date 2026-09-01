@@ -170,11 +170,12 @@ namespace IndustrialCommDemo.Views
             var baseDirectory = AppDomain.CurrentDomain.BaseDirectory;
             var candidates = new[]
             {
+                Path.Combine(baseDirectory, "snap7server", fileName),
                 Path.Combine(baseDirectory, fileName),
-                Path.GetFullPath(Path.Combine(baseDirectory, "..", "..", "..", "IndustrialCommDemo.Snap7Server", "bin", "Debug", "net472", fileName)),
-                Path.GetFullPath(Path.Combine(baseDirectory, "..", "..", "..", "IndustrialCommDemo.Snap7Server", "bin", "Release", "net472", fileName)),
-                Path.GetFullPath(Path.Combine(baseDirectory, "..", "..", "..", "IndustrialCommDemo.Snap7Server", "bin", "x86", "Debug", "net472", fileName)),
-                Path.GetFullPath(Path.Combine(baseDirectory, "..", "..", "..", "IndustrialCommDemo.Snap7Server", "bin", "x86", "Release", "net472", fileName)),
+                Path.GetFullPath(Path.Combine(baseDirectory, "..", "..", "..", "IndustrialCommDemo.Snap7Server", "bin", "Debug", "net8.0", fileName)),
+                Path.GetFullPath(Path.Combine(baseDirectory, "..", "..", "..", "IndustrialCommDemo.Snap7Server", "bin", "Release", "net8.0", fileName)),
+                Path.GetFullPath(Path.Combine(baseDirectory, "..", "..", "..", "IndustrialCommDemo.Snap7Server", "bin", "x86", "Debug", "net8.0", fileName)),
+                Path.GetFullPath(Path.Combine(baseDirectory, "..", "..", "..", "IndustrialCommDemo.Snap7Server", "bin", "x86", "Release", "net8.0", fileName)),
             };
             var executable = candidates.FirstOrDefault(File.Exists);
             if (executable == null)

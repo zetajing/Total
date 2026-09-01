@@ -5,7 +5,7 @@ using System.Text;
 namespace IndustrialCommDemo.Snap7Server
 {
     /// <summary>
-    /// Minimal .NET Framework host for the native Snap7Server.
+    /// Minimal .NET host for the native Snap7Server.
     /// The byte arrays remain pinned for the complete lifetime of the server,
     /// so S7 clients can read and write them as normal DB areas.
     /// </summary>

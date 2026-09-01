@@ -10,7 +10,7 @@
 - 只做 TCP/Socket：引用 `IndustrialCommSdk.Transport`。
 - 需要历史数据：业务层依赖 `IIndustrialHistoryStore`，数据库选择只放在创建入口。
 
-所有项目当前目标框架都是 `net472`。快捷扩展、Tag 和轮询位于 `IndustrialCommSdk.Runtime`；配置位于 `IndustrialCommSdk.Runtime.Configuration`；存储公共类型位于 `IndustrialCommSdk.Storage`。
+SDK 类库当前目标框架为 `net8.0`，WPF/WinForms 应用目标框架为 `net8.0-windows`，Snap7Server 为 x86 的 `net8.0` 控制台项目。快捷扩展、Tag 和轮询位于 `IndustrialCommSdk.Runtime`；配置位于 `IndustrialCommSdk.Runtime.Configuration`；存储公共类型位于 `IndustrialCommSdk.Storage`。
 
 ## 程序集边界
 
@@ -143,7 +143,7 @@ var sdk = new IndustrialSdk(registry, logger);
 
 ## 当前限制和验证边界
 
-- 当前只目标 `net472`，尚未多目标到 .NET 8，也尚未发布独立 NuGet 包。
+- 当前 SDK 类库目标为 `net8.0`，WPF/WinForms 应用目标为 `net8.0-windows`；尚未发布独立 NuGet 包。
 - 密码仍由应用配置提供，生产部署应接入 Windows 凭据管理器、DPAPI 或其他受保护来源。
 - S7/MC 已完成连续区单报文批量读取；跨边界、断线恢复和真实设备行为仍需仿真/现场验收。
 - OPC UA 客户端已使用底层库异步 API，并默认拒绝未受信证书；证书签发、信任链和真实 Server 互操作仍需集成验收。

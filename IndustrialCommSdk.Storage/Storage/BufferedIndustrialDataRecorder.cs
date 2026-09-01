@@ -57,7 +57,7 @@ namespace IndustrialCommSdk.Storage
         private readonly BufferedDataRecorderOptions _options;
         private readonly IIndustrialLogger _logger;
         // BlockingCollection 同时提供线程安全队列、容量限制和“完成添加”通知，
-        // 很适合 .NET Framework 4.7.2 下实现简单可靠的生产者/消费者模型。
+        // 很适合 .NET 8 下实现简单可靠的生产者/消费者模型。
         private readonly BlockingCollection<IReadOnlyCollection<IndustrialDataRecord>> _queue;
 
         // 该取消源只属于后台工作任务。正常停止使用 CompleteAdding 排空队列，
