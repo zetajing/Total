@@ -3,6 +3,7 @@
     <OutputType>Exe</OutputType>
     <TargetFramework>net8.0</TargetFramework>
     <PlatformTarget>x86</PlatformTarget>
+    <RuntimeIdentifiers>win-x86</RuntimeIdentifiers>
     <AppendPlatformToOutputPath>false</AppendPlatformToOutputPath>
     <LangVersion>latest</LangVersion>
     <RootNamespace>IndustrialCommDemo.Snap7Server</RootNamespace>

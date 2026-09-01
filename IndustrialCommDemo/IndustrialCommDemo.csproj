@@ -38,10 +38,18 @@
     <Snap7ServerOutput>$(MSBuildThisFileDirectory)..\IndustrialCommDemo.Snap7Server\bin\$(Configuration)\net8.0\</Snap7ServerOutput>
   </PropertyGroup>
 
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
+    <DebugType>full</DebugType>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
+    <DebugType>full</DebugType>
+  </PropertyGroup>
+
   <!-- Keep the optional x86 Snap7 sidecar next to the Demo executable so the
        virtual PLC page can start it without requiring a separate install step. -->
   <Target Name="BuildAndCopySnap7Server" AfterTargets="Build" Condition="Exists('$(Snap7ServerProject)')">
-    <MSBuild Projects="$(Snap7ServerProject)" Targets="Restore;Build" Properties="Configuration=$(Configuration);Platform=x86;RuntimeIdentifier=;SelfContained=false" />
+    <MSBuild Projects="$(Snap7ServerProject)" Targets="Restore;Build" Properties="Configuration=$(Configuration);Platform=x86;TargetFramework=net8.0;RuntimeIdentifier=;SelfContained=false;PublishSingleFile=false;PublishReadyToRun=false;PublishProfile=" />
     <ItemGroup>
       <Snap7ServerFiles Include="$(Snap7ServerOutput)*.*" />
     </ItemGroup>
@@ -56,9 +64,7 @@
       <_Snap7ServerPublishDirectory>$(PublishDir)snap7server\</_Snap7ServerPublishDirectory>
     </PropertyGroup>
     <MakeDir Directories="$(_Snap7ServerPublishDirectory)" />
-    <MSBuild Projects="$(Snap7ServerProject)"
-             Targets="Restore;Publish"
-             Properties="Configuration=$(Configuration);Platform=x86;TargetFramework=net8.0;RuntimeIdentifier=win-x86;SelfContained=true;PublishSingleFile=false;PublishReadyToRun=false;PublishProfile=;PublishDir=$(_Snap7ServerPublishDirectory)" />
+    <MSBuild Projects="$(Snap7ServerProject)" Targets="Restore;Publish" Properties="Configuration=$(Configuration);Platform=x86;TargetFramework=net8.0;RuntimeIdentifier=win-x86;SelfContained=true;PublishSingleFile=false;PublishReadyToRun=false;PublishProfile=;PublishDir=$(_Snap7ServerPublishDirectory)" />
   </Target>
 
 </Project>
