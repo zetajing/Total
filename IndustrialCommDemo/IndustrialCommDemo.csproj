@@ -55,8 +55,8 @@
     </PropertyGroup>
     <MakeDir Directories="$(_Snap7ServerPublishDirectory)" />
     <MSBuild Projects="$(Snap7ServerProject)"
-             Targets="Publish"
-             Properties="Configuration=$(Configuration);Platform=x86;RuntimeIdentifier=win-x86;SelfContained=true;PublishSingleFile=false;PublishDir=$(_Snap7ServerPublishDirectory)" />
+             Targets="Restore;Publish"
+             Properties="Configuration=$(Configuration);Platform=x86;TargetFramework=net8.0;RuntimeIdentifier=win-x86;SelfContained=true;PublishSingleFile=false;PublishReadyToRun=false;PublishProfile=;PublishDir=$(_Snap7ServerPublishDirectory)" />
   </Target>
 
 </Project>
