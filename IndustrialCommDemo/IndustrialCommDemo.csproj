@@ -5,6 +5,8 @@
     <TargetFramework>net8.0-windows</TargetFramework>
     <LangVersion>latest</LangVersion>
     <UseWPF>true</UseWPF>
+    <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
+    <PublishReadyToRun>true</PublishReadyToRun>
     <ApplicationIcon>Assets\industrial-comm-icon.ico</ApplicationIcon>
   </PropertyGroup>
 
