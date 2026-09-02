@@ -1,3 +1,4 @@
+using System;
 using System.Configuration;
 using System.Data;
 using System.Windows;
@@ -18,8 +19,8 @@ public partial class App : Application
     /// <param name="e">包含退出事件数据的 <see cref="ExitEventArgs"/> 实例。</param>
     protected override void OnExit(ExitEventArgs e)
     {
-        // 关闭日志显示辅助工具，释放相关资源
-        LogDisplayHelper.Shutdown();
+        // 在应用退出前等待后台日志队列完成落盘。
+        LogDisplayHelper.Shutdown(TimeSpan.FromSeconds(5));
         base.OnExit(e);
     }
 }

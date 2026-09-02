@@ -1,0 +1,68 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://schemas.microsoft.com/packaging/2013/05/nuspec.xsd">
+  <metadata>
+    <id>Beckhoff.TwinCAT.Ads.Server</id>
+    <version>7.0.317</version>
+    <authors>Beckhoff</authors>
+    <requireLicenseAcceptance>true</requireLicenseAcceptance>
+    <license type="file">License.md</license>
+    <licenseUrl>https://aka.ms/deprecateLicenseUrl</licenseUrl>
+    <icon>Package.png</icon>
+    <readme>ReadMe.md</readme>
+    <projectUrl>https://infosys.beckhoff.com/content/1033/tc3_ads_intro/index.html</projectUrl>
+    <description>The Beckhoff.TwinCAT.AdsServer Package can be used to implement your own ADS Server.</description>
+    <releaseNotes>### 7.0.307
+Fix: The server no longer depends on Microsoft.Extensions.Configuration.Binder for reading the AmsRouter settings.
+### 7.0.294
+Fix: AdsServer no longer serializes received AMS frames on a single dispatcher thread and no longer runs the receive loop on a ThreadPool worker. This removes sporadic latency outliers between an ADS request and its response, especially on systems with few cores.
+Enh: AdsServer allocates significantly less per frame (pooled and stack allocated buffers), which reduces GC pressure and Gen2 collections.
+Fix: Exceptions escaping an AdsServer indication handler are logged instead of being lost, and oversized AMS frames are rejected instead of being allocated.
+### 7.0.152
+Enh: Implements AdsClient.Connect() timeout (200ms) for sending internal PortConnect/GetLocalNetId command.
+BreakingChange: AdsServer.ConnectServerAsync(CancellationToken cancel) implementation as the async counterpart of AdsServer.ConnectServer (Replaces old obsolete AdsSErver.ConnectServerAsync)
+### 7.0.127
+Fix: SemaphoreFullException in AsyncLock class, #280297
+### 7.0.109
+Enh: Overall optimizations for performance gains and less memory pressure. More internal usage of ReadOnlyMemory&lt;byte&gt; instead of byte[] reduces the amount of array copy operations.
+### 7.0.36
+Breaking Change: Removes .NET6 as Dependency (out-of-support)
+### 7.0
+Enh: Supports **locally** installed TwinCAT 2 (via PInvoke channel)
+     Fallback usage of 'TcAmsServer.dll' internally enables function on systems that don't have TCP Loopback port open (e.g TC2 and systems with TCP Loopback disabled), #230847
+Enh: Supports internal communication via UnixSockets, TCP/IP Loopback and PInvoke
+Enh: TargetFramework dependencies changed to net8.0, net6.0, netstandard2.0</releaseNotes>
+    <copyright>Copyright 2001-2026 (c) Beckhoff Automation GmbH &amp; Co. KG. All rights reserved.</copyright>
+    <tags>Beckhoff TwinCAT ADS Server NetCore</tags>
+    <repository type="git" commit="585851a9bcfd91a457edb3db7d6dbc6ad09fd909" />
+    <dependencies>
+      <group targetFramework="net10.0">
+        <dependency id="Beckhoff.TwinCAT.Ads.Abstractions" version="7.0.317" exclude="Build,Analyzers" />
+        <dependency id="Beckhoff.TwinCAT.Ads.ConfigurationProviders" version="7.0.317" exclude="Build,Analyzers" />
+        <dependency id="Microsoft.Extensions.Configuration" version="10.0.11" exclude="Build,Analyzers" />
+        <dependency id="Microsoft.Extensions.Logging.Abstractions" version="10.0.11" exclude="Build,Analyzers" />
+        <dependency id="System.ComponentModel.Composition" version="10.0.11" exclude="Build,Analyzers" />
+        <dependency id="System.Reactive" version="6.1.0" exclude="Build,Analyzers" />
+      </group>
+      <group targetFramework="net8.0">
+        <dependency id="Beckhoff.TwinCAT.Ads.Abstractions" version="7.0.317" exclude="Build,Analyzers" />
+        <dependency id="Beckhoff.TwinCAT.Ads.ConfigurationProviders" version="7.0.317" exclude="Build,Analyzers" />
+        <dependency id="Microsoft.Extensions.Configuration" version="8.0.0" exclude="Build,Analyzers" />
+        <dependency id="Microsoft.Extensions.Logging.Abstractions" version="8.0.3" exclude="Build,Analyzers" />
+        <dependency id="System.ComponentModel.Composition" version="8.0.0" exclude="Build,Analyzers" />
+        <dependency id="System.Reactive" version="6.1.0" exclude="Build,Analyzers" />
+      </group>
+      <group targetFramework=".NETStandard2.0">
+        <dependency id="Beckhoff.TwinCAT.Ads.Abstractions" version="7.0.317" exclude="Build,Analyzers" />
+        <dependency id="Beckhoff.TwinCAT.Ads.ConfigurationProviders" version="7.0.317" exclude="Build,Analyzers" />
+        <dependency id="Microsoft.Extensions.Configuration" version="3.1.0" exclude="Build,Analyzers" />
+        <dependency id="Microsoft.Extensions.Configuration.Abstractions" version="3.1.0" exclude="Build,Analyzers" />
+        <dependency id="System.Buffers" version="4.5.1" exclude="Build,Analyzers" />
+        <dependency id="System.ComponentModel.Composition" version="4.5.0" exclude="Build,Analyzers" />
+        <dependency id="System.Memory" version="4.5.5" exclude="Build,Analyzers" />
+        <dependency id="System.Numerics.Vectors" version="4.5.0" exclude="Build,Analyzers" />
+        <dependency id="System.Reactive" version="5.0.0" exclude="Build,Analyzers" />
+        <dependency id="System.Runtime.CompilerServices.Unsafe" version="4.7.1" exclude="Build,Analyzers" />
+      </group>
+    </dependencies>
+  </metadata>
+</package>

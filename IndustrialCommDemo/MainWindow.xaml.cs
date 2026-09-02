@@ -6,6 +6,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using IndustrialCommSdk.Diagnostics;
+using IndustrialCommSdk.Storage;
 using IndustrialCommDemo.Services;
 using IndustrialCommDemo.Helpers;
 
@@ -23,10 +24,14 @@ namespace IndustrialCommDemo
         private bool _logPanelVisible = true;
         private bool _closeCleanupStarted;
         private bool _closeCleanupCompleted;
+        private const int MaxVisibleLogMessages = 2000;
+        private readonly Queue<string> _visibleAppLogMessages = new Queue<string>();
+        private readonly Queue<string> _visibleSdkLogMessages = new Queue<string>();
 
         public MainWindow()
         {
             InitializeComponent();
+            LogDisplayHelper.WarningRaised += LogDisplayHelper_WarningRaised;
 
             // Create loggers
             _demoLogger = new AppLogger(Dispatcher, AppendLogBatch, "APP");
@@ -165,14 +170,65 @@ namespace IndustrialCommDemo
 
         private void AppendLogBatch(IReadOnlyList<string> messages)
         {
-            foreach (var msg in messages) LogTextBox.AppendText(msg + Environment.NewLine);
-            LogTextBox.ScrollToEnd();
+            AppendLogBatch(LogTextBox, _visibleAppLogMessages, messages);
         }
 
         private void AppendSdkLogBatch(IReadOnlyList<string> messages)
         {
-            foreach (var msg in messages) SdkLogTextBox.AppendText(msg + Environment.NewLine);
-            SdkLogTextBox.ScrollToEnd();
+            AppendLogBatch(SdkLogTextBox, _visibleSdkLogMessages, messages);
+        }
+
+        private static void AppendLogBatch(
+            TextBox textBox,
+            Queue<string> visibleMessages,
+            IReadOnlyList<string> messages)
+        {
+            var removedLength = 0;
+            foreach (var message in messages)
+            {
+                var line = (message ?? string.Empty) + Environment.NewLine;
+                visibleMessages.Enqueue(line);
+                textBox.AppendText(line);
+            }
+
+            while (visibleMessages.Count > MaxVisibleLogMessages)
+            {
+                removedLength += visibleMessages.Dequeue().Length;
+            }
+
+            if (removedLength > 0)
+            {
+                var text = textBox.Text ?? string.Empty;
+                textBox.Text = removedLength >= text.Length ? string.Empty : text.Substring(removedLength);
+            }
+
+            textBox.ScrollToEnd();
+        }
+
+        private void LogDisplayHelper_WarningRaised(object sender, LogDisplayWarningEventArgs e)
+        {
+            try
+            {
+                if (Dispatcher.HasShutdownStarted || Dispatcher.HasShutdownFinished)
+                {
+                    return;
+                }
+
+                _ = Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    var entry = new LogDisplayEntry(
+                        DateTimeOffset.Now,
+                        "APP",
+                        LogDisplayLevel.Warn,
+                        "日志系统告警：" + e.Message,
+                        e.Exception);
+                    AppendLogBatch(new[] { entry.FormatText() });
+                }));
+            }
+            catch
+            {
+                // 窗口关闭期间 Dispatcher 可能已经停止，不能让日志告警影响退出流程。
+            }
         }
 
         private void ClearLogButton_Click(object sender, RoutedEventArgs e)
@@ -180,11 +236,13 @@ namespace IndustrialCommDemo
             if (LogTabControl.SelectedIndex == 1)
             {
                 SdkLogTextBox.Clear();
+                _visibleSdkLogMessages.Clear();
                 _sdkLogger.Info("SDK 日志已清空。");
             }
             else
             {
                 LogTextBox.Clear();
+                _visibleAppLogMessages.Clear();
                 _demoLogger.Info("Demo 日志已清空。");
             }
         }

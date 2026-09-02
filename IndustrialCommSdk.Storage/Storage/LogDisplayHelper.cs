@@ -1,77 +1,148 @@
 using System;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
-using System.Reflection;
 using System.Text;
 using System.Threading;
-using IndustrialCommSdk.Storage;
+using System.Threading.Channels;
+using System.Threading.Tasks;
 
 namespace IndustrialCommSdk.Storage
 {
+    /// <summary>日志级别。</summary>
+    public enum LogDisplayLevel
+    {
+        Trace,
+        Info,
+        Warn,
+        Error
+    }
+
+    /// <summary>一条待显示和落盘的结构化日志。</summary>
+    public sealed class LogDisplayEntry
+    {
+        public LogDisplayEntry(
+            DateTimeOffset timestamp,
+            string channel,
+            LogDisplayLevel level,
+            string message,
+            Exception exception = null)
+            : this(timestamp, channel, level, message, exception, false)
+        {
+        }
+
+        internal LogDisplayEntry(
+            DateTimeOffset timestamp,
+            string channel,
+            LogDisplayLevel level,
+            string message,
+            Exception exception,
+            bool legacyText)
+        {
+            Timestamp = timestamp;
+            Channel = channel ?? string.Empty;
+            Level = level;
+            Message = message ?? string.Empty;
+            Exception = exception;
+            IsLegacyText = legacyText;
+        }
+
+        public DateTimeOffset Timestamp { get; }
+        public string Channel { get; }
+        public LogDisplayLevel Level { get; }
+        public string Message { get; }
+        public Exception Exception { get; }
+        internal bool IsLegacyText { get; }
+
+        /// <summary>生成文件和界面共用的文本格式。</summary>
+        public string FormatText()
+        {
+            if (IsLegacyText)
+            {
+                return Message;
+            }
+
+            var builder = new StringBuilder();
+            builder.Append('[')
+                .Append(Timestamp.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss.fff"))
+                .Append("] [")
+                .Append(Channel)
+                .Append("] [")
+                .Append(Level.ToString().ToUpperInvariant())
+                .Append("] ")
+                .Append(Message);
+
+            if (Exception != null)
+            {
+                builder.AppendLine();
+                builder.Append(Exception);
+            }
+
+            return builder.ToString();
+        }
+
+        public override string ToString()
+        {
+            return FormatText();
+        }
+    }
+
+    /// <summary>日志系统向宿主报告的告警类型。</summary>
+    public enum LogDisplayWarningKind
+    {
+        QueueOverflow,
+        WriteFailure,
+        ShutdownTimeout,
+        WriteAfterShutdown
+    }
+
+    /// <summary>日志系统内部告警事件参数。</summary>
+    public sealed class LogDisplayWarningEventArgs : EventArgs
+    {
+        public LogDisplayWarningEventArgs(
+            LogDisplayWarningKind kind,
+            string message,
+            Exception exception = null,
+            long affectedCount = 0)
+        {
+            Kind = kind;
+            Message = message ?? string.Empty;
+            Exception = exception;
+            AffectedCount = affectedCount;
+        }
+
+        public LogDisplayWarningKind Kind { get; }
+        public string Message { get; }
+        public Exception Exception { get; }
+        public long AffectedCount { get; }
+    }
+
     /// <summary>
-    ///     日志显示辅助静态类。
-    ///     提供异步、批量写入日志文件的后台工作线程机制，支持日志缓存、自动刷新和旧日志清理功能。
-    ///     所有待写入消息通过线程安全的 <see cref="ConcurrentQueue{T}" /> 缓冲，由专用后台线程批量落盘，
-    ///     避免频繁 I/O 对业务线程造成阻塞。
+    ///     日志显示与落盘兼容门面。
+    ///     该类不依赖第三方日志包，文件写入由一个有界队列和单一后台消费者完成。
     /// </summary>
     public static class LogDisplayHelper
     {
-        /// <summary>
-        ///     待写入日志消息的线程安全队列。
-        /// </summary>
-        private static readonly ConcurrentQueue<LogEntry> PendingMessages = new ConcurrentQueue<LogEntry>();
+        private static readonly Lazy<LogDisplayEngine> Engine =
+            new Lazy<LogDisplayEngine>(
+                () => new LogDisplayEngine(
+                    () => StoragePathProvider.LogsRoot,
+                    () => DateTimeOffset.Now,
+                    RaiseWarning),
+                LazyThreadSafetyMode.ExecutionAndPublication);
 
-        /// <summary>
-        ///     用于通知工作线程有新的待处理消息的信号量。
-        /// </summary>
-        private static readonly AutoResetEvent FlushSignal = new AutoResetEvent(false);
+        /// <summary>日志系统无法写入或队列溢出时触发。事件处理器不应执行磁盘写入。</summary>
+        public static event EventHandler<LogDisplayWarningEventArgs> WarningRaised;
 
-        /// <summary>
-        ///     用于同步关闭逻辑的锁对象，确保关闭请求仅被处理一次。
-        /// </summary>
-        private static readonly object SyncRoot = new object();
-
-        /// <summary>
-        ///     后台日志写入工作线程。
-        /// </summary>
-        private static readonly Thread WorkerThread;
-
-        /// <summary>
-        ///     指示是否已请求关闭后台工作线程的 volatile 标志。
-        /// </summary>
-        private static volatile bool _shutdownRequested;
-
-        /// <summary>
-        ///     累计写入批次数，用于触发定期的旧日志清理操作（每 120 次批量写入执行一次清理）。
-        /// </summary>
-        private static int _cleanupTick;
-
-        /// <summary>
-        ///     静态构造函数，初始化并启动后台工作线程。
-        ///     工作线程设置为后台线程，名称为 "LogDisplayHelperWorker"。
-        /// </summary>
-        static LogDisplayHelper()
-        {
-            WorkerThread = new Thread(ProcessLoop)
-            {
-                IsBackground = true,
-                Name = "LogDisplayHelperWorker"
-            };
-            WorkerThread.Start();
-        }
-
-        /// <summary>
-        ///     向日志队列中添加一条消息并触发刷新信号。
-        ///     空字符串或仅含空白字符的消息将被忽略。
-        /// </summary>
-        /// <param name="message">要记录的日志消息内容。</param>
+        /// <summary>兼容旧调用，默认写入 APP 通道。</summary>
         public static void ShowMsg(string message)
         {
-            ShowMsg("Demo", message);
+            ShowMsg("APP", message);
         }
 
-        /// <summary>将日志写入指定的独立通道目录。</summary>
+        /// <summary>
+        ///     兼容旧调用。旧文本被视为已经格式化的原始日志，不重复添加时间和级别。
+        /// </summary>
         public static void ShowMsg(string channel, string message)
         {
             if (string.IsNullOrWhiteSpace(message))
@@ -79,161 +150,514 @@ namespace IndustrialCommSdk.Storage
                 return;
             }
 
-            PendingMessages.Enqueue(new LogEntry(NormalizeChannel(channel), message));
-            FlushSignal.Set();
+            TryWrite(new LogDisplayEntry(
+                DateTimeOffset.Now,
+                NormalizeChannel(channel),
+                LogDisplayLevel.Info,
+                message,
+                null,
+                true));
         }
 
-        /// <summary>
-        ///     关闭日志辅助系统。
-        ///     设置关闭标志、通知工作线程退出，等待工作线程结束（最多 2 秒），
-        ///     最后将队列中剩余的所有未写入消息强制刷新到磁盘。
-        ///     可安全多次调用，仅首次执行实际的关闭操作。
-        /// </summary>
+        /// <summary>将结构化日志非阻塞地加入后台写入队列。</summary>
+        public static bool TryWrite(LogDisplayEntry entry)
+        {
+            return entry != null && !string.IsNullOrWhiteSpace(entry.Message) && Engine.Value.TryWrite(entry);
+        }
+
+        /// <summary>关闭日志系统并等待最多 5 秒排空队列。</summary>
         public static void Shutdown()
         {
-            lock (SyncRoot)
-            {
-                if (_shutdownRequested)
-                {
-                    return;
-                }
-
-                _shutdownRequested = true;
-            }
-
-            FlushSignal.Set();
-
-            if (Thread.CurrentThread != WorkerThread && WorkerThread.IsAlive)
-            {
-                WorkerThread.Join(2000);
-            }
-
-            FlushPendingMessages();
+            Shutdown(TimeSpan.FromSeconds(5));
         }
 
-        /// <summary>
-        ///     后台工作线程主循环。
-        ///     等待刷新信号（超时 1 秒），然后执行一次待处理消息的批量写入。
-        ///     当关闭标志已设置且队列为空时退出循环，终止工作线程。
-        /// </summary>
-        private static void ProcessLoop()
+        /// <summary>关闭日志系统，返回是否在指定时间内完整落盘。</summary>
+        public static bool Shutdown(TimeSpan timeout)
         {
-            while (true)
-            {
-                FlushSignal.WaitOne(1000);
-                FlushPendingMessages();
-
-                if (_shutdownRequested && PendingMessages.IsEmpty)
-                {
-                    return;
-                }
-            }
+            return Engine.Value.Shutdown(timeout);
         }
 
-        /// <summary>
-        ///     将当前队列中所有待处理消息分批写入日志文件。
-        ///     每批最多 200 条消息，分批调用 <see cref="WriteBatch" /> 写入磁盘。
-        /// </summary>
-        private static void FlushPendingMessages()
+        /// <summary>获取指定通道的日志目录。</summary>
+        public static string GetLogDirectory(string channel)
         {
-            var batches = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
-            LogEntry entry;
-            var count = 0;
-            while (count < 200 && PendingMessages.TryDequeue(out entry))
-            {
-                List<string> batch;
-                if (!batches.TryGetValue(entry.Channel, out batch))
-                {
-                    batch = new List<string>();
-                    batches.Add(entry.Channel, batch);
-                }
-                batch.Add(entry.Message);
-                count++;
-            }
-
-            foreach (var pair in batches) WriteBatch(pair.Key, pair.Value);
-            if (!PendingMessages.IsEmpty) FlushSignal.Set();
+            return Path.Combine(StoragePathProvider.LogsRoot, NormalizeChannel(channel));
         }
 
-        /// <summary>
-        ///     将一批日志消息写入到按小时轮转的日志文件中。
-        ///     日志文件路径为：{StoragePathProvider.DataRoot}/Logs/{channel}/{yyyyMMdd_HH}.log。
-        ///     每写入 120 批消息后，自动触发一次旧日志清理（保留最近 14 天）。
-        ///     所有 I/O 异常被静默吞噬，不影响业务线程。
-        /// </summary>
-        /// <param name="batch">待写入的日志消息集合。</param>
-        private static void WriteBatch(string channel, IReadOnlyCollection<string> batch)
+        internal static string NormalizeChannel(string channel)
         {
-            if (batch == null || batch.Count == 0)
+            if (string.Equals(channel, "SDK", StringComparison.OrdinalIgnoreCase))
+            {
+                return "SDK";
+            }
+
+            return "APP";
+        }
+
+        private static void RaiseWarning(LogDisplayWarningEventArgs args)
+        {
+            var handler = WarningRaised;
+            if (handler == null)
             {
                 return;
             }
 
             try
             {
-                var logDirectory = GetLogDirectory(channel);
-                Directory.CreateDirectory(logDirectory);
+                handler(null, args);
+            }
+            catch (Exception exception)
+            {
+                Trace.TraceError("日志告警处理器执行失败：{0}", exception);
+            }
+        }
+    }
 
-                var logFile = Path.Combine(logDirectory, DateTime.Now.ToString("yyyyMMdd_HH") + ".log");
-                File.AppendAllLines(logFile, batch, new UTF8Encoding(false));
+    /// <summary>可注入路径和时钟的日志写入引擎，便于隔离静态门面进行测试。</summary>
+    internal sealed class LogDisplayEngine
+    {
+        internal const int QueueCapacity = 10000;
+        internal const int MaxBatchSize = 200;
+        internal const int BatchWindowMilliseconds = 100;
 
-                if (Interlocked.Increment(ref _cleanupTick) % 120 == 0)
+        private readonly Channel<LogDisplayEntry> _queue;
+        private readonly Func<string> _logsRootProvider;
+        private readonly Func<DateTimeOffset> _clock;
+        private readonly Action<LogDisplayWarningEventArgs> _warningSink;
+        private readonly object _lifecycleGate = new object();
+        private readonly object _warningGate = new object();
+        private readonly HashSet<LogDisplayWarningKind> _activeWarnings = new HashSet<LogDisplayWarningKind>();
+        private readonly Dictionary<string, ActiveLogWriter> _writers =
+            new Dictionary<string, ActiveLogWriter>(StringComparer.OrdinalIgnoreCase);
+        private readonly Task _workerTask;
+
+        private long _queuedCount;
+        private bool _accepting = true;
+        private bool _shutdownStarted;
+        private bool _shutdownCompleted;
+
+        internal LogDisplayEngine(
+            Func<string> logsRootProvider,
+            Func<DateTimeOffset> clock,
+            Action<LogDisplayWarningEventArgs> warningSink)
+        {
+            _logsRootProvider = logsRootProvider ?? throw new ArgumentNullException(nameof(logsRootProvider));
+            _clock = clock ?? throw new ArgumentNullException(nameof(clock));
+            _warningSink = warningSink;
+
+            _queue = Channel.CreateBounded<LogDisplayEntry>(new BoundedChannelOptions(QueueCapacity)
+            {
+                SingleReader = true,
+                SingleWriter = false,
+                FullMode = BoundedChannelFullMode.DropOldest,
+                AllowSynchronousContinuations = false
+            });
+
+            _workerTask = Task.Run(ProcessLoopAsync);
+        }
+
+        internal bool TryWrite(LogDisplayEntry entry)
+        {
+            if (entry == null || string.IsNullOrWhiteSpace(entry.Message))
+            {
+                return false;
+            }
+
+            var normalized = NormalizeEntry(entry);
+            LogDisplayWarningEventArgs warning = null;
+            var clearOverflowWarning = false;
+
+            lock (_lifecycleGate)
+            {
+                if (!_accepting)
                 {
-                    CleanupOldLogs(logDirectory);
+                    warning = new LogDisplayWarningEventArgs(
+                        LogDisplayWarningKind.WriteAfterShutdown,
+                        "日志系统已经关闭，新的日志不会再接收。" );
+                }
+                else if (_queue.Writer.TryWrite(normalized))
+                {
+                    if (_queuedCount >= QueueCapacity)
+                    {
+                        warning = new LogDisplayWarningEventArgs(
+                            LogDisplayWarningKind.QueueOverflow,
+                            string.Format("日志队列已满，已淘汰最早日志。当前容量：{0}。", QueueCapacity),
+                            affectedCount: 1);
+                    }
+                    else
+                    {
+                        _queuedCount++;
+                        clearOverflowWarning = _queuedCount < QueueCapacity;
+                    }
+                }
+                else
+                {
+                    warning = new LogDisplayWarningEventArgs(
+                        LogDisplayWarningKind.WriteAfterShutdown,
+                        "日志系统已经关闭，新的日志不会再接收。" );
                 }
             }
-            catch
+
+            if (clearOverflowWarning)
             {
-                // 忽略所有 I/O 异常，确保日志写入失败不会影响主业务流程
+                ClearWarning(LogDisplayWarningKind.QueueOverflow);
             }
+
+            if (warning != null)
+            {
+                ReportWarning(warning);
+                return warning.Kind != LogDisplayWarningKind.WriteAfterShutdown;
+            }
+
+            return true;
         }
 
-        /// <summary>
-        ///     获取日志文件存储目录。
-        ///     优先使用入口程序集的名称，若无法获取则回退为 "IndustrialCommDemo"。
-        ///     目录路径为：{StoragePathProvider.DataRoot}/Logs。
-        /// </summary>
-        /// <returns>日志目录的完整路径字符串。</returns>
-        public static string GetLogDirectory(string channel)
+        internal bool Shutdown(TimeSpan timeout)
         {
-            return Path.Combine(StoragePathProvider.LogsRoot, NormalizeChannel(channel));
+            if (timeout < TimeSpan.Zero)
+            {
+                throw new ArgumentOutOfRangeException(nameof(timeout));
+            }
+
+            Task workerTask;
+            lock (_lifecycleGate)
+            {
+                if (_shutdownCompleted)
+                {
+                    return true;
+                }
+
+                if (!_shutdownStarted)
+                {
+                    _shutdownStarted = true;
+                    _accepting = false;
+                    _queue.Writer.TryComplete();
+                }
+
+                workerTask = _workerTask;
+            }
+
+            if (Task.CurrentId.HasValue && Task.CurrentId.Value == workerTask.Id)
+            {
+                ReportWarning(new LogDisplayWarningEventArgs(
+                    LogDisplayWarningKind.ShutdownTimeout,
+                    "日志后台线程不能等待自身关闭。" ));
+                return false;
+            }
+
+            try
+            {
+                if (!workerTask.Wait(timeout))
+                {
+                    ReportWarning(new LogDisplayWarningEventArgs(
+                        LogDisplayWarningKind.ShutdownTimeout,
+                        string.Format("日志在 {0} 秒内未完成落盘，剩余约 {1} 条。", timeout.TotalSeconds, Volatile.Read(ref _queuedCount)),
+                        affectedCount: Volatile.Read(ref _queuedCount)));
+                    return false;
+                }
+            }
+            catch (AggregateException exception)
+            {
+                ReportWarning(new LogDisplayWarningEventArgs(
+                    LogDisplayWarningKind.WriteFailure,
+                    "日志后台线程异常退出。",
+                    exception.GetBaseException(),
+                    Volatile.Read(ref _queuedCount)));
+                return false;
+            }
+
+            lock (_lifecycleGate)
+            {
+                _shutdownCompleted = true;
+            }
+
+            ClearWarning(LogDisplayWarningKind.ShutdownTimeout);
+            return true;
         }
 
-        private static string NormalizeChannel(string channel)
+        private LogDisplayEntry NormalizeEntry(LogDisplayEntry entry)
         {
-            if (string.Equals(channel, "SDK", StringComparison.OrdinalIgnoreCase)) return "SDK";
-            return "Demo";
+            var timestamp = entry.Timestamp == default(DateTimeOffset) ? _clock() : entry.Timestamp;
+            return new LogDisplayEntry(
+                timestamp,
+                LogDisplayHelper.NormalizeChannel(entry.Channel),
+                entry.Level,
+                entry.Message,
+                entry.Exception,
+                entry.IsLegacyText);
         }
 
-        private sealed class LogEntry
-        {
-            public LogEntry(string channel, string message) { Channel = channel; Message = message; }
-            public string Channel { get; private set; }
-            public string Message { get; private set; }
-        }
-
-        /// <summary>
-        ///     清理指定日志目录中超过 14 天未修改的旧日志文件（*.log）。
-        ///     所有 I/O 异常被静默吞噬，不影响正常日志写入。
-        /// </summary>
-        /// <param name="logDirectory">要执行清理操作的日志目录路径。</param>
-        private static void CleanupOldLogs(string logDirectory)
+        private async Task ProcessLoopAsync()
         {
             try
             {
-                var cutoff = DateTime.Now.AddDays(-14);
-                foreach (var file in Directory.GetFiles(logDirectory, "*.log"))
+                while (await _queue.Reader.WaitToReadAsync().ConfigureAwait(false))
                 {
-                    var info = new FileInfo(file);
-                    if (info.LastWriteTime < cutoff)
+                    var batch = await ReadBatchAsync().ConfigureAwait(false);
+                    if (batch.Count > 0)
                     {
-                        info.Delete();
+                        WriteBatch(batch);
                     }
                 }
             }
-            catch
+            catch (Exception exception)
             {
-                // 忽略清理过程中的异常，不影响日志系统正常运行
+                ReportWarning(new LogDisplayWarningEventArgs(
+                    LogDisplayWarningKind.WriteFailure,
+                    "日志后台写入线程异常退出。",
+                    exception,
+                    Volatile.Read(ref _queuedCount)));
+            }
+            finally
+            {
+                DisposeWriters();
+            }
+        }
+
+        private async Task<List<LogDisplayEntry>> ReadBatchAsync()
+        {
+            var batch = new List<LogDisplayEntry>(MaxBatchSize);
+            LogDisplayEntry entry;
+            var deadline = Stopwatch.GetTimestamp() +
+                           (long)(Stopwatch.Frequency * (BatchWindowMilliseconds / 1000.0));
+
+            while (batch.Count < MaxBatchSize && TryRead(out entry))
+            {
+                batch.Add(entry);
+            }
+
+            while (batch.Count < MaxBatchSize)
+            {
+                var remainingTicks = deadline - Stopwatch.GetTimestamp();
+                if (remainingTicks <= 0)
+                {
+                    break;
+                }
+
+                var remainingMilliseconds = Math.Max(
+                    1,
+                    (int)Math.Ceiling(remainingTicks * 1000.0 / Stopwatch.Frequency));
+                var readyTask = _queue.Reader.WaitToReadAsync().AsTask();
+                var delayTask = Task.Delay(remainingMilliseconds);
+                var completed = await Task.WhenAny(readyTask, delayTask).ConfigureAwait(false);
+                if (completed == delayTask || !await readyTask.ConfigureAwait(false))
+                {
+                    break;
+                }
+
+                while (batch.Count < MaxBatchSize && TryRead(out entry))
+                {
+                    batch.Add(entry);
+                }
+            }
+
+            return batch;
+        }
+
+        private bool TryRead(out LogDisplayEntry entry)
+        {
+            lock (_lifecycleGate)
+            {
+                if (_queue.Reader.TryRead(out entry))
+                {
+                    _queuedCount--;
+                    return true;
+                }
+            }
+
+            entry = null;
+            return false;
+        }
+
+        private void WriteBatch(IReadOnlyList<LogDisplayEntry> batch)
+        {
+            var groups = new List<LogBatchGroup>();
+            var groupMap = new Dictionary<string, LogBatchGroup>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var entry in batch)
+            {
+                var channel = LogDisplayHelper.NormalizeChannel(entry.Channel);
+                var hour = entry.Timestamp.ToLocalTime().ToString("yyyyMMdd_HH");
+                var key = channel + "|" + hour;
+                if (!groupMap.TryGetValue(key, out var group))
+                {
+                    group = new LogBatchGroup(channel, hour);
+                    groupMap.Add(key, group);
+                    groups.Add(group);
+                }
+
+                group.Entries.Add(entry);
+            }
+
+            var failed = false;
+            foreach (var group in groups)
+            {
+                try
+                {
+                    var writer = GetWriter(group.Channel, group.Hour);
+                    foreach (var entry in group.Entries)
+                    {
+                        writer.WriteLine(entry.FormatText());
+                    }
+
+                    writer.Flush();
+                }
+                catch (Exception exception)
+                {
+                    failed = true;
+                    RemoveWriter(group.Channel);
+                    ReportWarning(new LogDisplayWarningEventArgs(
+                        LogDisplayWarningKind.WriteFailure,
+                        string.Format("写入日志文件失败：通道 {0}，时段 {1}。", group.Channel, group.Hour),
+                        exception,
+                        group.Entries.Count));
+                }
+            }
+
+            if (!failed)
+            {
+                ClearWarning(LogDisplayWarningKind.WriteFailure);
+            }
+        }
+
+        private ActiveLogWriter GetWriter(string channel, string hour)
+        {
+            var filePath = GetFilePath(channel, hour);
+            if (_writers.TryGetValue(channel, out var existing) &&
+                string.Equals(existing.FilePath, filePath, StringComparison.OrdinalIgnoreCase))
+            {
+                return existing;
+            }
+
+            RemoveWriter(channel);
+            var writer = new ActiveLogWriter(filePath);
+            _writers[channel] = writer;
+            return writer;
+        }
+
+        private string GetFilePath(string channel, string hour)
+        {
+            var directory = Path.Combine(_logsRootProvider(), LogDisplayHelper.NormalizeChannel(channel));
+            Directory.CreateDirectory(directory);
+            return Path.Combine(directory, hour + ".log");
+        }
+
+        private void RemoveWriter(string channel)
+        {
+            if (_writers.TryGetValue(channel, out var writer))
+            {
+                _writers.Remove(channel);
+                try
+                {
+                    writer.Dispose();
+                }
+                catch (Exception exception)
+                {
+                    ReportWarning(new LogDisplayWarningEventArgs(
+                        LogDisplayWarningKind.WriteFailure,
+                        "关闭日志文件失败。",
+                        exception));
+                }
+            }
+        }
+
+        private void DisposeWriters()
+        {
+            foreach (var writer in _writers.Values)
+            {
+                try
+                {
+                    writer.Flush();
+                    writer.Dispose();
+                }
+                catch (Exception exception)
+                {
+                    ReportWarning(new LogDisplayWarningEventArgs(
+                        LogDisplayWarningKind.WriteFailure,
+                        "关闭日志文件失败。",
+                        exception));
+                }
+            }
+
+            _writers.Clear();
+        }
+
+        private void ReportWarning(LogDisplayWarningEventArgs warning)
+        {
+            var shouldReport = false;
+            lock (_warningGate)
+            {
+                shouldReport = _activeWarnings.Add(warning.Kind);
+            }
+
+            if (shouldReport)
+            {
+                if (warning.Kind == LogDisplayWarningKind.QueueOverflow ||
+                    warning.Kind == LogDisplayWarningKind.ShutdownTimeout)
+                {
+                    Trace.TraceWarning("日志系统告警：{0}", warning.Message);
+                }
+                else
+                {
+                    Trace.TraceError("日志系统告警：{0} {1}", warning.Message, warning.Exception);
+                }
+
+                _warningSink?.Invoke(warning);
+            }
+        }
+
+        private void ClearWarning(LogDisplayWarningKind kind)
+        {
+            lock (_warningGate)
+            {
+                _activeWarnings.Remove(kind);
+            }
+        }
+
+        private sealed class LogBatchGroup
+        {
+            internal LogBatchGroup(string channel, string hour)
+            {
+                Channel = channel;
+                Hour = hour;
+            }
+
+            internal string Channel { get; }
+            internal string Hour { get; }
+            internal List<LogDisplayEntry> Entries { get; } = new List<LogDisplayEntry>();
+        }
+
+        private sealed class ActiveLogWriter : IDisposable
+        {
+            private readonly StreamWriter _writer;
+
+            internal ActiveLogWriter(string filePath)
+            {
+                FilePath = filePath;
+                var stream = new FileStream(
+                    filePath,
+                    FileMode.Append,
+                    FileAccess.Write,
+                    FileShare.ReadWrite,
+                    4096,
+                    FileOptions.SequentialScan);
+                _writer = new StreamWriter(stream, new UTF8Encoding(false), 4096, false);
+            }
+
+            internal string FilePath { get; }
+
+            internal void WriteLine(string line)
+            {
+                _writer.WriteLine(line);
+            }
+
+            internal void Flush()
+            {
+                _writer.Flush();
+            }
+
+            public void Dispose()
+            {
+                _writer.Dispose();
             }
         }
     }

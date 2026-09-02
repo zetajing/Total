@@ -1,0 +1,62 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://schemas.microsoft.com/packaging/2013/05/nuspec.xsd">
+  <metadata>
+    <id>Beckhoff.TwinCAT.Ads.Abstractions</id>
+    <version>7.0.317</version>
+    <title>.NET ADS Communications Library</title>
+    <authors>Beckhoff</authors>
+    <requireLicenseAcceptance>true</requireLicenseAcceptance>
+    <license type="file">License.md</license>
+    <licenseUrl>https://aka.ms/deprecateLicenseUrl</licenseUrl>
+    <icon>Package.png</icon>
+    <readme>ReadMe.md</readme>
+    <projectUrl>https://infosys.beckhoff.com/content/1033/tc3_ads_intro/index.html</projectUrl>
+    <description>ADS Abstractions for .Net Standard / Core. This package contains the base interfaces and implementations necessary for the AdsServer and Client packages. This is a dependent package and should not be used standalone.</description>
+    <releaseNotes>### 7.0.306
+Enh: Refactoring of the winCAT.TypeSystem.SymbolIterator class
+### 7.0.286
+Fix: Several minor security issues in base classes used by TcpIPRouter fixed.
+### 7.0.280
+Fix: Issue starting communication with 32-Bit TwinCAT (hanging on TcpLoopback)
+### 7.0.263
+Breaking Change: Removing TwinCAT.Ads.AdsErrorCode.Succeeded (use TwincAT.AdsErrorCode.NoError instead). The removed value was already obsolelete and created some quirks in specific circumstances.
+### 7.0.165
+Change: TwinCAT.TypeSystem.IEnumValue.Primitive renamed to IEnumValue.Value to represent the Primitive value of the enum member (old property remains marked as obsolete).
+Change: TwinCAT.TypeSystem.IEnumValue.ManagedBaseType renamed to IEnumValue.BaseType to represent the managed base type of the enum member (old property remains marked as obsolete).
+### 7.0.133
+Enh: New extension methods TwinCAT.Ads.AdsClientExtensions.RepeatedWriteAsync / TwinCAT.Ads.AdsClientExtensions.RepeatedWrite 
+### 7.0.109
+Enh: Overall optimizations for performance gains and less memory pressure. More internal usage of ReadOnlyMemory&lt;byte&gt; instead of byte[] reduces the amount of array copy operations.
+### 7.0.36
+Breaking Change: Removes .NET6 as Dependency (out-of-support)
+### 7.0
+Enh: Supports **locally** installed TwinCAT 2 (via PInvoke channel)
+Enh: Supports internal communication via UnixSockets, TCP/IP Loopback and PInvoke
+Enh: TargetFramework dependencies changed to net8.0, net6.0, netstandard2.0</releaseNotes>
+    <copyright>Copyright 2001-2026 (c) Beckhoff Automation GmbH &amp; Co. KG. All rights reserved.</copyright>
+    <tags>Beckhoff TwinCAT ADS Abstractions Interfaces NetCore</tags>
+    <repository type="git" commit="585851a9bcfd91a457edb3db7d6dbc6ad09fd909" />
+    <dependencies>
+      <group targetFramework="net10.0">
+        <dependency id="Microsoft.Extensions.Configuration.Abstractions" version="10.0.11" exclude="Build,Analyzers" />
+        <dependency id="Microsoft.Extensions.Logging.Abstractions" version="10.0.11" exclude="Build,Analyzers" />
+        <dependency id="System.ServiceProcess.ServiceController" version="10.0.11" exclude="Build,Analyzers" />
+      </group>
+      <group targetFramework="net8.0">
+        <dependency id="Microsoft.Extensions.Configuration.Abstractions" version="8.0.0" exclude="Build,Analyzers" />
+        <dependency id="Microsoft.Extensions.Logging.Abstractions" version="8.0.3" exclude="Build,Analyzers" />
+        <dependency id="System.ServiceProcess.ServiceController" version="8.0.1" exclude="Build,Analyzers" />
+      </group>
+      <group targetFramework=".NETStandard2.0">
+        <dependency id="Microsoft.Extensions.Configuration.Abstractions" version="3.1.0" exclude="Build,Analyzers" />
+        <dependency id="Microsoft.Extensions.Logging.Abstractions" version="3.1.0" exclude="Build,Analyzers" />
+        <dependency id="System.Buffers" version="4.5.1" exclude="Build,Analyzers" />
+        <dependency id="System.Memory" version="4.5.5" exclude="Build,Analyzers" />
+        <dependency id="System.Numerics.Vectors" version="4.5.0" exclude="Build,Analyzers" />
+        <dependency id="System.Runtime.CompilerServices.Unsafe" version="4.7.1" exclude="Build,Analyzers" />
+        <dependency id="System.ServiceProcess.ServiceController" version="4.5.0" exclude="Build,Analyzers" />
+        <dependency id="System.Text.Encoding.CodePages" version="4.5.1" exclude="Build,Analyzers" />
+      </group>
+    </dependencies>
+  </metadata>
+</package>

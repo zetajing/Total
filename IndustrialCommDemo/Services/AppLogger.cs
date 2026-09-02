@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
@@ -19,6 +18,7 @@ namespace IndustrialCommDemo.Services
         /// UI 刷新延迟时间（毫秒）。在接收到日志消息后，等待此时间再将批量消息派发给 UI 线程。
         /// </summary>
         private const int UiFlushDelayMilliseconds = 100;
+        private const int MaxPendingUiMessages = 2000;
 
         /// <summary>
         /// 用于在 UI 线程上执行操作的 <see cref="Dispatcher"/> 实例。
@@ -34,7 +34,7 @@ namespace IndustrialCommDemo.Services
         /// <summary>
         /// 线程安全的队列，用于暂存待刷新到 UI 的日志消息行。
         /// </summary>
-        private readonly ConcurrentQueue<string> _pendingUiMessages = new ConcurrentQueue<string>();
+        private readonly Queue<string> _pendingUiMessages = new Queue<string>();
         private readonly object _lifetimeGate = new object();
 
         /// <summary>
@@ -58,7 +58,10 @@ namespace IndustrialCommDemo.Services
         {
             _dispatcher = dispatcher ?? throw new ArgumentNullException(nameof(dispatcher));
             _appendBatch = appendBatch ?? throw new ArgumentNullException(nameof(appendBatch));
-            _channel = string.IsNullOrWhiteSpace(channel) ? "APP" : channel.Trim().ToUpperInvariant();
+            var normalizedChannel = string.IsNullOrWhiteSpace(channel) ? "APP" : channel.Trim().ToUpperInvariant();
+            _channel = string.Equals(normalizedChannel, "SDK", StringComparison.OrdinalIgnoreCase)
+                ? "SDK"
+                : "APP";
         }
 
         /// <summary>
@@ -67,7 +70,7 @@ namespace IndustrialCommDemo.Services
         /// <param name="message">日志消息文本。</param>
         public void Trace(string message)
         {
-            Write("TRACE", message, null);
+            Write(LogDisplayLevel.Trace, message, null);
         }
 
         /// <summary>
@@ -76,7 +79,7 @@ namespace IndustrialCommDemo.Services
         /// <param name="message">日志消息文本。</param>
         public void Info(string message)
         {
-            Write("INFO ", message, null);
+            Write(LogDisplayLevel.Info, message, null);
         }
 
         /// <summary>
@@ -85,7 +88,7 @@ namespace IndustrialCommDemo.Services
         /// <param name="message">日志消息文本。</param>
         public void Warn(string message)
         {
-            Write("WARN ", message, null);
+            Write(LogDisplayLevel.Warn, message, null);
         }
 
         /// <summary>
@@ -96,8 +99,7 @@ namespace IndustrialCommDemo.Services
         /// <param name="exception">与日志关联的 <see cref="Exception"/> 对象；可为 null。</param>
         public void Error(string message, Exception exception)
         {
-            var detail = exception == null ? message : string.Format("{0} | {1}", message, exception.Message);
-            Write("ERROR", detail, exception);
+            Write(LogDisplayLevel.Error, message, exception);
         }
 
         /// <summary>
@@ -134,19 +136,16 @@ namespace IndustrialCommDemo.Services
         }
 
         /// <summary>
-        /// 写入一条格式化后的日志行到待处理队列中，并安排 UI 刷新。
+        /// 写入一条结构化日志到 SDK 日志引擎和 UI 队列，并安排 UI 刷新。
         /// 如果实例已释放，则直接返回。
         /// </summary>
-        /// <param name="level">日志级别字符串（如 "TRACE"、"INFO "、"WARN "、"ERROR"）。</param>
+        /// <param name="level">日志级别。</param>
         /// <param name="message">日志消息文本。</param>
         /// <param name="exception">与日志关联的异常；可为 null。若提供，会附加其堆栈跟踪信息。</param>
-        private void Write(string level, string message, Exception exception)
+        private void Write(LogDisplayLevel level, string message, Exception exception)
         {
-            var line = string.Format("[{0:HH:mm:ss}] [{1}] {2} {3}", DateTime.Now, _channel, level, message ?? string.Empty);
-            if (exception != null && !string.IsNullOrWhiteSpace(exception.StackTrace))
-            {
-                line = line + Environment.NewLine + exception.StackTrace;
-            }
+            var entry = new LogDisplayEntry(DateTimeOffset.Now, _channel, level, message, exception);
+            var line = entry.FormatText();
 
             lock (_lifetimeGate)
             {
@@ -155,9 +154,14 @@ namespace IndustrialCommDemo.Services
                     return;
                 }
 
+                if (_pendingUiMessages.Count >= MaxPendingUiMessages)
+                {
+                    _pendingUiMessages.Dequeue();
+                }
+
                 _pendingUiMessages.Enqueue(line);
             }
-            LogDisplayHelper.ShowMsg(_channel, line);
+            LogDisplayHelper.TryWrite(entry);
             ScheduleUiFlush();
         }
 
@@ -203,10 +207,12 @@ namespace IndustrialCommDemo.Services
         private void FlushUiQueue()
         {
             var batch = new List<string>();
-            string line;
-            while (_pendingUiMessages.TryDequeue(out line))
+            lock (_lifetimeGate)
             {
-                batch.Add(line);
+                while (_pendingUiMessages.Count > 0)
+                {
+                    batch.Add(_pendingUiMessages.Dequeue());
+                }
             }
 
             Interlocked.Exchange(ref _flushScheduled, 0);
@@ -216,7 +222,13 @@ namespace IndustrialCommDemo.Services
                 _appendBatch(batch);
             }
 
-            if (!_pendingUiMessages.IsEmpty && !_disposed)
+            var hasPendingMessages = false;
+            lock (_lifetimeGate)
+            {
+                hasPendingMessages = _pendingUiMessages.Count > 0;
+            }
+
+            if (hasPendingMessages && !_disposed)
             {
                 ScheduleUiFlush();
             }

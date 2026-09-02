@@ -25,7 +25,7 @@ namespace IndustrialCommSdk.Storage
         {
             var normalized = Validate(path);
             Directory.CreateDirectory(normalized);
-            Directory.CreateDirectory(Path.Combine(normalized, "Logs", "Demo"));
+            Directory.CreateDirectory(Path.Combine(normalized, "Logs", "APP"));
             Directory.CreateDirectory(Path.Combine(normalized, "Logs", "SDK"));
             Directory.CreateDirectory(Path.Combine(normalized, "State"));
             Directory.CreateDirectory(Path.Combine(normalized, "Cache"));

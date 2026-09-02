@@ -1,0 +1,1143 @@
+<?xml version="1.0"?>
+<doc>
+    <assembly>
+        <name>TwinCAT.Ads.TcpRouter</name>
+    </assembly>
+    <members>
+        <member name="M:TwinCAT.Ads.TcpRouter.AmsFrameObservable.Create(TwinCAT.Ads.TcpRouter.TcpClientConnectionInfo,System.String,Microsoft.Extensions.Logging.ILogger)">
+            <summary>
+            Creates the specified information.
+            </summary>
+            <param name="info">The information.</param>
+            <param name="debugHint">The debug hint.</param>
+            <param name="logger">The logger.</param>
+            <returns>IObservable&lt;TcpFrame&gt;.</returns>
+        </member>
+        <member name="T:TwinCAT.Ads.TcpRouter.AmsFrameReceiver">
+            <summary>
+            Class TcpClientAmsMessageReceiver.
+            </summary>
+        </member>
+        <member name="F:TwinCAT.Ads.TcpRouter.AmsFrameReceiver.MaxTcpMessageDataSize">
+            <summary>
+            Maximum accepted size (in bytes) for the data part (<see cref="P:TwinCAT.Ams.TcpHeader.cbSize"/>) of a single
+            AMS/TCP message, i.e. the AMS header plus its data payload.
+            </summary>
+            <remarks>
+            SECURITY (ICS-383): <see cref="P:TwinCAT.Ams.TcpHeader.cbSize"/> is a 32-bit length taken directly from the
+            6-byte AMS/TCP header and is fully attacker-controlled. Without an upper bound, a single small
+            message can force the router to pre-allocate an arbitrarily large payload buffer (up to ~4 GiB),
+            enabling a memory-exhaustion denial-of-service. 64 MiB comfortably exceeds any legitimate single
+            AMS/TCP frame (large symbol uploads, sum commands and file transfers are chunked well below this),
+            while capping the per-message allocation. Frames declaring a larger body are rejected and the
+            connection is closed.
+            </remarks>
+        </member>
+        <member name="M:TwinCAT.Ads.TcpRouter.AmsFrameReceiver.#ctor(TwinCAT.Ads.TcpRouter.TcpClientConnectionInfo,System.String,Microsoft.Extensions.Logging.ILogger)">
+            <summary>
+            Initializes a new instance of the <see cref="T:TwinCAT.Ads.TcpRouter.AmsFrameReceiver"/> class.
+            </summary>
+            <param name="info">The connection information.</param>
+            <param name="debugHint">Debug hint.</param>
+            <param name="logger">The logger.</param>
+        </member>
+        <member name="M:TwinCAT.Ads.TcpRouter.AmsFrameReceiver.ReadAsync(System.Threading.CancellationToken)">
+            <summary>
+            Reads the TCP frame from stream asynchronously
+            </summary>
+            <param name="cancel">The cancellation token.</param>
+            <returns>TcpHeaders with data</returns>
+        </member>
+        <member name="T:TwinCAT.Ads.TcpRouter.NamespaceDoc">
+            <summary>
+            Types and implementations for running a <see cref="T:TwinCAT.Ads.TcpRouter.AmsTcpIpRouter"/> that is used in scenarious where no standard TwinCat Router is installed or is available.
+            </summary>
+        </member>
+        <member name="T:TwinCAT.Ads.TcpRouter.IAmsRouter">
+            <summary>
+            Interface IAmsRouter
+            </summary>
+            
+        </member>
+        <member name="P:TwinCAT.Ads.TcpRouter.IAmsRouter.NetId">
+            <summary>
+            The Local <see cref="T:TwinCAT.Ads.AmsNetId"/> of the <see cref="T:TwinCAT.Ads.TcpRouter.IAmsRouter"/>
+            </summary>
+            <value>The net identifier.</value>
+        </member>
+        <member name="M:TwinCAT.Ads.TcpRouter.IAmsRouter.AddRoute(TwinCAT.Ads.Configuration.Route)">
+            <summary>
+            Adds a dynamic <see cref="T:TwinCAT.Ads.Configuration.Route"/>
+            </summary>
+            <param name="route">The route.</param>
+        </member>
+        <member name="M:TwinCAT.Ads.TcpRouter.IAmsRouter.RemoveRoute(TwinCAT.Ads.AmsNetId)">
+            <summary>
+            Removes a dynamic <see cref="T:TwinCAT.Ads.Configuration.Route"/>
+            </summary>
+            <param name="netId">The NetId of the route.</param>
+            <returns><c>true</c> if removed, <c>false</c> otherwise.</returns>
+        </member>
+        <member name="M:TwinCAT.Ads.TcpRouter.IAmsRouter.RemoveRoute(System.String)">
+            <summary>
+            Removes a dynamic <see cref="T:TwinCAT.Ads.Configuration.Route"/>
+            </summary>
+            <param name="route">The route.</param>
+            <returns><c>true</c> if removed, <c>false</c> otherwise.</returns>
+        </member>
+        <member name="M:TwinCAT.Ads.TcpRouter.IAmsRouter.StartAsync(System.Threading.CancellationToken)">
+            <summary>
+            Starts the <see cref="T:TwinCAT.Ads.TcpRouter.IAmsRouter" /> asynchronously.
+            </summary>
+            <remarks>The asynchronous task runs as long until <see cref="M:TwinCAT.Ads.TcpRouter.IAmsRouter.Stop"/>is called.</remarks>
+            <returns>Task.</returns>
+        </member>
+        <member name="M:TwinCAT.Ads.TcpRouter.IAmsRouter.Stop">
+            <summary>
+            Stops the <see cref="T:TwinCAT.Ads.TcpRouter.IAmsRouter"/>.
+            </summary>
+        </member>
+        <member name="M:TwinCAT.Ads.TcpRouter.IAmsRouter.TryAddRoute(TwinCAT.Ads.Configuration.Route)">
+            <summary>
+            Adds a dynamic <see cref="T:TwinCAT.Ads.Configuration.Route"/>
+            </summary>
+            <param name="route">The route.</param>
+            <returns><c>true</c> if added, <c>false</c> otherwise.</returns>
+        </member>
+        <member name="P:TwinCAT.Ads.TcpRouter.IAmsRouter.IsRunning">
+            <summary>
+            Gets a value indicating whether the <see cref="T:TwinCAT.Ads.TcpRouter.IAmsRouter"/> is running (Start phase completely finished).
+            </summary>
+            <value><c>true</c> if this the router is running; otherwise, <c>false</c>.</value>
+        </member>
+        <member name="P:TwinCAT.Ads.TcpRouter.IAmsRouter.IsActive">
+            <summary>
+            Gets a value indicating whether the <see cref="T:TwinCAT.Ads.TcpRouter.IAmsRouter"/> is active (Running or in Starting / Stopping state).
+            </summary>
+            <value><c>true</c> if this the router is active; otherwise, <c>false</c>.</value>
+        </member>
+        <member name="P:TwinCAT.Ads.TcpRouter.IAmsRouter.RouterStatus">
+            <summary>
+            Gets the router status.
+            </summary>
+            <value>The router status.</value>
+        </member>
+        <member name="E:TwinCAT.Ads.TcpRouter.IAmsRouter.RouterStatusChanged">
+            <summary>
+            Occurs when the router status changes.
+            </summary>
+        </member>
+        <member name="P:TwinCAT.Ads.TcpRouter.IAmsRouter.Routes">
+            <summary>
+            Gets a read-only list of the routes
+            </summary>
+            <value>The routes.</value>
+        </member>
+        <member name="T:TwinCAT.Ads.TcpRouter.AmsTcpIpRouter">
+            <summary>
+            ADS Router class
+            </summary>
+            <remarks>
+            The <see cref="T:TwinCAT.Ads.TcpRouter.AmsTcpIpRouter"/> implements a simple ADS/AMS Router for systems, where no TwinCAT Router installation
+            is available.
+            <para>
+            The Router opens two different type of communication channels
+            <list type="bullet">
+            <item>One for the machine internal communication between AdsClients and AdsServers. This is called the **ADS Loopback** port and has by default the
+            IPAddress.Loopback (172.0.0.1) and Port 0xBF02 (<see cref="P:TwinCAT.Ams.AmsConfiguration.RouterLoopbackPort"/>)</item>
+            <item>The other that routes the machine external communication to other TwinCAT ADS routers. This **ADS External Channel** is opened by default on every available IPAddress connected to a Network again on 
+            default Port 0xBF02. A **StaticRoutes** table (e.g. the StaticRoutes.xml of every TwinCAT System) is used to ensure security and maintain the list of remote target systems.</item>
+            </list>
+            With this infrastructure, the AmsTcpIpRouter is able to process ADS/AMS communication in form of ADS Requests and Responses not only isolated on the local system, but also between the local system and remote
+            systems as long they are properly configured.
+            </para>
+            <para>For sophisticated scenarious, the default configurations can be changed to also support more than one router on one system and/or split Client/Server/Router applications in virtual environments 
+            like docker.
+            </para>
+            <para>
+            <list type="table">
+            <listheader><term>Property Name</term><term>Description</term><term>Default</term></listheader>
+            <item><term>Name</term><term>The name of the local system.</term><term>No default, must be set.</term></item>
+            <item><term><see cref="P:TwinCAT.Ads.TcpRouter.AmsTcpIpRouter.LocalNetId"/></term><term>The AmsNetId of the local system.</term><term>No default, must be set.</term></item>
+            <item><term>RemoteConnections</term><term>List of the registered remote Routes / Systems that can be reached remotely.</term><term>None/Empty</term></item>
+            <item><term><see cref="P:TwinCAT.Ads.TcpRouter.AmsTcpIpRouter.TcpIpPort"/></term><term>The TCP Port to be used for external ADS communication (**ADS External channel**)</term><term>0xBF02 (48898)</term></item>
+            <item><term><see cref="P:TwinCAT.Ads.TcpRouter.AmsTcpIpRouter.Loopback"/></term><term>The LoopbackIP of Device internal communication. 
+            This setting should only be changed if ADS Server and Router application should run on different (virtual) devices.
+            On the AdsServer side an appropriate system configuration via <see cref="P:TwinCAT.Ams.AmsConfiguration.RouterLoopbackPort"/> is necessary if the LoopackIP is changed.</term><term>Loopback 127.0.0.1</term></item>
+            <item><term>LoopbackPort</term><term>The Loopback Port of Device internal ADS communication.
+            This setting should only be changed when different TcpPorts are necessary to seperate internal and external router communcation (e.g. in WSL2
+            docker containers) where the LoopbackIP 127.0.0.1 isn't appropiate.
+            On the AdsServer side an appropriate system configuration via <see cref="P:TwinCAT.Ams.AmsConfiguration.RouterLoopbackPort"/> is necessary if the loopback port is changed.</term><term>0xBF02 (48898)</term></item>
+            <item><term><see cref="P:TwinCAT.Ads.TcpRouter.AmsTcpIpRouter.AcceptedLoopbackIPs"/></term><term>The TCP Port to be used for external ADS communication (**ADS External channel**)</term><term>0xBF02 (48898)</term></item>
+            <item><term><see cref="P:TwinCAT.Ads.TcpRouter.AmsTcpIpRouter.AcceptedLoopbackNetwork"/></term><term>The TCP Port to be used for external ADS communication (**ADS External channel**)</term><term>0xBF02 (48898)</term></item>
+            </list>
+            </para>
+            <para>
+            The router settings can be configured by the .NET Configuration Builder <see cref="T:Microsoft.Extensions.Configuration.IConfigurationBuilder"/> or simply by calling one of the <see cref="T:TwinCAT.Ads.TcpRouter.AmsTcpIpRouter"/> constructor overloads.
+            <list type="table">
+            <item><term>Xml Configuration (StaticRoutes.xml)</term><term><see cref="M:TwinCAT.Ads.Configuration.StaticRoutesXmlConfigurationBuilderExtension.AddStaticRoutesXmlConfiguration(Microsoft.Extensions.Configuration.IConfigurationBuilder,Microsoft.Extensions.Logging.ILoggerFactory)"/></term></item>
+            <item><term>Json Configuration (appSettings.json)</term><term>Microsoft.Extensions.Configuration.JsonConfigurationExtensions.AddJsonFile(string)</term></item>
+            <item><term>Environment variables</term><term>Microsoft.Extensions.Configuration.EnvironmentVariablesExtensions.AddEnvironmentVariables()</term></item>
+            <item><term>ConsoleArguments</term><term>Microsoft.Extensions.Configuration.CommandLineConfigurationExtensions.AddCommandLine(string[])</term></item>
+            </list>
+            </para>
+            </remarks>
+            <example>
+            The following sample shows how to use the <see cref="T:TwinCAT.Ads.TcpRouter.AmsTcpIpRouter"/> class within an own Console application. This console application can also be 
+            accessed as binary from the Nuget.org package repository. The ID of the package is 'Beckhoff.TwinCAT.Ads.AdsRouterConsole'.
+            <code language="C#" title="Ads Router WorkerService">
+            <code source="..\..\Sources\TwinCAT.Ads.AdsRouterConsole\Program.cs" region="CODE_SAMPLE_ROUTERCONSOLE"/>
+            <code source="..\..\Sources\TwinCAT.Ads.AdsRouterConsole\Worker.cs" region="CODE_SAMPLE_ROUTERCONSOLE"/>
+            </code>
+            </example>
+            <seealso cref="T:TwinCAT.Ads.Configuration.RouteConfig"/>
+            <seealso cref="T:TwinCAT.Ams.AmsConfiguration"/>
+        </member>
+        <member name="F:TwinCAT.Ads.TcpRouter.AmsTcpIpRouter._staticRoutes">
+            <summary>
+            The static routes
+            </summary>
+        </member>
+        <member name="F:TwinCAT.Ads.TcpRouter.AmsTcpIpRouter._dynamicRoutes">
+            <summary>
+            The dynamic routes
+            </summary>
+        </member>
+        <member name="F:TwinCAT.Ads.TcpRouter.AmsTcpIpRouter._local">
+            <summary>
+            The local <see cref="T:TwinCAT.Ads.Configuration.Route"/>
+            </summary>
+        </member>
+        <member name="F:TwinCAT.Ads.TcpRouter.AmsTcpIpRouter._tcpIpPort">
+            <summary>
+            Used TCP Port (0xBF02) for external communication
+            </summary>
+        </member>
+        <member name="P:TwinCAT.Ads.TcpRouter.AmsTcpIpRouter.TcpIpPort">
+            <summary>
+            Gets the used TCP IP Port for External communication.
+            </summary>
+            <value>The TCP ip port.</value>
+        </member>
+        <member name="F:TwinCAT.Ads.TcpRouter.AmsTcpIpRouter._loopbackPort">
+            <summary>
+            The Loopback port (0xBF02) for internal communication
+            </summary>
+        </member>
+        <member name="P:TwinCAT.Ads.TcpRouter.AmsTcpIpRouter.LoopbackPort">
+            <summary>
+            Gets the loopback port for internal Loopback communnciation (default is 0xBF02)
+            </summary>
+            <value>The loopback port.</value>
+        </member>
+        <member name="F:TwinCAT.Ads.TcpRouter.AmsTcpIpRouter._externalMode">
+            <summary>
+            The ExternalMode indicates, that a different LoopbackIP/Port is used and not 127.0.0.1:0xBF02
+            </summary>
+        </member>
+        <member name="P:TwinCAT.Ads.TcpRouter.AmsTcpIpRouter.ExternalMode">
+            <summary>
+            The ExternalMode indicates, that a different LoopbackIP/Port is used and not 127.0.0.1:0xBF02
+            </summary>
+            <remarks>
+            </remarks>
+        </member>
+        <member name="P:TwinCAT.Ads.TcpRouter.AmsTcpIpRouter.UdpDiscoveryPort">
+            <summary>
+            Gets the UDP discovery port.
+            </summary>
+            <value>The UDP discovery port.</value>
+        </member>
+        <member name="F:TwinCAT.Ads.TcpRouter.AmsTcpIpRouter.s_localNetId">
+            <summary>
+            Local <see cref="T:TwinCAT.Ads.AmsNetId"/>
+            </summary>
+        </member>
+        <member name="P:TwinCAT.Ads.TcpRouter.AmsTcpIpRouter.LocalNetId">
+            <summary>
+            Gets the local <see cref="T:TwinCAT.Ads.AmsNetId"/>
+            </summary>
+            <value>The local net identifier.</value>
+            <remarks>This is initialized during the execution of the <see cref="T:TwinCAT.Ads.TcpRouter.AmsTcpIpRouter"/> constructor.</remarks>
+        </member>
+        <member name="P:TwinCAT.Ads.TcpRouter.AmsTcpIpRouter.Loopback">
+            <summary>
+            Gets the loopback alias
+            </summary>
+            <value>The loopback.</value>
+        </member>
+        <member name="P:TwinCAT.Ads.TcpRouter.AmsTcpIpRouter.AcceptedLoopbackIPs">
+            <summary>
+            Gets the allowed loopback sources.
+            </summary>
+            <remarks>These are the Loopback sources that can use the configured Loopback for communication</remarks>
+            <value>The allowed loopback sources.</value>
+            <remarks>This array specifies the range of valid (external) IPAddresses that are allowed to use the now 'virtual' internal Loopback TCP socket.
+            If not set, the <see cref="T:TwinCAT.Ads.TcpRouter.AmsTcpIpRouter"/> allows on the internal Loopback socket only connections from the same machine. These connections are
+            used for the 'internal' bidirectional communication between Router and AdsClient/AdsServer. To enable sophisticated scenarios (e.g. virtualization of AdsClient or AdsServer applications
+            running in a decoupled environment/container independant of the Router) the accepted Network can be set. The specified network then forms a virtual ADS Device using the Device internal loopback port.
+            This property can be used as an alternative to <see cref="P:TwinCAT.Ads.TcpRouter.AmsTcpIpRouter.AcceptedLoopbackIPs"/>.
+            </remarks>
+            <seealso cref="P:TwinCAT.Ads.TcpRouter.AmsTcpIpRouter.AcceptedLoopbackNetwork"/>.
+        </member>
+        <member name="P:TwinCAT.Ads.TcpRouter.AmsTcpIpRouter.AcceptedLoopbackNetwork">
+            <summary>
+            Gets the Allowed loopback network.
+            </summary>
+            <value>The allowed loopback network in CIDR notation</value>
+            <remarks>This subnet specifies the range of valid (external) IPAddresses that are allowed to use the now 'virtual' internal Loopback TCP socket.
+            If not set, the <see cref="T:TwinCAT.Ads.TcpRouter.AmsTcpIpRouter"/> allows on the internal Loopback socket only connections from the same machine. These connections are
+            used for the 'internal' bidirectional communication between Router and AdsClient/AdsServer. To enable sophisticated scenarios (e.g. virtualization of AdsClient or AdsServer applications
+            running in a decoupled environment/container independant of the Router) the accepted Network can be set. The specified network then forms a virtual ADS Device using the Device internal loopback port.
+            This property can be used as an alternative to <see cref="P:TwinCAT.Ads.TcpRouter.AmsTcpIpRouter.AcceptedLoopbackIPs"/>.
+            </remarks>
+            <seealso cref="P:TwinCAT.Ads.TcpRouter.AmsTcpIpRouter.AcceptedLoopbackIPs"/>
+        </member>
+        <member name="P:TwinCAT.Ads.TcpRouter.AmsTcpIpRouter.ChannelPortType">
+            <summary>
+            Gets the used channel type for loopback communication.
+            </summary>
+            <value>The type of loopback/internal communication.</value>
+            <remarks>The ChannelPortType is used for the 'internal' connection between AdsClients and
+            AdsServers. So this is what was called the 'Loopback' connection before.
+            Be aware if moving the Router to a different 'virtual' machine - splitting it from the local AdsServers and AdsClients,
+            the <see cref="F:TwinCAT.Ads.ChannelPortType.Loopback"/> must be set. Only that channel is capable to traverse the TCP/IP stack.
+            </remarks>
+            <seealso cref="P:TwinCAT.Ams.AmsConfiguration.ChannelPortType"/>
+        </member>
+        <member name="P:TwinCAT.Ads.TcpRouter.AmsTcpIpRouter.UnixDomainSocketPath">
+            <summary>
+            Gets the used Unix Domain socket path (<see cref="F:TwinCAT.Ads.ChannelPortType.UnixSocket"/>
+            </summary>
+            <value>The unix domain socket path.</value>
+            <remarks>This socket path is only used when <see cref="F:TwinCAT.Ads.ChannelPortType.UnixSocket"/>is set.
+            Be aware for using the UnixSockets, AdsClients and AdsServer using this channel must reside in the
+            'virtual' same machine/LocalHost.
+            This path can also set by the TWINCAT3AMSPATH environment variable.
+            Configuration ID: AmsRouter:ChannelProtocol
+            </remarks>
+            <seealso cref="P:TwinCAT.Ams.AmsConfiguration.UnixDomainSocketPath"/>
+        </member>
+        <member name="F:TwinCAT.Ads.TcpRouter.AmsTcpIpRouter._logger">
+            <summary>
+            Logger object
+            </summary>
+        </member>
+        <member name="P:TwinCAT.Ads.TcpRouter.AmsTcpIpRouter.Logger">
+            <summary>
+            Gets the logger interface
+            </summary>
+            <value>The logger.</value>
+        </member>
+        <member name="F:TwinCAT.Ads.TcpRouter.AmsTcpIpRouter._loggerFactory">
+            <summary>
+            The logger factory
+            </summary>
+        </member>
+        <member name="F:TwinCAT.Ads.TcpRouter.AmsTcpIpRouter._configuration">
+            <summary>
+            The configuration
+            </summary>
+        </member>
+        <member name="M:TwinCAT.Ads.TcpRouter.AmsTcpIpRouter.#ctor(Microsoft.Extensions.Configuration.IConfiguration)">
+            <summary>
+            Initializes a new instance of the <see cref="T:TwinCAT.Ads.TcpRouter.AmsTcpIpRouter" /> class with the specified configuration.
+            </summary>
+            <param name="configuration">The configuration.</param>
+        </member>
+        <member name="M:TwinCAT.Ads.TcpRouter.AmsTcpIpRouter.#ctor(TwinCAT.Ads.AmsNetId)">
+            <summary>
+            Initializes a new instance of the <see cref="T:TwinCAT.Ads.TcpRouter.AmsTcpIpRouter"/> class.
+            </summary>
+            <param name="local">The local.</param>
+            <remarks>The <see cref="T:TwinCAT.Ads.TcpRouter.AmsTcpIpRouter"/> will be connected to the Default port.
+            </remarks>
+        </member>
+        <member name="M:TwinCAT.Ads.TcpRouter.AmsTcpIpRouter.#ctor(TwinCAT.Ads.AmsNetId,Microsoft.Extensions.Logging.ILoggerFactory)">
+            <summary>
+            Initializes a new instance of the <see cref="T:TwinCAT.Ads.TcpRouter.AmsTcpIpRouter" /> class.
+            </summary>
+            <param name="local">The local.</param>
+            <param name="loggerFactory">The logger factory.</param>
+            <remarks>The <see cref="T:TwinCAT.Ads.TcpRouter.AmsTcpIpRouter" /> will be connected to the Default port
+            </remarks>
+        </member>
+        <member name="M:TwinCAT.Ads.TcpRouter.AmsTcpIpRouter.#ctor(TwinCAT.Ads.AmsNetId,TwinCAT.Ads.ChannelPortType,Microsoft.Extensions.Logging.ILoggerFactory)">
+            <summary>
+            Initializes a new instance of the <see cref="T:TwinCAT.Ads.TcpRouter.AmsTcpIpRouter" /> class.
+            </summary>
+            <param name="local">The local.</param>
+            <param name="portType">The port type.</param>
+            <param name="loggerFactory">The logger factory.</param>
+            <exception cref="T:System.ArgumentOutOfRangeException">portType</exception>
+            <remarks>The <see cref="T:TwinCAT.Ads.TcpRouter.AmsTcpIpRouter" /> will be connected to the Default port</remarks>
+        </member>
+        <member name="M:TwinCAT.Ads.TcpRouter.AmsTcpIpRouter.#ctor(TwinCAT.Ads.AmsNetId,System.Int32,System.Net.IPAddress,System.Int32,System.Net.IPAddress[],Microsoft.Extensions.Logging.ILoggerFactory)">
+            <summary>
+            Initializes a new instance of the <see cref="T:TwinCAT.Ads.TcpRouter.AmsTcpIpRouter" /> class.
+            </summary>
+            <param name="local">The (enforced) local NET Id.</param>
+            <param name="externalPort">The TCP/IP port the <see cref="T:TwinCAT.Ads.TcpRouter.AmsTcpIpRouter" /> is using.</param>
+            <param name="loopbackIP">The loopback ip.</param>
+            <param name="loopbackPort">The loopback port.</param>
+            <param name="loopbackCommunicationIPs">The loopback communication source addresses.</param>
+            <param name="loggerFactory">The logger factory.</param>
+            <remarks>This constructor doesn't read the 'StaticRoutes.xml'. Instead, it is expected to force
+            the local <see cref="T:TwinCAT.Ads.AmsNetId" />, the TCP/IP port and add the routes as Dynamic routes.</remarks>
+            <exclude/>
+        </member>
+        <member name="M:TwinCAT.Ads.TcpRouter.AmsTcpIpRouter.#ctor(TwinCAT.Ads.AmsNetId,System.Int32,System.Net.IPAddress,System.Int32,System.Net.IPAddress[],System.Int32,Microsoft.Extensions.Logging.ILoggerFactory)">
+            <summary>
+            Initializes a new instance of the <see cref="T:TwinCAT.Ads.TcpRouter.AmsTcpIpRouter" /> class.
+            </summary>
+            <param name="local">The (enforced) local NET Id.</param>
+            <param name="externalPort">The TCP/IP port the <see cref="T:TwinCAT.Ads.TcpRouter.AmsTcpIpRouter" /> is using.</param>
+            <param name="loopbackIP">The loopback ip.</param>
+            <param name="loopbackPort">The loopback port.</param>
+            <param name="loopbackCommunicationIPs">The loopback communication source addresses.</param>
+            <param name="udpDiscoveryPort">The UDP discovery port.</param>
+            <param name="loggerFactory">The logger factory.</param>
+            <remarks>This constructor doesn't read the 'StaticRoutes.xml'. Instead, it is expected to force
+            the local <see cref="T:TwinCAT.Ads.AmsNetId" />, the TCP/IP port and add the routes as Dynamic routes.</remarks>
+        </member>
+        <member name="M:TwinCAT.Ads.TcpRouter.AmsTcpIpRouter.#ctor(TwinCAT.Ads.AmsNetId,System.Int32,System.Net.IPAddress,System.Int32,System.Nullable{System.Net.IPNetwork},Microsoft.Extensions.Logging.ILoggerFactory)">
+            <summary>
+            Initializes a new instance of the <see cref="T:TwinCAT.Ads.TcpRouter.AmsTcpIpRouter" /> class.
+            </summary>
+            <param name="local">The (enforced) local NET Id.</param>
+            <param name="externalPort">The TCP/IP port the <see cref="T:TwinCAT.Ads.TcpRouter.AmsTcpIpRouter" /> is using.</param>
+            <param name="loopbackIP">The loopback ip.</param>
+            <param name="loopbackPort">The loopback port.</param>
+            <param name="loopbackCommunicationNetwork">The loopback communication sources.</param>
+            <param name="loggerFactory">The logger factory.</param>
+            <remarks>This constructor doesn't read the 'StaticRoutes.xml'. Instead, it is expected to force
+            the local <see cref="T:TwinCAT.Ads.AmsNetId" />, the TCP/IP port and add the routes as Dynamic routes.</remarks>
+            <exclude/>
+        </member>
+        <member name="M:TwinCAT.Ads.TcpRouter.AmsTcpIpRouter.#ctor(TwinCAT.Ads.AmsNetId,System.Int32,System.Net.IPAddress,System.Int32,System.Nullable{System.Net.IPNetwork},System.Int32,Microsoft.Extensions.Logging.ILoggerFactory)">
+            <summary>
+            Initializes a new instance of the <see cref="T:TwinCAT.Ads.TcpRouter.AmsTcpIpRouter" /> class.
+            </summary>
+            <param name="local">The (enforced) local NET Id.</param>
+            <param name="externalPort">The TCP/IP port the <see cref="T:TwinCAT.Ads.TcpRouter.AmsTcpIpRouter" /> is using.</param>
+            <param name="loopbackIP">The loopback ip.</param>
+            <param name="loopbackPort">The loopback port.</param>
+            <param name="loopbackCommunicationNetwork">The loopback communication sources.</param>
+            <param name="udpDiscoveryPort">The UDP discovery port.</param>
+            <param name="loggerFactory">The logger factory.</param>
+            <remarks>This constructor doesn't read the 'StaticRoutes.xml'. Instead, it is expected to force
+            the local <see cref="T:TwinCAT.Ads.AmsNetId" />, the TCP/IP port and add the routes as Dynamic routes.</remarks>
+        </member>
+        <member name="M:TwinCAT.Ads.TcpRouter.AmsTcpIpRouter.#ctor(Microsoft.Extensions.Configuration.IConfiguration,Microsoft.Extensions.Logging.ILoggerFactory)">
+            <summary>
+            Initializes a new instance of the <see cref="T:TwinCAT.Ads.TcpRouter.AmsTcpIpRouter" /> class.
+            </summary>
+            <param name="configuration">The configuration.</param>
+            <param name="loggerFactory">The logger factory.</param>
+            <exception cref="T:System.Exception">No IPv4 address for server</exception>
+            <remarks>The <see cref="T:TwinCAT.Ads.TcpRouter.AmsTcpIpRouter" /> will be connected to the Default port
+            <see cref="F:TwinCAT.Ams.AmsConfiguration.DEFAULT_TCP_PORT" />.</remarks>
+        </member>
+        <member name="M:TwinCAT.Ads.TcpRouter.AmsTcpIpRouter.CanLog(Microsoft.Extensions.Logging.LogLevel)">
+            <summary>
+            Determines whether the used logger is enabled for the specified log level.
+            </summary>
+            <param name="level">The level.</param>
+            <returns><c>true</c> if this instance can log the specified level; otherwise, <c>false</c>.</returns>
+        </member>
+        <member name="M:TwinCAT.Ads.TcpRouter.AmsTcpIpRouter.Init(TwinCAT.Ads.Configuration.RouterConfig,Microsoft.Extensions.Logging.ILoggerFactory)">
+            <summary>
+            Initializes the <see cref="T:TwinCAT.Ads.TcpRouter.AmsTcpIpRouter" /> object (called from constructor)
+            </summary>
+            <param name="settings">The settings.</param>
+            <param name="loggerFactory">The logger factory</param>
+            <exception cref="T:System.ArgumentNullException">settings</exception>
+            <exception cref="T:System.ArgumentException">Local NetId not found! - netId</exception>
+            <exception cref="T:System.ArgumentNullException">staticRoutes</exception>
+            <exception cref="T:System.Exception">No IPv4 address for server</exception>
+        </member>
+        <member name="M:TwinCAT.Ads.TcpRouter.AmsTcpIpRouter.Init(TwinCAT.Ads.ChannelPortType,System.String,TwinCAT.Ads.AmsNetId,System.Int32,System.Net.IPAddress,System.Int32,System.Net.IPAddress[],System.Nullable{System.Net.IPNetwork},TwinCAT.Ads.Configuration.RouteCollection,System.Int32,Microsoft.Extensions.Logging.ILoggerFactory)">
+            <summary>
+            Initializes the specified local name.
+            </summary>
+            <param name="portType">The Port type.</param>
+            <param name="localName">Name of the local.</param>
+            <param name="netId">The net identifier.</param>
+            <param name="externalPort">The port.</param>
+            <param name="loopbackIP">The used LoopbackIP by this <see cref="T:TwinCAT.Ads.TcpRouter.AmsTcpIpRouter" /></param>
+            <param name="loopbackPort">The loopback port used by this <see cref="T:TwinCAT.Ads.TcpRouter.AmsTcpIpRouter" />.</param>
+            <param name="acceptedLoopbackIPs">The allowed loopback connections.</param>
+            <param name="acceptedLoopbackNetwork">The accepted loopback network.</param>
+            <param name="routes">The routes.</param>
+            <param name="udpDiscoveryPort">The UDP discovery port.</param>
+            <param name="loggerFactory">The logger factory.</param>
+            <exception cref="T:System.ArgumentOutOfRangeException">portType</exception>
+            <exception cref="T:System.ArgumentException">Local NetId not found! - netId</exception>
+            <exception cref="P:TwinCAT.Ads.AdsNotificationErrorEventArgs.Exception">No IPv4 address for server</exception>
+            <exception cref="T:System.ArgumentNullException">Local NetId not found! - netId</exception>
+            <exception cref="F:TwinCAT.Ads.AdsState.Exception">routes</exception>
+            <exception cref="T:System.Exception">No IPv4 address for server</exception>
+        </member>
+        <member name="M:TwinCAT.Ads.TcpRouter.AmsTcpIpRouter.LoadRouteInfo">
+            <summary>
+            Loads the route information.
+            </summary>
+            <returns>AmsRegisterTpPortIn[].</returns>
+            <remarks>
+            The returned route names and AMS NetIds are served by the AMS/UDP
+            <c>ReadRoutes</c> discovery service, which answers <b>without credentials by
+            design</b> (discovery has to work before a route or credential relationship
+            exists). Anything placed into these entries must therefore be considered
+            disclosed to every peer that can reach the discovery port — do not extend them
+            with sensitive data such as credentials or host addresses of unrelated systems.
+            See ICS-406 / Bug 316419.
+            </remarks>
+        </member>
+        <member name="P:TwinCAT.Ads.TcpRouter.AmsTcpIpRouter.Routes">
+            <summary>
+            Gets a read-only list of the routes
+            </summary>
+            <value>The routes.</value>
+        </member>
+        <member name="M:TwinCAT.Ads.TcpRouter.AmsTcpIpRouter.TryAddRoute(TwinCAT.Ads.Configuration.Route)">
+            <summary>
+            Adds a dynamic <see cref="T:TwinCAT.Ads.Configuration.Route"/>
+            </summary>
+            <param name="route">The route.</param>
+            <returns><c>true</c> if added, <c>false</c> otherwise.</returns>
+        </member>
+        <member name="M:TwinCAT.Ads.TcpRouter.AmsTcpIpRouter.AddRoute(TwinCAT.Ads.Configuration.Route)">
+            <summary>
+            Adds a dynamic <see cref="T:TwinCAT.Ads.Configuration.Route"/>
+            </summary>
+            <param name="route">The route.</param>
+        </member>
+        <member name="M:TwinCAT.Ads.TcpRouter.AmsTcpIpRouter.RemoveRoute(System.String)">
+            <summary>
+            Removes a dynamic <see cref="T:TwinCAT.Ads.Configuration.Route"/>
+            </summary>
+            <param name="route">The route.</param>
+            <returns><c>true</c> if removed, <c>false</c> otherwise.</returns>
+        </member>
+        <member name="M:TwinCAT.Ads.TcpRouter.AmsTcpIpRouter.RemoveRoute(TwinCAT.Ads.AmsNetId)">
+            <summary>
+            Removes a dynamic <see cref="T:TwinCAT.Ads.Configuration.Route"/>
+            </summary>
+            <param name="netId">The NetId of the route.</param>
+            <returns><c>true</c> if removed, <c>false</c> otherwise.</returns>
+        </member>
+        <member name="M:TwinCAT.Ads.TcpRouter.AmsTcpIpRouter.StartAsync(System.Threading.CancellationToken)">
+            <summary>
+            Starts the <see cref="T:TwinCAT.Ads.TcpRouter.AmsTcpIpRouter" /> asynchronously.
+            </summary>
+            <remarks>The asynchronous task runs as long until <see cref="M:TwinCAT.Ads.TcpRouter.AmsTcpIpRouter.Stop"/>is called.</remarks>
+            <returns>Task.</returns>
+        </member>
+        <member name="M:TwinCAT.Ads.TcpRouter.AmsTcpIpRouter.Stop">
+            <summary>
+            Stops the <see cref="T:TwinCAT.Ads.TcpRouter.AmsTcpIpRouter"/>.
+            </summary>
+        </member>
+        <member name="P:TwinCAT.Ads.TcpRouter.AmsTcpIpRouter.IsRunning">
+            <summary>
+            Gets a value indicating whether the <see cref="T:TwinCAT.Ads.TcpRouter.IAmsRouter" /> is running (Start phase completely finished).
+            </summary>
+            <value>
+              <c>true</c> if this the router is running; otherwise, <c>false</c>.</value>
+        </member>
+        <member name="P:TwinCAT.Ads.TcpRouter.AmsTcpIpRouter.IsActive">
+            <summary>
+            Gets a value indicating whether the <see cref="T:TwinCAT.Ads.TcpRouter.IAmsRouter" /> is active (Running or in Starting / Stopping state).
+            </summary>
+            <value>
+              <c>true</c> if this the router is active; otherwise, <c>false</c>.</value>
+        </member>
+        <member name="M:TwinCAT.Ads.TcpRouter.AmsTcpIpRouter.CanCommunicate(System.Net.IPAddress,System.Int32,System.Collections.Generic.List{TwinCAT.Ads.AmsNetId}@)">
+            <summary>
+            Determines whether the source IPAddress is allowed to communicate with the router.
+            </summary>
+            <param name="ip">The ip.</param>
+            <param name="port">The port.</param>
+            <param name="netIds">A list of the NetIds.</param>
+            <returns>AdsErrorCode.</returns>
+            <exception cref="T:System.ArgumentNullException">ip</exception>
+            <exception cref="T:TwinCAT.Ads.TcpRouter.RouterNotInitializedException"></exception>
+        </member>
+        <member name="M:TwinCAT.Ads.TcpRouter.AmsTcpIpRouter.CanCommunicate(TwinCAT.Ads.AmsAddress)">
+            <summary>Determines whether <see cref="T:TwinCAT.Ads.TcpRouter.AmsTcpIpRouter"/> can communicate the specified address.</summary>
+            <param name="address">The address.</param>
+            <returns>AdsErrorCode.</returns>
+            <exception cref="T:System.ArgumentNullException">address</exception>
+            <exception cref="T:TwinCAT.Ads.TcpRouter.RouterNotInitializedException"></exception>
+        </member>
+        <member name="M:TwinCAT.Ads.TcpRouter.AmsTcpIpRouter.LogInvalidNetAccess(TwinCAT.Ads.AmsNetId)">
+            <summary>
+            Logs Invalid AmsNetId access as warning
+            </summary>
+        </member>
+        <member name="M:TwinCAT.Ads.TcpRouter.AmsTcpIpRouter.LogInvalidIPAccess(System.Net.IPAddress,System.Int32)">
+            <summary>
+            Logs Invalid IPAccess as warning
+            </summary>
+            <param name="ip">The ip.</param>
+            <param name="port">The port.</param>
+        </member>
+        <member name="F:TwinCAT.Ads.TcpRouter.AmsTcpIpRouter._remoteListeners">
+            <summary>
+            Listeners to the outer Network.
+            </summary>
+        </member>
+        <member name="F:TwinCAT.Ads.TcpRouter.AmsTcpIpRouter._stopTrigger">
+            <summary>
+            The stop token Source.
+            </summary>
+        </member>
+        <member name="P:TwinCAT.Ads.TcpRouter.AmsTcpIpRouter.NetId">
+            <summary>
+            The Local <see cref="T:TwinCAT.Ads.AmsNetId"/> of this router.
+            </summary>
+            <value>The net identifier.</value>
+        </member>
+        <member name="P:TwinCAT.Ads.TcpRouter.AmsTcpIpRouter.UserModeRuntime">
+            <summary>
+            Gets a value indicating whether this router acts like a UserModeRuntime
+            </summary>
+            <remarks>This value is always true</remarks>
+            <value><c>true</c> if [user mode runtime]; otherwise, <c>false</c>.</value>
+        </member>
+        <member name="P:TwinCAT.Ads.TcpRouter.AmsTcpIpRouter.RouterStatus">
+            <summary>
+            Gets the router status.
+            </summary>
+            <value>The router status.</value>
+            <seealso cref="E:TwinCAT.Ads.TcpRouter.AmsTcpIpRouter.RouterStatusChanged"/>
+        </member>
+        <member name="E:TwinCAT.Ads.TcpRouter.AmsTcpIpRouter.RouterStatusChanged">
+            <summary>
+            Occurs when the router status changes.
+            </summary>
+            <seealso cref="P:TwinCAT.Ads.TcpRouter.AmsTcpIpRouter.RouterStatus"/>
+        </member>
+        <member name="M:TwinCAT.Ads.TcpRouter.AmsTcpIpRouter.OnRegisterServer(TwinCAT.Ads.TcpRouter.TcpClientConnectionInfo,System.UInt16,TwinCAT.Ads.AdsErrorCode@,TwinCAT.Ads.AmsAddress@)">
+            <summary>
+            Handler function registering an ADS Server
+            </summary>
+            <param name="info">The information.</param>
+            <param name="port2">The port2.</param>
+            <param name="errorCode">The error code.</param>
+            <param name="address">The address.</param>
+            <returns>The NamedPipeServerStream for Server Communication 'AmsCommunicationPipe_[Port]]'.</returns>
+        </member>
+        <member name="M:TwinCAT.Ads.TcpRouter.AmsTcpIpRouter.OnUnregisterServer(System.UInt16)">
+            <summary>
+            Called when [unregister server].
+            </summary>
+            <param name="port">The AdsServer port or the AdsClient port</param>
+        </member>
+        <member name="M:TwinCAT.Ads.TcpRouter.AmsTcpIpRouter.AmsRequestAsync(TwinCAT.Ams.AmsCommand,System.Threading.CancellationToken)">
+            <summary>
+            Sends an Ams Request asynchronously.
+            </summary>
+            <param name="packet">The packet.</param>
+            <param name="cancel">The cancellation token that can be used by other objects or threads to receive notice of cancellation.</param>
+            <returns>A Task&lt;AdsErrorCode&gt; representing the asynchronous operation.</returns>
+        </member>
+        <member name="M:TwinCAT.Ads.TcpRouter.AmsTcpIpRouter.AmsResponseAsync(TwinCAT.Ams.AmsCommand,System.Threading.CancellationToken)">
+            <summary>
+            Sends an Ams Response asynchronously.
+            </summary>
+            <param name="packet">The packet.</param>
+            <param name="cancel">The cancellation token that can be used by other objects or threads to receive notice of cancellation.</param>
+            <returns>A Task&lt;AdsErrorCode&gt; representing the asynchronous operation.</returns>
+        </member>
+        <member name="M:TwinCAT.Ads.TcpRouter.AmsTcpIpRouter.AmsErrorResponse(TwinCAT.Ams.AmsHeader,TwinCAT.Ads.AdsErrorCode,System.Threading.CancellationToken)">
+            <summary>
+            Sends an AmsError response.
+            </summary>
+            <param name="request">The request.</param>
+            <param name="error">The error.</param>
+            <param name="cancel">The cancellation token that can be used by other objects or threads to receive notice of cancellation.</param>
+            <returns>AdsErrorCode.</returns>
+        </member>
+        <member name="M:TwinCAT.Ads.TcpRouter.AmsTcpIpRouter.OnReceiveError(TwinCAT.Ads.AdsErrorCode,TwinCAT.Ams.AmsCommand)">
+            <summary>
+            Handler function receiving communicaton errors.
+            </summary>
+            <param name="errorCode">The error code.</param>
+            <param name="command">The command.</param>
+        </member>
+        <member name="M:TwinCAT.Ads.TcpRouter.AmsTcpIpRouter.Dump">
+            <summary>
+            Dumps the <see cref="T:TwinCAT.Ads.TcpRouter.AmsTcpIpRouter"/>
+            </summary>
+            <returns>System.String.</returns>
+        </member>
+        <member name="F:TwinCAT.Ads.TcpRouter.AmsTcpIpRouter.CLIENTPORT_LOOPBACK">
+            <summary>
+            The Loopback Client AmsPort (fixed value ushort.MaxValue)
+            </summary>
+        </member>
+        <member name="F:TwinCAT.Ads.TcpRouter.AmsTcpIpRouter.CLIENTPORT_START">
+            <summary>
+            Start counter for client AmsPorts (starting with 1)
+            </summary>
+        </member>
+        <member name="M:TwinCAT.Ads.TcpRouter.AmsTcpIpRouter.receiveRemoteAsync(System.String,System.Threading.CancellationToken)">
+            <summary>
+            Starts external Listeners on all network interfaces and receive external TcpRequests
+            </summary>
+            <param name="debugHint">The debug hint.</param>
+            <param name="cancel">The cancellation token.</param>
+            <returns>System.Threading.Tasks.Task.</returns>
+            <exception cref="T:TwinCAT.Ads.TcpRouter.RouterNotInitializedException"></exception>
+            <exception cref="T:TwinCAT.Ads.TcpRouter.RouterNotStartedException"></exception>
+            <exception cref="T:TwinCAT.AdsException"></exception>
+        </member>
+        <member name="M:TwinCAT.Ads.TcpRouter.AmsTcpIpRouter.IsLoopbackConnection(TwinCAT.Ads.TcpRouter.TcpClientConnectionInfo)">
+            <summary>
+            Determines whether the connection info represents the Loopback channel (linked to the virtual local device)
+            </summary>
+            <param name="info">The information.</param>
+            <returns><c>true</c> if [is loopback connection] [the specified information]; otherwise, <c>false</c>.</returns>
+        </member>
+        <member name="M:TwinCAT.Ads.TcpRouter.AmsTcpIpRouter.IsLoopbackConnection(System.Net.Sockets.TcpClient)">
+            <summary>
+            Determines whether the client represents the Loopback channel (linked to the virtual local device)
+            </summary>
+            <param name="client">The client.</param>
+            <returns><c>true</c> if [is loopback connection] [the specified client]; otherwise, <c>false</c>.</returns>
+        </member>
+        <member name="M:TwinCAT.Ads.TcpRouter.AmsTcpIpRouter.IsLoopbackConnection(System.Net.Sockets.Socket)">
+            <summary>
+            Determines whether the socket is bound to the loopback channel (linked to the virtual local device)
+            </summary>
+            <param name="socket">The socket.</param>
+            <returns><c>true</c> if [is loopback connection] [the specified socket]; otherwise, <c>false</c>.</returns>
+        </member>
+        <member name="M:TwinCAT.Ads.TcpRouter.AmsTcpIpRouter.IsLoopbackConnection(TwinCAT.Ads.AmsAddress)">
+            <summary>
+            Determines whether the target address will communicate via Loopback (Virtually the same device)
+            </summary>
+            <param name="address">The address.</param>
+            <returns><c>true</c> if [is loopback connection] [the specified address]; otherwise, <c>false</c>.</returns>
+        </member>
+        <member name="M:TwinCAT.Ads.TcpRouter.AmsTcpIpRouter.IsAcceptedLoopbackSource(System.Net.IPAddress,System.Int32)">
+            <summary>
+            Determines whether the source ip is an Loopback Source (internal or external)
+            </summary>
+            <param name="source">The ip.</param>
+            <param name="port">The port.</param>
+            <returns><c>true</c> if [is loopback source] [the specified ip]; otherwise, <c>false</c>.</returns>
+        </member>
+        <member name="M:TwinCAT.Ads.TcpRouter.AmsTcpIpRouter.receiveAsync(TwinCAT.Ads.TcpRouter.TcpClientConnectionInfo,System.Boolean,System.String)">
+            <summary>
+            Receives Data from a TcpListener Asynchronously (Reactive Mode)
+            </summary>
+            <param name="info">The information.</param>
+            <param name="isLoopback">Indictates, that this receive loop runs as 'Loopback' loop, 'External' otherwise.</param>
+            <param name="debugHint">The debug hint.</param>
+            <returns>Task&lt;AdsErrorCode&gt;.</returns>
+            <exception cref="T:TwinCAT.Ads.TcpRouter.RouterNotStartedException"></exception>
+        </member>
+        <member name="M:TwinCAT.Ads.TcpRouter.AmsTcpIpRouter.onPortConnectRequest(TwinCAT.Ams.TcpPortConnectRequestFrame,TwinCAT.Ads.TcpRouter.TcpClientConnectionInfo,System.Threading.CancellationToken)">
+            <summary>
+            Handler function for an PortConnect Request
+            </summary>
+            <param name="frame">The frame.</param>
+            <param name="info">The information.</param>
+            <param name="cancel">The cancellation token.</param>
+            <returns>Task&lt;AdsErrorCode&gt;.</returns>
+        </member>
+        <member name="M:TwinCAT.Ads.TcpRouter.AmsTcpIpRouter.onCommandReceivedFromRemoteAsync(TwinCAT.Ams.AmsCommand,TwinCAT.Ads.TcpRouter.TcpClientConnectionInfo,System.String,System.Int32,System.Int32,System.Threading.CancellationToken)">
+            <summary>
+            Handles an received <see cref="T:TwinCAT.Ams.AmsCommand"/> from the Outside/External world
+            </summary>
+            <param name="command">The command.</param>
+            <param name="sender">The sender.</param>
+            <param name="debugHint">The debug hint.</param>
+            <param name="receivedCounter">The received counter.</param>
+            <param name="sendCounter">The send counter.</param>
+            <param name="combinedCancel">The cancellation token that can be used by other objects or threads to receive notice of cancellation.</param>
+            <returns>AdsErrorCode.</returns>
+            <exception cref="T:TwinCAT.Ads.TcpRouter.RouterPipeException"></exception>
+        </member>
+        <member name="M:TwinCAT.Ads.TcpRouter.AmsTcpIpRouter.onCommandReceivedFromLoopbackAsync(TwinCAT.Ams.AmsCommand,TwinCAT.Ads.TcpRouter.TcpClientConnectionInfo,System.String,System.Int32,System.Int32,System.Threading.CancellationToken)">
+            <summary>
+            Handles an received <see cref="T:TwinCAT.Ams.AmsCommand"/> from the Loopback (Device internal) connections.
+            </summary>
+            <param name="command">The command.</param>
+            <param name="sender">The sender.</param>
+            <param name="debugHint">The debug hint.</param>
+            <param name="receivedCounter">The received counter.</param>
+            <param name="sendCounter">The send counter.</param>
+            <param name="combinedCancel">The cancellation token that can be used by other objects or threads to receive notice of cancellation.</param>
+            <returns>AdsErrorCode.</returns>
+        </member>
+        <member name="M:TwinCAT.Ads.TcpRouter.AmsTcpIpRouter.receiveAsync(System.Net.Sockets.Socket,System.UInt16,System.Boolean,System.String,System.Threading.CancellationToken)">
+            <summary>
+            Receives TcpRequests from one listener and processes these requests.
+            </summary>
+            <param name="listener">The listener.</param>
+            <param name="senderPort">The client port.</param>
+            <param name="isLoopback">if set to <c>true</c> [is loopback].</param>
+            <param name="debugHint">The debug hint.</param>
+            <param name="cancel">The cancellation token.</param>
+            <returns>System.Threading.Tasks.Task.</returns>
+        </member>
+        <member name="F:TwinCAT.Ads.TcpRouter.AmsTcpIpRouter._remoteConnections">
+            <summary>
+            The remote connections (Router &lt;--&gt;> Router)
+            </summary>
+            <remarks>These remote connections should only contain 'main' AmsNetIds with 1.1 at the end.</remarks>
+        </member>
+        <member name="F:TwinCAT.Ads.TcpRouter.AmsTcpIpRouter._loopbackConnections">
+            <summary>
+            The loopback connections (internal connections AdsServer/Client --&lt; Router)
+            </summary>
+        </member>
+        <member name="M:TwinCAT.Ads.TcpRouter.AmsTcpIpRouter.IsRegisteredServer(TwinCAT.Ads.AmsAddress)">
+            <summary>
+            Determines whether the Address specifies an locally registered AmsServer (uses Loopback connection)
+            </summary>
+            <param name="serverAddress">The server address.</param>
+            <returns><c>true</c> if [is server registered] [the specified server address]; otherwise, <c>false</c>.</returns>
+        </member>
+        <member name="F:TwinCAT.Ads.TcpRouter.AmsTcpIpRouter.TCP_TIMEOUT">
+            <summary>
+            The TCP timeout
+            </summary>
+        </member>
+        <member name="M:TwinCAT.Ads.TcpRouter.AmsTcpIpRouter.registerRemoteConnectionAsync(TwinCAT.Ads.AmsAddress)">
+            <summary>
+            Registers remote connection as an asynchronous operation.
+            </summary>
+            <remarks>The router only establishes 1 connection to another router - reusing the Socket for all local AdsClients / AdsServers.</remarks>
+            <param name="address">The address.</param>
+            <returns>A Task&lt;System.ValueTuple&gt; representing the asynchronous operation.</returns>
+        </member>
+        <member name="M:TwinCAT.Ads.TcpRouter.AmsTcpIpRouter.unregisterRemoteConnection(TwinCAT.Ads.TcpRouter.TcpClientConnectionInfo)">
+            <summary>
+            Unregisters the remote connection.
+            </summary>
+            <remarks>
+            The remote connection is only unregistered in 2 scenarios
+            1. The Remote site closes the connection
+            2. Shutdown of the AmsTcpIpRouter
+            </remarks>
+            <param name="info">The information.</param>
+            <returns><c>true</c> if XXXX, <c>false</c> otherwise.</returns>
+        </member>
+        <member name="M:TwinCAT.Ads.TcpRouter.AmsTcpIpRouter.getRoute(TwinCAT.Ads.AmsNetId)">
+            <summary>
+            Gets the route that accesses the target <see cref="T:TwinCAT.Ads.AmsNetId"/>
+            </summary>
+            <param name="targetNetId">The net identifier.</param>
+            <returns>System.Nullable{Route}.</returns>
+        </member>
+        <member name="M:TwinCAT.Ads.TcpRouter.AmsTcpIpRouter.getIPAddresses(TwinCAT.Ads.AmsNetId)">
+            <summary>
+            Gets the IPAddresses that can be used to send data to the specified <see cref="T:TwinCAT.Ads.AmsNetId"/>.
+            </summary>
+            <param name="targetNetId">The net identifier.</param>
+            <returns>System.Nullable{IPAddress}[].</returns>
+        </member>
+        <member name="M:TwinCAT.Ads.TcpRouter.AmsTcpIpRouter.IsConnected(TwinCAT.Ads.TcpRouter.TcpClientConnectionInfo,System.Net.Sockets.Socket@)">
+            <summary>
+            Determines whether the specified client is connected
+            </summary>
+            <param name="clientInfo">The client information.</param>
+            <param name="socket">The socket.</param>
+            <returns><c>true</c> if the specified client information is connected; otherwise, <c>false</c>.</returns>
+        </member>
+        <member name="M:TwinCAT.Ads.TcpRouter.AmsTcpIpRouter.IsConnected(TwinCAT.Ads.AmsAddress,TwinCAT.Ads.TcpRouter.TcpClientConnectionInfo@,System.Net.Sockets.Socket@)">
+            <summary>
+            Indicates whether the specified target is connected
+            </summary>
+            <param name="targetAddress">The target address.</param>
+            <param name="clientInfo">The client information.</param>
+            <param name="socket">The socket.</param>
+            <returns><c>true</c> if the specified target address is connected; otherwise, <c>false</c>.</returns>
+        </member>
+        <member name="M:TwinCAT.Ads.TcpRouter.AmsTcpIpRouter.AmsSendAsync(System.UInt16,TwinCAT.Ams.AmsCommand,System.Threading.CancellationToken)">
+            <summary>
+            Sends an AmsRequest asynchronously
+            </summary>
+            <param name="senderPort">The sender port.</param>
+            <param name="command">The command.</param>
+            <param name="externalCancel">The cancellation token that can be used by other objects or threads to receive notice of cancellation.</param>
+            <returns>A Task&lt;AdsErrorCode&gt; representing the asynchronous operation.</returns>
+            <exception cref="T:System.ArgumentNullException">command</exception>
+            <exception cref="T:System.ArgumentNullException">Command '{command.Dump()}' is not valid! - command</exception>
+        </member>
+        <member name="M:TwinCAT.Ads.TcpRouter.AmsTcpIpRouter.writeTcpFrameAsync(TwinCAT.Ams.TcpFrame,TwinCAT.Ads.TcpRouter.TcpClientConnectionInfo,System.Threading.CancellationToken)">
+            <summary>
+            Write a TCP frame as an asynchronous operation.
+            </summary>
+            <param name="frame">The frame.</param>
+            <param name="connection">The connection.</param>
+            <param name="cancel">The cancellation token that can be used by other objects or threads to receive notice of cancellation.</param>
+            <returns>A Task&lt;AdsErrorCode&gt; representing the asynchronous operation.</returns>
+            <exception cref="T:System.ArgumentNullException">frame</exception>
+            <exception cref="T:System.ArgumentNullException">connection</exception>
+            <exception cref="T:System.ArgumentException">Frame '{frame.Dump()}' is not valid! - frame</exception>
+        </member>
+        <member name="M:TwinCAT.Ads.TcpRouter.AmsTcpIpRouter.writeCommandAsync(TwinCAT.Ams.AmsCommand,System.IO.Stream)">
+            <summary>
+            Writes the AmsCommand to the target stream asynchronously.
+            </summary>
+            <param name="command">The command.</param>
+            <param name="targetStream">The target stream.</param>
+            <returns>AdsErrorCode.</returns>
+        </member>
+        <member name="T:TwinCAT.Ads.TcpRouter.RouterStatus">
+            <summary>
+            Enum RouterStatus
+            </summary>
+            <remarks>Indicates the status of the router.</remarks>
+        </member>
+        <member name="F:TwinCAT.Ads.TcpRouter.RouterStatus.None">
+            <summary>
+            None / Uninitialized
+            </summary>
+        </member>
+        <member name="F:TwinCAT.Ads.TcpRouter.RouterStatus.Initializing">
+            <summary>
+            Initializing
+            </summary>
+        </member>
+        <member name="F:TwinCAT.Ads.TcpRouter.RouterStatus.Starting">
+            <summary>
+            Router Starting
+            </summary>
+        </member>
+        <member name="F:TwinCAT.Ads.TcpRouter.RouterStatus.Started">
+            <summary>
+            Router Started / Executing
+            </summary>
+        </member>
+        <member name="F:TwinCAT.Ads.TcpRouter.RouterStatus.Stopping">
+            <summary>
+            Router Stopping.
+            </summary>
+        </member>
+        <member name="F:TwinCAT.Ads.TcpRouter.RouterStatus.Stopped">
+            <summary>
+            Router stopped.
+            </summary>
+        </member>
+        <member name="T:TwinCAT.Ads.TcpRouter.RouterStatusChangedEventArgs">
+            <summary>
+            Event Arguments sent when the <see cref="E:TwinCAT.Ads.TcpRouter.IAmsRouter.RouterStatusChanged"/>.
+            Implements the <see cref="T:System.EventArgs" />
+            </summary>
+            <seealso cref="T:System.EventArgs" />
+            <seealso cref="E:TwinCAT.Ads.TcpRouter.IAmsRouter.RouterStatusChanged"/>
+        </member>
+        <member name="F:TwinCAT.Ads.TcpRouter.RouterStatusChangedEventArgs.RouterStatus">
+            <summary>
+            The router status
+            </summary>
+        </member>
+        <member name="M:TwinCAT.Ads.TcpRouter.RouterStatusChangedEventArgs.#ctor(TwinCAT.Ads.TcpRouter.RouterStatus)">
+            <summary>
+            Initializes a new instance of the <see cref="T:TwinCAT.Ads.TcpRouter.RouterStatusChangedEventArgs"/> class.
+            </summary>
+            <param name="status">The status.</param>
+        </member>
+        <member name="T:TwinCAT.Ads.TcpRouter.RouterException">
+            <summary>
+            An <see cref="T:TwinCAT.Ads.TcpRouter.RouterException"/> is thrown on communication errors in the <see cref="T:TwinCAT.Ads.TcpRouter.AmsTcpIpRouter"/> class.
+            </summary>
+        </member>
+        <member name="M:TwinCAT.Ads.TcpRouter.RouterException.#ctor(System.String)">
+            <summary>
+            Initializes a new instance of the <see cref="T:TwinCAT.Ads.TcpRouter.RouterException"/> class.
+            </summary>
+            <param name="message">The message that describes the error.</param>
+        </member>
+        <member name="T:TwinCAT.Ads.TcpRouter.RouterNotInitializedException">
+            <summary>
+            Class RouterNotInitializedException.
+            Implements the <see cref="T:TwinCAT.Ads.TcpRouter.RouterException" />
+            </summary>
+            <seealso cref="T:TwinCAT.Ads.TcpRouter.RouterException" />
+        </member>
+        <member name="M:TwinCAT.Ads.TcpRouter.RouterNotInitializedException.#ctor">
+            <summary>
+            Initializes a new instance of the <see cref="T:TwinCAT.Ads.TcpRouter.RouterNotInitializedException"/> class.
+            </summary>
+        </member>
+        <member name="T:TwinCAT.Ads.TcpRouter.RouterNotStartedException">
+            <summary>
+            Class RouterNotStartedException.
+            Implements the <see cref="T:TwinCAT.Ads.TcpRouter.RouterException" />
+            </summary>
+            <seealso cref="T:TwinCAT.Ads.TcpRouter.RouterException" />
+        </member>
+        <member name="M:TwinCAT.Ads.TcpRouter.RouterNotStartedException.#ctor">
+            <summary>
+            Initializes a new instance of the <see cref="T:TwinCAT.Ads.TcpRouter.RouterNotStartedException"/> class.
+            </summary>
+        </member>
+        <member name="T:TwinCAT.Ads.TcpRouter.RouterPipeException">
+            <summary>
+            Class RouterPipeException.
+            Implements the <see cref="T:TwinCAT.Ads.TcpRouter.RouterException" />
+            </summary>
+            <seealso cref="T:TwinCAT.Ads.TcpRouter.RouterException" />
+        </member>
+        <member name="M:TwinCAT.Ads.TcpRouter.RouterPipeException.#ctor">
+            <summary>
+            Initializes a new instance of the <see cref="T:TwinCAT.Ads.TcpRouter.RouterPipeException"/> class.
+            </summary>
+        </member>
+        <member name="T:TwinCAT.Ads.TcpRouter.TcpClientConnectionInfo">
+            <summary>
+            Class TcpClientConnectionInfo.
+            Implements the <see cref="T:System.IDisposable" />
+            </summary>
+            <seealso cref="T:System.IDisposable" />
+        </member>
+        <member name="M:TwinCAT.Ads.TcpRouter.TcpClientConnectionInfo.#ctor(TwinCAT.Ads.AmsAddress)">
+            <summary>
+            Initializes a new instance of the <see cref="T:TwinCAT.Ads.TcpRouter.TcpClientConnectionInfo" /> class.
+            </summary>
+            <param name="address">The target address of the connection.</param>
+        </member>
+        <member name="M:TwinCAT.Ads.TcpRouter.TcpClientConnectionInfo.SetClient(System.Net.Sockets.Socket,System.Threading.CancellationTokenSource)">
+            <summary>
+            Sets the <see cref="T:System.Net.Sockets.TcpClient"/>.
+            </summary>
+            <param name="client">The client.</param>
+            <param name="cancel">The cancellation token.</param>
+        </member>
+        <member name="P:TwinCAT.Ads.TcpRouter.TcpClientConnectionInfo.ID">
+            <summary>
+            Gets Unique identifier of this connection.
+            </summary>
+            <value>The identifier.</value>
+        </member>
+        <member name="P:TwinCAT.Ads.TcpRouter.TcpClientConnectionInfo.IsLoopback">
+            <summary>
+            Gets a value indicating whether the connection represents a loopback.
+            </summary>
+            <value><c>true</c> if this instance is loop back; otherwise, <c>false</c>.</value>
+        </member>
+        <member name="F:TwinCAT.Ads.TcpRouter.TcpClientConnectionInfo._socket">
+            <summary>
+            The connection socket
+            </summary>
+        </member>
+        <member name="P:TwinCAT.Ads.TcpRouter.TcpClientConnectionInfo.Client">
+            <summary>
+            Gets the client.
+            </summary>
+            <value>The client.</value>
+            <exclude/>
+        </member>
+        <member name="P:TwinCAT.Ads.TcpRouter.TcpClientConnectionInfo.Socket">
+            <summary>
+            Gets the <see cref="P:TwinCAT.Ads.TcpRouter.TcpClientConnectionInfo.Socket"/> object.
+            </summary>
+            <value>The socket or null.</value>
+        </member>
+        <member name="F:TwinCAT.Ads.TcpRouter.TcpClientConnectionInfo._stream">
+            <summary>
+            The NetworkStream
+            </summary>
+        </member>
+        <member name="M:TwinCAT.Ads.TcpRouter.TcpClientConnectionInfo.GetStream">
+            <summary>
+            Gets the Network stream.
+            </summary>
+            <returns>System.Nullable&lt;Stream&gt;.</returns>
+        </member>
+        <member name="P:TwinCAT.Ads.TcpRouter.TcpClientConnectionInfo.IsConnected">
+            <summary>
+            Gets a value indicating whether the connection is established.
+            </summary>
+            <value><c>true</c> if this instance is connected; otherwise, <c>false</c>.</value>
+        </member>
+        <member name="F:TwinCAT.Ads.TcpRouter.TcpClientConnectionInfo._address">
+            <summary>
+            The represented <see cref="T:TwinCAT.Ads.AmsAddress"/>
+            </summary>
+        </member>
+        <member name="P:TwinCAT.Ads.TcpRouter.TcpClientConnectionInfo.Address">
+            <summary>
+            Gets the Target address of the connection (the LocalNetId on Loopback, the RemoteNetId on External connections)
+            </summary>
+            <value>The address.</value>
+        </member>
+        <member name="M:TwinCAT.Ads.TcpRouter.TcpClientConnectionInfo.Cancel">
+            <summary>
+            Cancels the connection
+            </summary>
+        </member>
+        <member name="M:TwinCAT.Ads.TcpRouter.TcpClientConnectionInfo.Dump">
+            <summary>
+            Dumps this instance.
+            </summary>
+            <returns>System.String.</returns>
+        </member>
+        <member name="M:TwinCAT.Ads.TcpRouter.TcpClientConnectionInfo.Dispose(System.Boolean)">
+            <summary>
+            Releases unmanaged and - optionally - managed resources.
+            </summary>
+            <param name="disposing"><c>true</c> to release both managed and unmanaged resources; <c>false</c> to release only unmanaged resources.</param>
+        </member>
+        <member name="M:TwinCAT.Ads.TcpRouter.TcpClientConnectionInfo.Dispose">
+            <summary>
+            Performs application-defined tasks associated with freeing, releasing, or resetting unmanaged resources.
+            </summary>
+        </member>
+        <member name="T:TwinCAT.Ads.TcpRouter.RemoteConnectionRegistry">
+            <summary>
+            Registry of the remote connections (Router &lt;--&gt; Router).
+            </summary>
+            <remarks>
+            The router establishes only one connection per remote system. Because SubNet targets
+            (<see cref="P:TwinCAT.Ads.AmsNetId.IsSubAddress"/>, e.g. <strong>x.x.x.x.2.1</strong>) are reached via the connection of their
+            'main' AmsNetId (<strong>x.x.x.x.1.1</strong>), every entry is keyed by that main AmsNetId. Keeping the
+            normalization inside this type guarantees that adding, looking up and removing a connection cannot
+            diverge on the key.
+            </remarks>
+        </member>
+        <member name="M:TwinCAT.Ads.TcpRouter.RemoteConnectionRegistry.GetKey(TwinCAT.Ads.AmsNetId)">
+            <summary>
+            Gets the key under which a connection to the specified <see cref="T:TwinCAT.Ads.AmsNetId"/> is registered.
+            </summary>
+            <param name="netId">The target AmsNetId.</param>
+            <returns>The 'main' AmsNetId of <paramref name="netId"/>.</returns>
+        </member>
+        <member name="P:TwinCAT.Ads.TcpRouter.RemoteConnectionRegistry.Count">
+            <summary>
+            Gets the number of registered connections.
+            </summary>
+        </member>
+        <member name="M:TwinCAT.Ads.TcpRouter.RemoteConnectionRegistry.TryAdd(TwinCAT.Ads.AmsNetId,TwinCAT.Ads.TcpRouter.TcpClientConnectionInfo)">
+            <summary>
+            Registers the connection to the specified target.
+            </summary>
+            <param name="netId">The target AmsNetId.</param>
+            <param name="connection">The connection.</param>
+            <returns><c>true</c> if the connection was added, <c>false</c> if a connection to the target is already registered.</returns>
+        </member>
+        <member name="M:TwinCAT.Ads.TcpRouter.RemoteConnectionRegistry.TryGetValue(TwinCAT.Ads.AmsNetId,TwinCAT.Ads.TcpRouter.TcpClientConnectionInfo@)">
+            <summary>
+            Gets the connection that is used to reach the specified target.
+            </summary>
+            <param name="netId">The target AmsNetId.</param>
+            <param name="connection">The registered connection.</param>
+            <returns><c>true</c> if a connection is registered, <c>false</c> otherwise.</returns>
+        </member>
+        <member name="M:TwinCAT.Ads.TcpRouter.RemoteConnectionRegistry.TryRemove(TwinCAT.Ads.AmsNetId,TwinCAT.Ads.TcpRouter.TcpClientConnectionInfo@)">
+            <summary>
+            Unregisters the connection that is used to reach the specified target.
+            </summary>
+            <param name="netId">The target AmsNetId.</param>
+            <param name="connection">The removed connection.</param>
+            <returns><c>true</c> if a connection was removed, <c>false</c> otherwise.</returns>
+        </member>
+    </members>
+</doc>
