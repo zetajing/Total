@@ -235,6 +235,8 @@ namespace IndustrialCommSdk.Abstractions
                         "TwinCAT ADS",
                         supportsString: true,
                         supportsByteArray: true,
+                        supportsOptimizedBatchRead: true,
+                        supportsOptimizedBatchWrite: true,
                         maxReadItems: 1000,
                         maxWriteItems: 1000,
                         maxAddressSpan: int.MaxValue,

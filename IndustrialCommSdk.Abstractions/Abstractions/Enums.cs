@@ -50,6 +50,16 @@ namespace IndustrialCommSdk.Abstractions
         ByteArray = 9,
         /// <summary>西门子 S7 原生 STRING[n]，包含最大长度和当前长度两个头字节。</summary>
         S7String = 12,
+        /// <summary>8 位有符号整数。</summary>
+        SByte = 13,
+        /// <summary>64 位有符号整数。</summary>
+        Int64 = 14,
+        /// <summary>64 位无符号整数。</summary>
+        UInt64 = 15,
+        /// <summary>TwinCAT TIME，映射为 .NET TimeSpan。</summary>
+        Time = 16,
+        /// <summary>TwinCAT WSTRING，映射为 Unicode .NET 字符串。</summary>
+        WString = 17,
     }
 
     /// <summary>读取值的质量状态，用于区分有效值、错误值和过期值。</summary>

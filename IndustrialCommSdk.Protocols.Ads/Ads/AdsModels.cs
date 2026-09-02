@@ -1,4 +1,7 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
+using TwinCAT.Ads;
 
 namespace IndustrialCommSdk.Protocols.Ads
 {
@@ -13,6 +16,21 @@ namespace IndustrialCommSdk.Protocols.Ads
 
         /// <summary>建立连接时使用的 ADS 超时。</summary>
         public int ConnectTimeoutMilliseconds { get; set; } = 10000;
+
+        /// <summary>是否启用官方 ADS SumCommand 批量访问。</summary>
+        public bool EnableSumCommands { get; set; } = true;
+
+        /// <summary>单个批量命令包含的最大项目数。</summary>
+        public int MaxBatchItems { get; set; } = 500;
+
+        /// <summary>单个批量命令估算的最大数据量。</summary>
+        public int MaxBatchPayloadBytes { get; set; } = 61440;
+
+        /// <summary>连接后是否读取一次目标设备状态。</summary>
+        public bool ValidateTargetStateOnConnect { get; set; } = true;
+
+        /// <summary>是否使用兼容模式同步投递通知回调。</summary>
+        public bool SynchronizeNotifications { get; set; }
     }
 
     /// <summary>直接构造 <see cref="AdsClient"/> 时使用的选项。</summary>
@@ -24,6 +42,10 @@ namespace IndustrialCommSdk.Protocols.Ads
         public int ConnectTimeoutMilliseconds { get; set; } = 10000;
         public int OperationTimeoutMilliseconds { get; set; } = 5000;
         public bool SynchronizeNotifications { get; set; }
+        public bool EnableSumCommands { get; set; } = true;
+        public int MaxBatchItems { get; set; } = 500;
+        public int MaxBatchPayloadBytes { get; set; } = 61440;
+        public bool ValidateTargetStateOnConnect { get; set; } = true;
     }
 
     /// <summary>ADS 变量地址。ADS 地址就是 PLC 符号名，例如 MAIN.bool1。</summary>
@@ -76,5 +98,58 @@ namespace IndustrialCommSdk.Protocols.Ads
         public string VariableName { get; private set; }
         public object Value { get; private set; }
         public DateTimeOffset Timestamp { get; private set; }
+    }
+
+    /// <summary>ADS 设备状态快照。</summary>
+    public sealed class AdsDeviceStateSnapshot
+    {
+        public AdsDeviceStateSnapshot(string adsState, short deviceState, DateTimeOffset timestamp)
+        {
+            AdsState = adsState;
+            DeviceState = deviceState;
+            Timestamp = timestamp;
+        }
+
+        public string AdsState { get; private set; }
+        public short DeviceState { get; private set; }
+        public DateTimeOffset Timestamp { get; private set; }
+    }
+
+    /// <summary>ADS 批量写入中的单项错误。</summary>
+    public sealed class AdsBatchWriteError
+    {
+        public AdsBatchWriteError(string address, AdsErrorCode errorCode, string message)
+        {
+            Address = address;
+            ErrorCode = errorCode;
+            Message = message;
+        }
+
+        public string Address { get; private set; }
+        public AdsErrorCode ErrorCode { get; private set; }
+        public string Message { get; private set; }
+
+        public override string ToString()
+        {
+            return Address + ": " + Message;
+        }
+    }
+
+    /// <summary>ADS SumCommand 批量写入失败异常，包含设备返回的逐项错误。</summary>
+    public sealed class AdsBatchWriteException : Exceptions.IndustrialCommunicationException
+    {
+        public AdsBatchWriteException(IReadOnlyList<AdsBatchWriteError> errors)
+            : base(CreateMessage(errors))
+        {
+            Errors = errors ?? throw new ArgumentNullException(nameof(errors));
+        }
+
+        public IReadOnlyList<AdsBatchWriteError> Errors { get; private set; }
+
+        private static string CreateMessage(IReadOnlyList<AdsBatchWriteError> errors)
+        {
+            if (errors == null || errors.Count == 0) return "ADS batch write failed.";
+            return "ADS batch write failed: " + string.Join("; ", errors.Select(error => error.ToString()));
+        }
     }
 }

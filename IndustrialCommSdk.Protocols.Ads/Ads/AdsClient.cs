@@ -9,13 +9,17 @@ using IndustrialCommSdk.Diagnostics;
 using IndustrialCommSdk.Exceptions;
 using IndustrialCommSdk.Runtime;
 using IndustrialCommSdk.Runtime.Polling;
+using TwinCAT;
 using TwinCAT.Ads;
+using TwinCAT.Ads.SumCommand;
+using TwinCAT.TypeSystem;
+using BeckhoffAdsClient = TwinCAT.Ads.AdsClient;
 
 namespace IndustrialCommSdk.Protocols.Ads
 {
     /// <summary>
-    /// TwinCAT ADS 客户端。变量地址使用 PLC 符号名，例如 MAIN.bool1、MAIN.str1 或 MAIN.ComplexStruct1。
-    /// 基础 IIndustrialClient API 覆盖常用标量、字符串和字节数组；结构体等 ADS 任意类型使用 ReadAnyAsync/WriteAnyAsync。
+    /// TwinCAT ADS 客户端。变量地址使用 PLC 符号名，例如 MAIN.xStart、MAIN.nCount 或 MAIN.ComplexStruct1。
+    /// 标量和字符串使用 SDK 的通用 IIndustrialClient API；结构体、数组和其它任意 CLR 类型使用 ReadAnyAsync/WriteAnyAsync。
     /// </summary>
     public sealed class AdsClient : IndustrialClientBase, INativeSubscriptionClient, IRegisterClient, IEventSubscriptionClient
     {
@@ -25,14 +29,20 @@ namespace IndustrialCommSdk.Protocols.Ads
         private readonly AdsClientOptions _options;
         private readonly AdsAddressParser _parser;
         private readonly object _clientSync = new object();
+        private readonly object _handleSync = new object();
         private readonly object _notificationSync = new object();
         private readonly SemaphoreSlim _nativeGate = new SemaphoreSlim(1, 1);
+        private readonly Dictionary<string, uint> _variableHandles =
+            new Dictionary<string, uint>(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, NativeSubscriptionRegistration> _nativeSubscriptions =
             new Dictionary<string, NativeSubscriptionRegistration>(StringComparer.OrdinalIgnoreCase);
-        private readonly Dictionary<int, NotificationBinding> _notificationBindings =
-            new Dictionary<int, NotificationBinding>();
-        private readonly AdsNotificationExEventHandler _notificationHandler;
-        private TcAdsClient _adsClient;
+        private readonly Dictionary<uint, NotificationBinding> _notificationBindings =
+            new Dictionary<uint, NotificationBinding>();
+        private readonly EventHandler<AdsNotificationExEventArgs> _notificationHandler;
+        private readonly EventHandler<ConnectionStateChangedEventArgs> _connectionStateHandler;
+        private BeckhoffAdsClient _adsClient;
+        private AdsDeviceStateSnapshot _deviceState;
+        private int _transportLost;
 
         public AdsClient(
             AdsClientOptions options,
@@ -50,6 +60,8 @@ namespace IndustrialCommSdk.Protocols.Ads
             if (options.Port < 1 || options.Port > 65535) throw new ArgumentOutOfRangeException(nameof(options.Port));
             if (options.ConnectTimeoutMilliseconds <= 0) throw new ArgumentOutOfRangeException(nameof(options.ConnectTimeoutMilliseconds));
             if (options.OperationTimeoutMilliseconds <= 0) throw new ArgumentOutOfRangeException(nameof(options.OperationTimeoutMilliseconds));
+            if (options.MaxBatchItems <= 0) throw new ArgumentOutOfRangeException(nameof(options.MaxBatchItems));
+            if (options.MaxBatchPayloadBytes < 4096) throw new ArgumentOutOfRangeException(nameof(options.MaxBatchPayloadBytes));
             if (!string.IsNullOrWhiteSpace(options.AmsNetId))
             {
                 var amsError = AdsProtocolProvider.ValidateAmsNetId(options.AmsNetId);
@@ -59,6 +71,7 @@ namespace IndustrialCommSdk.Protocols.Ads
             _options = options;
             _parser = parser ?? new AdsAddressParser();
             _notificationHandler = OnAdsNotification;
+            _connectionStateHandler = OnConnectionStateChanged;
         }
 
         /// <summary>返回 ADS 协议的能力描述。</summary>
@@ -73,98 +86,273 @@ namespace IndustrialCommSdk.Protocols.Ads
             {
                 lock (_clientSync)
                 {
-                    return _adsClient != null && _adsClient.IsConnected;
+                    return _adsClient != null && _adsClient.IsConnected && Volatile.Read(ref _transportLost) == 0;
                 }
             }
         }
 
-        /// <summary>连接到目标 AMS Net ID 和 ADS 端口。</summary>
-        protected override Task ConnectCoreAsync(CancellationToken cancellationToken)
+        /// <summary>读取最近一次成功连接时获取的 ADS 设备状态。</summary>
+        public AdsDeviceStateSnapshot LastDeviceState
         {
-            return Task.Run(() => ConnectCore(cancellationToken), cancellationToken);
+            get { lock (_clientSync) { return _deviceState; } }
         }
 
-        /// <summary>断开 ADS 连接，并删除当前连接上的通知注册。</summary>
-        protected override Task DisconnectCoreAsync(CancellationToken cancellationToken)
+        /// <summary>主动读取目标 PLC 的 ADS 状态，用于连接探测和诊断。</summary>
+        public Task<AdsDeviceStateSnapshot> ReadDeviceStateAsync(CancellationToken cancellationToken = default(CancellationToken))
         {
-            return Task.Run(() => DisconnectCore(cancellationToken), cancellationToken);
+            return ExecuteExclusiveAsync(async token =>
+            {
+                var client = GetConnectedClient();
+                var result = await client.ReadStateAsync(token).ConfigureAwait(false);
+                EnsureSucceeded(result, "ADS ReadState");
+                var state = new AdsDeviceStateSnapshot(
+                    result.State.AdsState.ToString(),
+                    result.State.DeviceState,
+                    result.TimeStamp == default(DateTimeOffset) ? DateTimeOffset.UtcNow : result.TimeStamp);
+                lock (_clientSync) { _deviceState = state; }
+                return state;
+            }, cancellationToken);
+        }
+
+        protected override async Task ConnectCoreAsync(CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var existing = GetClientSnapshot();
+            if (existing != null && existing.IsConnected) return;
+
+            BeckhoffAdsClient client = null;
+            try
+            {
+                var settings = _options.SynchronizeNotifications
+                    ? AdsClientSettings.CompatibilityDefault
+                    : AdsClientSettings.Default;
+                settings.Timeout = _options.ConnectTimeoutMilliseconds;
+                client = new BeckhoffAdsClient(settings);
+                client.Timeout = _options.ConnectTimeoutMilliseconds;
+                client.ConnectionStateChanged += _connectionStateHandler;
+                client.AdsNotificationEx += _notificationHandler;
+
+                if (string.IsNullOrWhiteSpace(_options.AmsNetId))
+                    await client.ConnectAsync(_options.Port, cancellationToken).ConfigureAwait(false);
+                else
+                    await client.ConnectAsync(new AmsNetId(_options.AmsNetId), _options.Port, cancellationToken).ConfigureAwait(false);
+
+                cancellationToken.ThrowIfCancellationRequested();
+                if (_options.ValidateTargetStateOnConnect)
+                {
+                    var stateResult = await client.ReadStateAsync(cancellationToken).ConfigureAwait(false);
+                    EnsureSucceeded(stateResult, "ADS target state probe");
+                    lock (_clientSync)
+                    {
+                        _deviceState = new AdsDeviceStateSnapshot(
+                            stateResult.State.AdsState.ToString(),
+                            stateResult.State.DeviceState,
+                            stateResult.TimeStamp == default(DateTimeOffset) ? DateTimeOffset.UtcNow : stateResult.TimeStamp);
+                    }
+                }
+
+                client.Timeout = _options.OperationTimeoutMilliseconds;
+                var previousClient = GetClientSnapshot();
+                if (previousClient != null && !ReferenceEquals(previousClient, client))
+                    await CloseClientAsync(previousClient, CancellationToken.None).ConfigureAwait(false);
+
+                lock (_clientSync)
+                {
+                    _adsClient = client;
+                    _transportLost = 0;
+                }
+                client = null;
+
+                await _nativeGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+                try
+                {
+                    foreach (var registration in _nativeSubscriptions.Values.ToList())
+                    {
+                        try { await InstallNativeSubscriptionAsync(registration, cancellationToken).ConfigureAwait(false); }
+                        catch (OperationCanceledException) { throw; }
+                        catch (Exception ex)
+                        {
+                            Logger.Warn("ADS subscription restore failed | Id=" + registration.Id + " | " + ex.Message);
+                        }
+                    }
+                }
+                finally
+                {
+                    _nativeGate.Release();
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                await CloseClientAsync(client ?? GetClientSnapshot(), CancellationToken.None).ConfigureAwait(false);
+                throw;
+            }
+            catch (Exception ex)
+            {
+                await CloseClientAsync(client ?? GetClientSnapshot(), CancellationToken.None).ConfigureAwait(false);
+                throw new IndustrialConnectionException("Failed to connect TwinCAT ADS endpoint.", ex);
+            }
+        }
+
+        protected override async Task DisconnectCoreAsync(CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            await _nativeGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+            try
+            {
+                var client = GetClientSnapshot();
+                await DeleteNativeNotificationHandlesAsync(client, cancellationToken).ConfigureAwait(false);
+                await CloseClientAsync(client, cancellationToken).ConfigureAwait(false);
+            }
+            finally
+            {
+                _nativeGate.Release();
+            }
         }
 
         protected override Task<DataValue> ReadCoreAsync(ReadRequest request, CancellationToken cancellationToken)
         {
-            return Task.Run(() => ReadValue(request, cancellationToken), cancellationToken);
+            return ReadValueAsync(request, cancellationToken);
         }
 
-        protected override Task<BatchReadResult> ReadManyCoreAsync(
+        protected override async Task<BatchReadResult> ReadManyCoreAsync(
             IReadOnlyCollection<ReadRequest> requests,
             CancellationToken cancellationToken)
         {
-            return Task.Run(() =>
+            var ordered = requests.ToList();
+            if (!_options.EnableSumCommands || ordered.Count == 1)
             {
-                var values = new List<DataValue>(requests.Count);
-                foreach (var request in requests)
+                var values = new List<DataValue>(ordered.Count);
+                foreach (var request in ordered)
                 {
                     cancellationToken.ThrowIfCancellationRequested();
-                    try
-                    {
-                        values.Add(ReadValue(request, cancellationToken));
-                    }
+                    try { values.Add(await ReadValueAsync(request, cancellationToken).ConfigureAwait(false)); }
                     catch (OperationCanceledException) { throw; }
-                    catch (Exception ex)
-                    {
-                        values.Add(new DataValue(
-                            request.Address,
-                            request.DataType,
-                            null,
-                            null,
-                            QualityStatus.Bad,
-                            DateTimeOffset.UtcNow,
-                            ex.Message));
-                    }
+                    catch (Exception ex) { values.Add(BadValue(request, ex.Message)); }
                 }
                 return new BatchReadResult(values);
-            }, cancellationToken);
+            }
+
+            var client = GetConnectedClient();
+            var batchValues = new List<DataValue>(ordered.Count);
+            foreach (var chunk in CreateReadChunks(ordered))
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var builder = SumInstancePathAnyTypeRead.Create(client);
+                foreach (var request in chunk)
+                {
+                    var type = AdsTypeCodec.GetClrType(request.DataType);
+                    var args = AdsTypeCodec.GetArguments(request.DataType, request.Length);
+                    var specifier = args == null ? new AnyTypeSpecifier(type) : new AnyTypeSpecifier(type, args);
+                    builder.AddEntry(_parser.ParseTyped(request.Address).Normalized, specifier);
+                }
+
+                var result = await builder
+                    .WithFallbackMode(SumFallbackMode.Discrete)
+                    .Build()
+                    .ReadAsync(cancellationToken)
+                    .ConfigureAwait(false);
+                var results = result == null ? null : result.ValueResults;
+                for (var i = 0; i < chunk.Count; i++)
+                {
+                    var request = chunk[i];
+                    if (results == null || i >= results.Length || results[i] == null || !results[i].Succeeded)
+                    {
+                        var code = results != null && i < results.Length && results[i] != null
+                            ? (AdsErrorCode)results[i].ErrorCode
+                            : (result == null ? AdsErrorCode.InternalError : result.OverallError);
+                        batchValues.Add(BadValue(request, FormatAdsError(code)));
+                    }
+                    else
+                    {
+                        var item = results[i];
+                        batchValues.Add(new DataValue(
+                            request.Address,
+                            request.DataType,
+                            item.Value,
+                            null,
+                            QualityStatus.Good,
+                            item.TimeStamp == default(DateTimeOffset) ? DateTimeOffset.UtcNow : item.TimeStamp,
+                            null));
+                    }
+                }
+            }
+
+            return new BatchReadResult(batchValues);
         }
 
         protected override Task WriteCoreAsync(WriteRequest request, CancellationToken cancellationToken)
         {
-            return Task.Run(() => WriteValue(request, cancellationToken), cancellationToken);
+            return WriteValueAsync(request, cancellationToken);
         }
 
-        /// <summary>
-        /// 使用 ADS 的 ReadAny 读取结构体、数组或其它任意 CLR 类型。
-        /// 对 STRING(n) 或数组类型，args 传入与参考工程相同的长度/维度参数。
-        /// </summary>
-        public Task<T> ReadAnyAsync<T>(
+        protected override async Task WriteManyCoreAsync(
+            IReadOnlyCollection<WriteRequest> requests,
+            CancellationToken cancellationToken)
+        {
+            var ordered = requests.ToList();
+            if (!_options.EnableSumCommands || ordered.Count == 1)
+            {
+                foreach (var request in ordered)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    await WriteValueAsync(request, cancellationToken).ConfigureAwait(false);
+                }
+                return;
+            }
+
+            var client = GetConnectedClient();
+            foreach (var chunk in CreateWriteChunks(ordered))
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var builder = SumWriteBySymbolPath.Create(client);
+                var values = new object[chunk.Count];
+                for (var i = 0; i < chunk.Count; i++)
+                {
+                    builder.AddEntry(_parser.ParseTyped(chunk[i].Address).Normalized);
+                    values[i] = AdsTypeCodec.ConvertForWrite(chunk[i].DataType, chunk[i].Value);
+                }
+
+                var result = await builder.Build().WriteAsync(values, cancellationToken).ConfigureAwait(false);
+                if (result != null && result.OverallSucceeded) continue;
+
+                var errors = new List<AdsBatchWriteError>();
+                var subErrors = result == null ? null : result.SubErrors;
+                for (var i = 0; i < chunk.Count; i++)
+                {
+                    var code = subErrors != null && i < subErrors.Length
+                        ? subErrors[i]
+                        : (result == null ? AdsErrorCode.InternalError : result.OverallError);
+                    if (code != AdsErrorCode.NoError)
+                        errors.Add(new AdsBatchWriteError(chunk[i].Address, code, FormatAdsError(code)));
+                }
+
+                if (errors.Count == 0)
+                {
+                    var code = result == null ? AdsErrorCode.InternalError : result.OverallError;
+                    errors.AddRange(chunk.Select(item => new AdsBatchWriteError(item.Address, code, FormatAdsError(code))));
+                }
+                throw new AdsBatchWriteException(errors);
+            }
+        }
+
+        /// <summary>使用 ADS 的 ReadAny 读取结构体、数组或其它任意 CLR 类型。</summary>
+        public async Task<T> ReadAnyAsync<T>(
             string variableName,
             int[] args = null,
             CancellationToken cancellationToken = default(CancellationToken))
         {
             var address = _parser.ParseTyped(variableName);
             var copiedArgs = CopyArguments(args);
-            return ExecuteExclusiveAsync<T>(token => Task.Run(() =>
+            return await ExecuteExclusiveAsync(async token =>
             {
-                token.ThrowIfCancellationRequested();
                 var client = GetConnectedClient();
-                var handle = client.CreateVariableHandle(address.Normalized);
-                try
-                {
-                    var value = copiedArgs == null
-                        ? client.ReadAny(handle, typeof(T))
-                        : client.ReadAny(handle, typeof(T), copiedArgs);
-                    if (value == null) throw new IndustrialProtocolException("ADS ReadAny returned no value.");
-                    return (T)value;
-                }
-                catch (IndustrialCommunicationException) { throw; }
-                catch (Exception ex)
-                {
-                    throw new IndustrialProtocolException("ADS ReadAny failed for '" + address.Normalized + "'.", ex);
-                }
-                finally
-                {
-                    DeleteVariableHandle(client, handle);
-                }
-            }, token), cancellationToken);
+                var result = copiedArgs == null
+                    ? await client.ReadAnyAsync(address.Normalized, typeof(T), token).ConfigureAwait(false)
+                    : await client.ReadAnyAsync(address.Normalized, typeof(T), copiedArgs, token).ConfigureAwait(false);
+                EnsureSucceeded(result, "ADS ReadAny '" + address.Normalized + "'");
+                if (result.Value == null) throw new IndustrialProtocolException("ADS ReadAny returned no value.");
+                return (T)result.Value;
+            }, cancellationToken).ConfigureAwait(false);
         }
 
         /// <summary>使用 ADS 的 WriteAny 写入结构体、数组或其它任意 CLR 类型。</summary>
@@ -177,26 +365,15 @@ namespace IndustrialCommSdk.Protocols.Ads
             if (value == null) throw new ArgumentNullException(nameof(value));
             var address = _parser.ParseTyped(variableName);
             var copiedArgs = CopyArguments(args);
-            return ExecuteExclusiveAsync(token => Task.Run(() =>
+            return ExecuteExclusiveAsync(async token =>
             {
-                token.ThrowIfCancellationRequested();
                 var client = GetConnectedClient();
-                var handle = client.CreateVariableHandle(address.Normalized);
-                try
-                {
-                    if (copiedArgs == null) client.WriteAny(handle, value);
-                    else client.WriteAny(handle, value, copiedArgs);
-                }
-                catch (IndustrialCommunicationException) { throw; }
-                catch (Exception ex)
-                {
-                    throw new IndustrialProtocolException("ADS WriteAny failed for '" + address.Normalized + "'.", ex);
-                }
-                finally
-                {
-                    DeleteVariableHandle(client, handle);
-                }
-            }, token), cancellationToken);
+                var handle = await GetVariableHandleAsync(client, address.Normalized, token).ConfigureAwait(false);
+                var result = copiedArgs == null
+                    ? await client.WriteAnyAsync(handle, value, token).ConfigureAwait(false)
+                    : await client.WriteAnyAsync(handle, value, copiedArgs, token).ConfigureAwait(false);
+                EnsureSucceeded(result, "ADS WriteAny '" + address.Normalized + "'");
+            }, cancellationToken);
         }
 
         public async Task<string> SubscribeNativeAsync(
@@ -217,7 +394,7 @@ namespace IndustrialCommSdk.Protocols.Ads
                 _nativeSubscriptions.Add(subscriptionId, registration);
                 try
                 {
-                    InstallNativeSubscription(registration, cancellationToken);
+                    await InstallNativeSubscriptionAsync(registration, cancellationToken).ConfigureAwait(false);
                     Logger.Info(string.Format(
                         CultureInfo.InvariantCulture,
                         "ADS native subscription started | Key={0} | Device={1} | Items={2} | Interval={3}ms",
@@ -249,10 +426,9 @@ namespace IndustrialCommSdk.Protocols.Ads
             await _nativeGate.WaitAsync(cancellationToken).ConfigureAwait(false);
             try
             {
-                NativeSubscriptionRegistration registration;
-                if (!_nativeSubscriptions.TryGetValue(subscriptionId, out registration)) return true;
+                if (!_nativeSubscriptions.TryGetValue(subscriptionId, out var registration)) return true;
                 _nativeSubscriptions.Remove(subscriptionId);
-                DeleteNativeNotificationHandles(registration, GetClientSnapshot());
+                await DeleteNativeNotificationHandlesAsync(GetClientSnapshot(), cancellationToken, registration).ConfigureAwait(false);
                 Logger.Info("ADS native subscription stopped | Id=" + subscriptionId);
                 return true;
             }
@@ -262,9 +438,7 @@ namespace IndustrialCommSdk.Protocols.Ads
             }
         }
 
-        /// <summary>
-        /// 为结构体等任意 ADS 类型创建原生通知。返回值可传给 UnsubscribeAnyAsync。
-        /// </summary>
+        /// <summary>为结构体等任意 ADS 类型创建原生通知。返回值可传给 UnsubscribeAnyAsync。</summary>
         public async Task<string> SubscribeAnyAsync(
             string variableName,
             Type valueType,
@@ -294,7 +468,7 @@ namespace IndustrialCommSdk.Protocols.Ads
                 _nativeSubscriptions.Add(registrationId, registration);
                 try
                 {
-                    InstallNativeSubscription(registration, cancellationToken);
+                    await InstallNativeSubscriptionAsync(registration, cancellationToken).ConfigureAwait(false);
                     return registrationId;
                 }
                 catch
@@ -321,8 +495,7 @@ namespace IndustrialCommSdk.Protocols.Ads
             try
             {
                 var client = GetClientSnapshot();
-                foreach (var registration in _nativeSubscriptions.Values.ToList())
-                    DeleteNativeNotificationHandles(registration, client);
+                DeleteNativeNotificationHandles(client);
                 _nativeSubscriptions.Clear();
                 lock (_notificationSync) { _notificationBindings.Clear(); }
                 CloseClient(client);
@@ -334,115 +507,42 @@ namespace IndustrialCommSdk.Protocols.Ads
             }
         }
 
-        private void ConnectCore(CancellationToken cancellationToken)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            TcAdsClient client = null;
-            try
-            {
-                client = new TcAdsClient();
-                client.Timeout = _options.ConnectTimeoutMilliseconds;
-                client.Synchronize = _options.SynchronizeNotifications;
-                client.AdsNotificationEx += _notificationHandler;
-
-                if (string.IsNullOrWhiteSpace(_options.AmsNetId))
-                    client.Connect(_options.Port);
-                else
-                    client.Connect(_options.AmsNetId, _options.Port);
-
-                cancellationToken.ThrowIfCancellationRequested();
-                client.Timeout = _options.OperationTimeoutMilliseconds;
-                lock (_clientSync) { _adsClient = client; }
-                client = null;
-
-                _nativeGate.Wait();
-                try
-                {
-                    foreach (var registration in _nativeSubscriptions.Values.ToList())
-                    {
-                        try { InstallNativeSubscription(registration, cancellationToken); }
-                        catch (OperationCanceledException) { throw; }
-                        catch (Exception ex)
-                        {
-                            Logger.Warn("ADS subscription restore failed | Id=" + registration.Id + " | " + ex.Message);
-                        }
-                    }
-                }
-                finally
-                {
-                    _nativeGate.Release();
-                }
-            }
-            catch (OperationCanceledException)
-            {
-                CloseClient(client ?? GetClientSnapshot());
-                throw;
-            }
-            catch (Exception ex)
-            {
-                CloseClient(client ?? GetClientSnapshot());
-                throw new IndustrialConnectionException("Failed to connect TwinCAT ADS endpoint.", ex);
-            }
-        }
-
-        private void DisconnectCore(CancellationToken cancellationToken)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            _nativeGate.Wait(cancellationToken);
-            try
-            {
-                var client = GetClientSnapshot();
-                foreach (var registration in _nativeSubscriptions.Values.ToList())
-                    DeleteNativeNotificationHandles(registration, client);
-                CloseClient(client);
-            }
-            finally
-            {
-                _nativeGate.Release();
-            }
-        }
-
-        private DataValue ReadValue(ReadRequest request, CancellationToken cancellationToken)
+        private async Task<DataValue> ReadValueAsync(ReadRequest request, CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
             var address = _parser.ParseTyped(request.Address);
             var client = GetConnectedClient();
-            var handle = client.CreateVariableHandle(address.Normalized);
-            try
-            {
-                var type = AdsTypeCodec.GetClrType(request.DataType);
-                var args = AdsTypeCodec.GetArguments(request.DataType, request.Length);
-                var value = args == null
-                    ? client.ReadAny(handle, type)
-                    : client.ReadAny(handle, type, args);
-                return new DataValue(request.Address, request.DataType, value, null, QualityStatus.Good, DateTimeOffset.UtcNow, null);
-            }
-            finally
-            {
-                DeleteVariableHandle(client, handle);
-            }
+            var type = AdsTypeCodec.GetClrType(request.DataType);
+            var args = AdsTypeCodec.GetArguments(request.DataType, request.Length);
+            var result = args == null
+                ? await client.ReadAnyAsync(address.Normalized, type, cancellationToken).ConfigureAwait(false)
+                : await client.ReadAnyAsync(address.Normalized, type, args, cancellationToken).ConfigureAwait(false);
+            EnsureSucceeded(result, "ADS read '" + address.Normalized + "'");
+            return new DataValue(
+                request.Address,
+                request.DataType,
+                result.Value,
+                null,
+                QualityStatus.Good,
+                result.TimeStamp == default(DateTimeOffset) ? DateTimeOffset.UtcNow : result.TimeStamp,
+                null);
         }
 
-        private void WriteValue(WriteRequest request, CancellationToken cancellationToken)
+        private async Task WriteValueAsync(WriteRequest request, CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
             var address = _parser.ParseTyped(request.Address);
             var client = GetConnectedClient();
-            var handle = client.CreateVariableHandle(address.Normalized);
-            try
-            {
-                var value = AdsTypeCodec.ConvertForWrite(request.DataType, request.Value);
-                var args = AdsTypeCodec.GetArguments(request.DataType, request.Length);
-                if (args == null) client.WriteAny(handle, value);
-                else client.WriteAny(handle, value, args);
-            }
-            finally
-            {
-                DeleteVariableHandle(client, handle);
-            }
+            var value = AdsTypeCodec.ConvertForWrite(request.DataType, request.Value);
+            var args = AdsTypeCodec.GetArguments(request.DataType, request.Length);
+            var handle = await GetVariableHandleAsync(client, address.Normalized, cancellationToken).ConfigureAwait(false);
+            var result = args == null
+                ? await client.WriteAnyAsync(handle, value, cancellationToken).ConfigureAwait(false)
+                : await client.WriteAnyAsync(handle, value, args, cancellationToken).ConfigureAwait(false);
+            EnsureSucceeded(result, "ADS write '" + address.Normalized + "'");
         }
 
-        private void InstallNativeSubscription(NativeSubscriptionRegistration registration, CancellationToken cancellationToken)
+        private async Task InstallNativeSubscriptionAsync(NativeSubscriptionRegistration registration, CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
             var client = GetConnectedClient();
@@ -453,12 +553,17 @@ namespace IndustrialCommSdk.Protocols.Ads
                 {
                     cancellationToken.ThrowIfCancellationRequested();
                     var mode = registration.ReportOnChangeOnly ? AdsTransMode.OnChange : AdsTransMode.Cyclic;
-                    var cycleTime = ToAdsMilliseconds(registration.Interval);
-                    var handle = binding.Arguments == null
-                        ? client.AddDeviceNotificationEx(binding.VariableName, mode, cycleTime, 0, binding, binding.ValueType)
-                        : client.AddDeviceNotificationEx(binding.VariableName, mode, cycleTime, 0, binding, binding.ValueType, binding.Arguments);
-                    binding.Handle = handle;
-                    lock (_notificationSync) { _notificationBindings[handle] = binding; }
+                    var settings = new NotificationSettings(mode, ToAdsMilliseconds(registration.Interval), 0);
+                    var result = await client.AddDeviceNotificationExAsync(
+                        binding.VariableName,
+                        settings,
+                        binding,
+                        binding.ValueType,
+                        binding.Arguments,
+                        cancellationToken).ConfigureAwait(false);
+                    EnsureSucceeded(result, "ADS add notification '" + binding.VariableName + "'");
+                    binding.Handle = result.Handle;
+                    lock (_notificationSync) { _notificationBindings[binding.Handle] = binding; }
                     installed.Add(binding);
                 }
             }
@@ -467,7 +572,7 @@ namespace IndustrialCommSdk.Protocols.Ads
                 foreach (var binding in installed)
                 {
                     lock (_notificationSync) { _notificationBindings.Remove(binding.Handle); }
-                    try { client.DeleteDeviceNotification(binding.Handle); }
+                    try { await client.DeleteDeviceNotificationAsync(binding.Handle, CancellationToken.None).ConfigureAwait(false); }
                     catch (Exception ex) { Logger.Warn("ADS notification cleanup failed: " + ex.Message); }
                     binding.Handle = 0;
                 }
@@ -475,9 +580,28 @@ namespace IndustrialCommSdk.Protocols.Ads
             }
         }
 
-        private void DeleteNativeNotificationHandles(NativeSubscriptionRegistration registration, TcAdsClient client)
+        private async Task DeleteNativeNotificationHandlesAsync(
+            BeckhoffAdsClient client,
+            CancellationToken cancellationToken,
+            NativeSubscriptionRegistration only = null)
         {
-            foreach (var binding in registration.Bindings)
+            var bindings = (only == null ? _nativeSubscriptions.Values.SelectMany(x => x.Bindings) : only.Bindings).ToList();
+            foreach (var binding in bindings)
+            {
+                var handle = binding.Handle;
+                if (handle == 0) continue;
+                lock (_notificationSync) { _notificationBindings.Remove(handle); }
+                binding.Handle = 0;
+                if (client == null) continue;
+                try { await client.DeleteDeviceNotificationAsync(handle, cancellationToken).ConfigureAwait(false); }
+                catch (Exception ex) { Logger.Warn("ADS notification delete failed: " + ex.Message); }
+            }
+        }
+
+        private void DeleteNativeNotificationHandles(BeckhoffAdsClient client)
+        {
+            var bindings = _nativeSubscriptions.Values.SelectMany(x => x.Bindings).ToList();
+            foreach (var binding in bindings)
             {
                 var handle = binding.Handle;
                 if (handle == 0) continue;
@@ -494,10 +618,10 @@ namespace IndustrialCommSdk.Protocols.Ads
             NotificationBinding binding;
             lock (_notificationSync)
             {
-                if (!_notificationBindings.TryGetValue(eventArgs.NotificationHandle, out binding)) return;
+                if (!_notificationBindings.TryGetValue(eventArgs.Handle, out binding)) return;
             }
 
-            var timestamp = DateTimeOffset.UtcNow;
+            var timestamp = eventArgs.TimeStamp == default(DateTimeOffset) ? DateTimeOffset.UtcNow : eventArgs.TimeStamp;
             try
             {
                 if (binding.AnyHandler != null)
@@ -522,37 +646,115 @@ namespace IndustrialCommSdk.Protocols.Ads
             }
         }
 
-        private TcAdsClient GetConnectedClient()
+        private void OnConnectionStateChanged(object sender, ConnectionStateChangedEventArgs eventArgs)
+        {
+            var connected = eventArgs.NewState == ConnectionState.Connected;
+            Interlocked.Exchange(ref _transportLost, connected ? 0 : 1);
+            if (!connected)
+            {
+                lock (_notificationSync)
+                {
+                    // Notification handles belong to the old ADS connection.
+                    // Ignore late events until the logical subscriptions are restored.
+                    _notificationBindings.Clear();
+                }
+                var detail = eventArgs.Exception == null ? string.Empty : " | " + eventArgs.Exception.Message;
+                Logger.Warn("ADS connection state changed to " + eventArgs.NewState + detail);
+            }
+        }
+
+        private async Task<uint> GetVariableHandleAsync(BeckhoffAdsClient client, string address, CancellationToken cancellationToken)
+        {
+            lock (_handleSync)
+            {
+                if (_variableHandles.TryGetValue(address, out var cached)) return cached;
+            }
+
+            var result = await client.CreateVariableHandleAsync(address, cancellationToken).ConfigureAwait(false);
+            EnsureSucceeded(result, "ADS create handle '" + address + "'");
+            lock (_handleSync)
+            {
+                if (_variableHandles.TryGetValue(address, out var cached))
+                {
+                    try { client.DeleteVariableHandle(result.Handle); } catch { }
+                    return cached;
+                }
+                _variableHandles[address] = result.Handle;
+                return result.Handle;
+            }
+        }
+
+        private async Task CloseClientAsync(BeckhoffAdsClient client, CancellationToken cancellationToken)
+        {
+            if (client == null) return;
+            await DeleteVariableHandlesAsync(client, cancellationToken).ConfigureAwait(false);
+            try
+            {
+                if (client.IsConnected) await client.DisconnectAsync(cancellationToken).ConfigureAwait(false);
+            }
+            catch (Exception ex) { Logger.Warn("ADS client disconnect failed: " + ex.Message); }
+            finally
+            {
+                DetachAndDisposeClient(client);
+            }
+        }
+
+        private async Task DeleteVariableHandlesAsync(BeckhoffAdsClient client, CancellationToken cancellationToken)
+        {
+            KeyValuePair<string, uint>[] handles;
+            lock (_handleSync)
+            {
+                handles = _variableHandles.ToArray();
+                _variableHandles.Clear();
+            }
+
+            foreach (var item in handles)
+            {
+                try { await client.DeleteVariableHandleAsync(item.Value, cancellationToken).ConfigureAwait(false); }
+                catch (Exception ex) { Logger.Warn("ADS variable handle cleanup failed | Address=" + item.Key + " | " + ex.Message); }
+            }
+        }
+
+        private void CloseClient(BeckhoffAdsClient client)
+        {
+            if (client == null) return;
+            KeyValuePair<string, uint>[] handles;
+            lock (_handleSync)
+            {
+                handles = _variableHandles.ToArray();
+                _variableHandles.Clear();
+            }
+            foreach (var item in handles)
+            {
+                try { client.DeleteVariableHandle(item.Value); } catch { }
+            }
+            try { if (client.IsConnected) client.Disconnect(); } catch (Exception ex) { Logger.Warn("ADS client disconnect failed: " + ex.Message); }
+            DetachAndDisposeClient(client);
+        }
+
+        private void DetachAndDisposeClient(BeckhoffAdsClient client)
+        {
+            lock (_clientSync)
+            {
+                if (ReferenceEquals(_adsClient, client)) _adsClient = null;
+                _transportLost = 1;
+            }
+            try { client.ConnectionStateChanged -= _connectionStateHandler; } catch { }
+            try { client.AdsNotificationEx -= _notificationHandler; } catch { }
+            try { client.Dispose(); } catch (Exception ex) { Logger.Warn("ADS client dispose failed: " + ex.Message); }
+        }
+
+        private BeckhoffAdsClient GetConnectedClient()
         {
             var client = GetClientSnapshot();
-            if (client == null || !client.IsConnected)
+            if (client == null || !client.IsConnected || Volatile.Read(ref _transportLost) != 0)
                 throw new IndustrialConnectionException("TwinCAT ADS client is not connected.");
             return client;
         }
 
-        private TcAdsClient GetClientSnapshot()
+        private BeckhoffAdsClient GetClientSnapshot()
         {
             lock (_clientSync) { return _adsClient; }
-        }
-
-        private void CloseClient(TcAdsClient client)
-        {
-            if (client == null) return;
-            lock (_clientSync)
-            {
-                if (ReferenceEquals(_adsClient, client)) _adsClient = null;
-            }
-            try { client.AdsNotificationEx -= _notificationHandler; }
-            catch (Exception ex) { Logger.Warn("ADS notification event detach failed: " + ex.Message); }
-            try { client.Dispose(); }
-            catch (Exception ex) { Logger.Warn("ADS client dispose failed: " + ex.Message); }
-        }
-
-        private static void DeleteVariableHandle(TcAdsClient client, int handle)
-        {
-            if (client == null || handle == 0) return;
-            try { client.DeleteVariableHandle(handle); }
-            catch { /* The connection may already have gone away. */ }
         }
 
         private void ValidateSubscriptionRequest(SubscriptionRequest request, EventHandler<SubscriptionEvent> handler)
@@ -568,8 +770,59 @@ namespace IndustrialCommSdk.Protocols.Ads
                 if (!string.Equals(DeviceId, item.DeviceId, StringComparison.OrdinalIgnoreCase))
                     throw new ArgumentException("Subscription item device ID does not match the client device ID.", nameof(request));
                 _parser.ParseTyped(item.Address);
+                AdsTypeCodec.GetClrType(item.DataType);
                 AdsTypeCodec.GetArguments(item.DataType, item.Length);
             }
+        }
+
+        private IEnumerable<IReadOnlyList<ReadRequest>> CreateReadChunks(IReadOnlyList<ReadRequest> requests)
+        {
+            var chunk = new List<ReadRequest>();
+            var estimatedBytes = 0;
+            foreach (var request in requests)
+            {
+                var estimate = AdsTypeCodec.EstimateSize(request.DataType, request.Length);
+                if (chunk.Count > 0 && (chunk.Count >= _options.MaxBatchItems || estimatedBytes + estimate > _options.MaxBatchPayloadBytes))
+                {
+                    yield return chunk;
+                    chunk = new List<ReadRequest>();
+                    estimatedBytes = 0;
+                }
+                chunk.Add(request);
+                estimatedBytes += estimate;
+            }
+            if (chunk.Count > 0) yield return chunk;
+        }
+
+        private IEnumerable<IReadOnlyList<WriteRequest>> CreateWriteChunks(IReadOnlyList<WriteRequest> requests)
+        {
+            var chunk = new List<WriteRequest>();
+            var estimatedBytes = 0;
+            foreach (var request in requests)
+            {
+                var estimate = AdsTypeCodec.EstimateSize(request.DataType, request.Length);
+                if (chunk.Count > 0 && (chunk.Count >= _options.MaxBatchItems || estimatedBytes + estimate > _options.MaxBatchPayloadBytes))
+                {
+                    yield return chunk;
+                    chunk = new List<WriteRequest>();
+                    estimatedBytes = 0;
+                }
+                chunk.Add(request);
+                estimatedBytes += estimate;
+            }
+            if (chunk.Count > 0) yield return chunk;
+        }
+
+        private static DataValue BadValue(ReadRequest request, string message)
+        {
+            return new DataValue(
+                request.Address,
+                request.DataType,
+                null,
+                null,
+                QualityStatus.Bad,
+                DateTimeOffset.UtcNow,
+                message);
         }
 
         private static int ToAdsMilliseconds(TimeSpan interval)
@@ -582,6 +835,17 @@ namespace IndustrialCommSdk.Protocols.Ads
         private static int[] CopyArguments(int[] args)
         {
             return args == null ? null : (int[])args.Clone();
+        }
+
+        private static string FormatAdsError(AdsErrorCode code)
+        {
+            return "ADS error " + code + " (0x" + ((int)code).ToString("X8", CultureInfo.InvariantCulture) + ").";
+        }
+
+        private static void EnsureSucceeded(ResultAds result, string operation)
+        {
+            if (result == null) throw new IndustrialProtocolException(operation + " returned no result.");
+            if (!result.Succeeded) throw new IndustrialProtocolException(operation + " failed: " + FormatAdsError(result.ErrorCode));
         }
 
         private static string GetDeviceId(AdsClientOptions options)
@@ -665,7 +929,7 @@ namespace IndustrialCommSdk.Protocols.Ads
             public string VariableName { get; private set; }
             public Type ValueType { get; private set; }
             public int[] Arguments { get; private set; }
-            public int Handle { get; set; }
+            public uint Handle { get; set; }
             public EventHandler<AdsValueNotificationEventArgs> AnyHandler { get { return Registration.AnyHandler; } }
         }
     }
@@ -678,14 +942,19 @@ namespace IndustrialCommSdk.Protocols.Ads
             {
                 case DataType.Bool: return typeof(bool);
                 case DataType.Byte: return typeof(byte);
+                case DataType.SByte: return typeof(sbyte);
                 case DataType.Char: return typeof(char);
                 case DataType.Int16: return typeof(short);
                 case DataType.UInt16: return typeof(ushort);
                 case DataType.Int32: return typeof(int);
                 case DataType.UInt32: return typeof(uint);
+                case DataType.Int64: return typeof(long);
+                case DataType.UInt64: return typeof(ulong);
                 case DataType.Float: return typeof(float);
                 case DataType.Double: return typeof(double);
-                case DataType.String: return typeof(string);
+                case DataType.String:
+                case DataType.WString: return typeof(string);
+                case DataType.Time: return typeof(TimeSpan);
                 case DataType.ByteArray: return typeof(byte[]);
                 default:
                     throw new IndustrialProtocolException("TwinCAT ADS does not map DataType " + dataType + "; use ReadAnyAsync/WriteAnyAsync for custom types.");
@@ -697,6 +966,7 @@ namespace IndustrialCommSdk.Protocols.Ads
             switch (dataType)
             {
                 case DataType.String:
+                case DataType.WString:
                 case DataType.ByteArray:
                     if (length == 0) throw new IndustrialDataConversionException("ADS string and byte-array lengths must be greater than zero.");
                     return new[] { (int)length };
@@ -704,6 +974,30 @@ namespace IndustrialCommSdk.Protocols.Ads
                     throw new IndustrialProtocolException("S7String is not an ADS data type; use DataType.String with the PLC STRING length.");
                 default:
                     return null;
+            }
+        }
+
+        public static int EstimateSize(DataType dataType, ushort length)
+        {
+            switch (dataType)
+            {
+                case DataType.Bool:
+                case DataType.Byte:
+                case DataType.SByte:
+                case DataType.Char: return 1;
+                case DataType.Int16:
+                case DataType.UInt16: return 2;
+                case DataType.Int32:
+                case DataType.UInt32:
+                case DataType.Float:
+                case DataType.Time: return 4;
+                case DataType.Int64:
+                case DataType.UInt64:
+                case DataType.Double: return 8;
+                case DataType.String:
+                case DataType.WString:
+                case DataType.ByteArray: return Math.Max(1, (int)length) * (dataType == DataType.WString ? 2 : 1);
+                default: return 256;
             }
         }
 
@@ -716,14 +1010,26 @@ namespace IndustrialCommSdk.Protocols.Ads
                 {
                     case DataType.Bool: return Convert.ToBoolean(value, CultureInfo.InvariantCulture);
                     case DataType.Byte: return Convert.ToByte(value, CultureInfo.InvariantCulture);
-                    case DataType.Char: return Convert.ToChar(value, CultureInfo.InvariantCulture);
+                    case DataType.SByte: return Convert.ToSByte(value, CultureInfo.InvariantCulture);
+                    case DataType.Char:
+                        if (value is char) return value;
+                        var text = Convert.ToString(value, CultureInfo.InvariantCulture);
+                        if (text.Length != 1) throw new InvalidCastException("ADS CHAR writes require a single character.");
+                        return text[0];
                     case DataType.Int16: return Convert.ToInt16(value, CultureInfo.InvariantCulture);
                     case DataType.UInt16: return Convert.ToUInt16(value, CultureInfo.InvariantCulture);
                     case DataType.Int32: return Convert.ToInt32(value, CultureInfo.InvariantCulture);
                     case DataType.UInt32: return Convert.ToUInt32(value, CultureInfo.InvariantCulture);
+                    case DataType.Int64: return Convert.ToInt64(value, CultureInfo.InvariantCulture);
+                    case DataType.UInt64: return Convert.ToUInt64(value, CultureInfo.InvariantCulture);
                     case DataType.Float: return Convert.ToSingle(value, CultureInfo.InvariantCulture);
                     case DataType.Double: return Convert.ToDouble(value, CultureInfo.InvariantCulture);
-                    case DataType.String: return Convert.ToString(value, CultureInfo.InvariantCulture);
+                    case DataType.String:
+                    case DataType.WString: return Convert.ToString(value, CultureInfo.InvariantCulture);
+                    case DataType.Time:
+                        if (value is TimeSpan) return value;
+                        if (value is string timeText) return TimeSpan.Parse(timeText, CultureInfo.InvariantCulture);
+                        return TimeSpan.FromMilliseconds(Convert.ToDouble(value, CultureInfo.InvariantCulture));
                     case DataType.ByteArray:
                         var bytes = value as byte[];
                         if (bytes == null) throw new InvalidCastException("ADS ByteArray writes require a byte[] value.");

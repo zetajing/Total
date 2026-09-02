@@ -15,6 +15,8 @@ namespace IndustrialCommSdk.Protocols.Ads
             return Errors(
                 settings.Port < 1 || settings.Port > 65535 ? "port must be between 1 and 65535." : null,
                 settings.ConnectTimeoutMilliseconds <= 0 ? "connectTimeoutMilliseconds must be positive." : null,
+                settings.MaxBatchItems <= 0 ? "maxBatchItems must be positive." : null,
+                settings.MaxBatchPayloadBytes < 4096 ? "maxBatchPayloadBytes must be at least 4096." : null,
                 string.IsNullOrWhiteSpace(settings.AmsNetId) ? null : ValidateAmsNetId(settings.AmsNetId));
         }
 
@@ -26,6 +28,11 @@ namespace IndustrialCommSdk.Protocols.Ads
                 AmsNetId = settings.AmsNetId,
                 Port = settings.Port,
                 ConnectTimeoutMilliseconds = settings.ConnectTimeoutMilliseconds,
+                EnableSumCommands = settings.EnableSumCommands,
+                MaxBatchItems = settings.MaxBatchItems,
+                MaxBatchPayloadBytes = settings.MaxBatchPayloadBytes,
+                ValidateTargetStateOnConnect = settings.ValidateTargetStateOnConnect,
+                SynchronizeNotifications = settings.SynchronizeNotifications,
                 OperationTimeoutMilliseconds = device.Runtime.OperationTimeoutMilliseconds,
             }, logger);
         }

@@ -249,17 +249,30 @@ public static class AdsExample
 
         await client.UseAsync(async connected =>
         {
-            bool enabled = await connected.ReadBoolAsync("MAIN.bool1");
-            await connected.WriteAsync("MAIN.bool1", !enabled);
+            bool start = await connected.ReadBoolAsync("MAIN.xStart");
+            int target = await connected.ReadInt32Async("MAIN.nTarget");
+            float speed = await connected.ReadFloatAsync("MAIN.rSpeed");
+            double temperature = await connected.ReadDoubleAsync("MAIN.lrTemperature");
+            string status = await connected.ReadStringAsync("MAIN.sStatus", 80);
+            TimeSpan delay = await connected.ReadAnyAsync<TimeSpan>("MAIN.tDelay");
 
-            // 参考工程中的 ComplexStruct 等自定义结构体使用 ADS ReadAny/WriteAny。
+            Console.WriteLine($"Start={start}, Target={target}, Speed={speed}, Temperature={temperature}, Status={status}, Delay={delay}");
+
+            // 仅在确认 nTarget 可安全写入后执行；测试结束后恢复原值。
+            await connected.WriteAsync("MAIN.nTarget", target);
+
+            // 官方 ADS 结构体通过 ReadAnyAsync/WriteAnyAsync 访问。
             // var value = await connected.ReadAnyAsync<ComplexStruct>("MAIN.ComplexStruct1");
         });
     }
 }
 ```
 
-ADS 地址直接使用 PLC 符号名，例如 `MAIN.bool1`、`MAIN.str1` 和 `MAIN.ComplexStruct1`；字符串和字节数组的点位长度通过 TagTable 的 `length` 指定。`AdsClient` 的 `SubscribeAsync` 使用 ADS 原生 OnChange/Cyclic 通知，不需要 SDK 轮询。参考工程的结构体需按 TwinCAT 内存布局声明 `[StructLayout(LayoutKind.Sequential, Pack = 1)]`，再使用 `ReadAnyAsync<T>`/`WriteAnyAsync`。项目已携带参考目录中的 `TwinCAT.Ads.dll` 4.3.0.0，运行前仍需在目标机安装并配置 TwinCAT ADS Router。
+ADS 地址直接使用 PLC 符号名，例如截图中的 `MAIN.xStart`、`MAIN.nTarget`、`MAIN.rSpeed`、`MAIN.lrTemperature`、`MAIN.sStatus` 和 `MAIN.tDelay`；字符串长度通过请求的 `length` 指定，`TIME` 映射为 `TimeSpan`。`AdsClient` 的订阅使用 ADS 原生 OnChange/Cyclic 通知，不需要 SDK 轮询；批量读写使用官方 SumCommand 并自动按项目数和报文大小分包。结构体需按 TwinCAT 内存布局声明 `[StructLayout(LayoutKind.Sequential, Pack = 1)]`，再使用 `ReadAnyAsync<T>`/`WriteAnyAsync`。核心项目直接依赖 `Beckhoff.TwinCAT.Ads 7.0.317`，不再携带旧版本地 DLL。
+
+不安装 TwinCAT 的电脑可选部署 `IndustrialCommSdk.AdsRouter.Host.exe` 和 `IndustrialCommSdk.Protocols.Ads.Router.dll`。编辑宿主输出目录中的 `appsettings.json`：设置本机 `AmsRouter:Name`、本机 `AmsRouter:NetId` 和虚拟 PLC 的 `RemoteConnections`；远程 PLC 还必须添加指向本机 AMS Net ID 的返回路由。默认端口是 TCP `48898`，PLC Runtime 1 的 ADS 端口通常是 `851`。独立 Router 不提供 ADS Secure 和系统服务端口 `10000`，只能部署在受防火墙保护的可信工业网络，并且不能与系统 TwinCAT Router 同时占用 `48898`。
+
+虚拟 PLC 的显式集成测试位于 `IndustrialCommSdk.Tests/AdsVirtualPlcIntegrationTests.cs`。运行前设置 `ADS_VIRTUAL_PLC_TARGET_AMS_NET_ID`，可选设置 `ADS_VIRTUAL_PLC_TARGET_IP`、`ADS_VIRTUAL_PLC_LOCAL_AMS_NET_ID`、`ADS_VIRTUAL_PLC_ROUTER_MODE`、`ADS_VIRTUAL_PLC_PORT` 和 `ADS_VIRTUAL_PLC_STATUS_LENGTH`，再执行测试过滤器 `AdsVirtualPlcIntegrationTests`。测试只写入 `MAIN.nTarget`、`MAIN.rSpeed`、`MAIN.tDelay`，并在 `finally` 中恢复原值，不写入电机状态或故障变量。
 
 ## MQTT
 

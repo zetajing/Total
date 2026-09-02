@@ -54,5 +54,32 @@ namespace IndustrialCommSdk.Tests
                 AmsNetId = "192.168.1.90",
             }));
         }
+
+        [Test]
+        public void AdsOptionsUseSafeBatchAndStateDefaults()
+        {
+            var options = new AdsClientOptions();
+
+            Assert.IsTrue(options.EnableSumCommands);
+            Assert.AreEqual(500, options.MaxBatchItems);
+            Assert.AreEqual(61440, options.MaxBatchPayloadBytes);
+            Assert.IsTrue(options.ValidateTargetStateOnConnect);
+            Assert.IsFalse(options.SynchronizeNotifications);
+        }
+
+        [Test]
+        public void AdsOfficialPrimitiveTypesKeepStableExistingValues()
+        {
+            Assert.AreEqual(1, (int)DataType.Bool);
+            Assert.AreEqual(4, (int)DataType.Int32);
+            Assert.AreEqual(6, (int)DataType.Float);
+            Assert.AreEqual(7, (int)DataType.Double);
+            Assert.AreEqual(8, (int)DataType.String);
+            Assert.AreEqual(13, (int)DataType.SByte);
+            Assert.AreEqual(14, (int)DataType.Int64);
+            Assert.AreEqual(15, (int)DataType.UInt64);
+            Assert.AreEqual(16, (int)DataType.Time);
+            Assert.AreEqual(17, (int)DataType.WString);
+        }
     }
 }
