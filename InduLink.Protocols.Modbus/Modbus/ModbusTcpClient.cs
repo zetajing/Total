@@ -1,0 +1,185 @@
+using System;
+using System.Net.Sockets;
+using System.Threading;
+using System.Threading.Tasks;
+using InduLink.Abstractions;
+using InduLink.Diagnostics;
+using InduLink.Exceptions;
+using InduLink.Runtime.Polling;
+using NModbus;
+
+namespace InduLink.Protocols.Modbus
+{
+    /// <summary>
+    /// Modbus TCP 客户端的配置选项。
+    /// </summary>
+    public sealed class ModbusTcpClientOptions
+    {
+        /// <summary>
+        /// 获取或设置设备标识符，用于在系统中唯一标识该设备。
+        /// </summary>
+        public string DeviceId { get; set; }
+
+        /// <summary>
+        /// 获取或设置 Modbus TCP 服务器的主机名或 IP 地址。
+        /// </summary>
+        public string Host { get; set; }
+
+        /// <summary>
+        /// 获取或设置 Modbus TCP 服务器的端口号。默认值为 502。
+        /// </summary>
+        public int Port { get; set; } = 502;
+
+        /// <summary>
+        /// 获取或设置 Modbus 从站 ID（站号）。默认值为 1。
+        /// </summary>
+        public byte SlaveId { get; set; } = 1;
+
+        /// <summary>
+        /// 获取或设置连接超时时间（毫秒）。默认值为 3000 毫秒。
+        /// </summary>
+        public int ConnectTimeoutMilliseconds { get; set; } = 3000;
+
+        /// <summary>获取或设置单次读写事务的默认超时（毫秒）。请求级 Timeout 优先。</summary>
+        public int OperationTimeoutMilliseconds { get; set; } = 5000;
+
+        /// <summary>
+        /// 获取或设置 Modbus 设备配置文件，用于定义设备的寄存器映射和字节序等特性。默认使用汇川 EasyPLC 配置。
+        /// </summary>
+        public IModbusDeviceProfile DeviceProfile { get; set; } = ModbusDeviceProfiles.InovanceEasyPlc;
+    }
+
+    /// <summary>
+    /// Modbus TCP 协议客户端，继承自 <see cref="ModbusClientBase"/>，提供通过 TCP 协议进行 Modbus 通信的功能。
+    /// </summary>
+    public sealed class ModbusTcpClient : ModbusClientBase
+    {
+        private readonly ModbusTcpClientOptions _options;
+        private TcpClient _tcpClient;
+        private IModbusMaster _master;
+
+        /// <summary>
+        /// 初始化 <see cref="ModbusTcpClient"/> 类的新实例。
+        /// </summary>
+        /// <param name="options">Modbus TCP 客户端配置选项，包含设备 ID、主机、端口等设置。</param>
+        /// <param name="logger">可选的工业日志记录器实例。如果为 null，则使用 <see cref="NullIndustrialLogger"/>。</param>
+        /// <param name="pollingScheduler">可选的轮询调度器实例。如果为 null，则创建默认的 <see cref="PollingScheduler"/>。</param>
+        /// <param name="addressParser">可选的 Modbus 地址解析器。如果为 null，则使用配置文件的默认解析器。</param>
+        /// <exception cref="ArgumentNullException">当 <paramref name="options"/> 为 null 时引发。</exception>
+        public ModbusTcpClient(ModbusTcpClientOptions options, IIndustrialLogger logger = null, IPollingScheduler pollingScheduler = null, ModbusAddressParser addressParser = null)
+            : base(GetDeviceId(options), ProtocolKind.ModbusTcp, options.SlaveId, options.DeviceProfile, addressParser, pollingScheduler, logger, options.OperationTimeoutMilliseconds)
+        {
+            ValidateOptions(options);
+            _options = options;
+        }
+
+        private static string GetDeviceId(ModbusTcpClientOptions options)
+        {
+            if (options == null) throw new ArgumentNullException(nameof(options));
+            return options.DeviceId;
+        }
+
+        private static void ValidateOptions(ModbusTcpClientOptions options)
+        {
+            if (options == null) throw new ArgumentNullException(nameof(options));
+            if (string.IsNullOrWhiteSpace(options.DeviceId))
+                throw new ArgumentException("Modbus TCP device ID is required.", nameof(options));
+            if (string.IsNullOrWhiteSpace(options.Host))
+                throw new ArgumentException("Modbus TCP host is required.", nameof(options));
+            if (options.Port < 1 || options.Port > 65535)
+                throw new ArgumentOutOfRangeException(nameof(options), "Modbus TCP port must be between 1 and 65535.");
+            if (options.SlaveId == 0 || options.SlaveId > 247)
+                throw new ArgumentOutOfRangeException(nameof(options), "Modbus TCP slave ID must be between 1 and 247.");
+            if (options.ConnectTimeoutMilliseconds <= 0)
+                throw new ArgumentOutOfRangeException(nameof(options), "Modbus TCP connect timeout must be greater than zero.");
+            if (options.OperationTimeoutMilliseconds <= 0)
+                throw new ArgumentOutOfRangeException(nameof(options), "Modbus TCP operation timeout must be greater than zero.");
+            if (options.DeviceProfile == null)
+                throw new ArgumentException("Modbus TCP device profile is required.", nameof(options));
+        }
+
+        /// <summary>
+        /// 获取当前活跃的 NModbus 主站实例。
+        /// </summary>
+        protected override IModbusMaster Master => _master;
+
+        /// <summary>
+        /// 获取一个值，指示当前是否已成功连接到 Modbus TCP 设备。
+        /// </summary>
+        public override bool IsConnected => _master != null && _tcpClient != null && _tcpClient.Connected;
+
+        /// <summary>
+        /// 建立与 Modbus TCP 设备的连接。
+        /// </summary>
+        protected override async Task ConnectCoreAsync(CancellationToken cancellationToken)
+        {
+            DisconnectInternal();
+            var client = new TcpClient();
+            try
+            {
+                using var timeoutCts = new CancellationTokenSource(_options.ConnectTimeoutMilliseconds);
+                using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutCts.Token);
+
+                var connectTask = client.ConnectAsync(_options.Host, _options.Port);
+                var waitTask = Task.Delay(Timeout.Infinite, linkedCts.Token);
+                var completed = await Task.WhenAny(connectTask, waitTask).ConfigureAwait(false);
+
+                if (completed == waitTask)
+                {
+                    client.Close();
+                    try { await connectTask.ConfigureAwait(false); } catch { }
+                    cancellationToken.ThrowIfCancellationRequested();
+                    throw new IndustrialTimeoutException("Modbus TCP connect timeout.");
+                }
+
+                await connectTask.ConfigureAwait(false);
+                var master = new ModbusFactory().CreateMaster(client);
+                _tcpClient = client;
+                _master = master;
+            }
+            catch (IndustrialTimeoutException) { client.Close(); throw; }
+            catch (OperationCanceledException) { client.Close(); throw; }
+            catch (Exception ex) when (!(ex is IndustrialConnectionException) && !(ex is IndustrialTimeoutException) && !(ex is OperationCanceledException))
+            {
+                client.Close();
+                throw new IndustrialConnectionException("Failed to connect Modbus TCP device.", ex);
+            }
+        }
+
+        /// <summary>
+        /// 断开与 Modbus TCP 设备的连接。
+        /// </summary>
+        protected override Task DisconnectCoreAsync(CancellationToken cancellationToken)
+        {
+            DisconnectInternal();
+            return Task.CompletedTask;
+        }
+
+        /// <summary>
+        /// 释放客户端占用的资源。
+        /// </summary>
+        protected override void DisposeCore()
+        {
+            DisconnectInternal();
+        }
+
+        protected override void OnOperationTimeout() { DisconnectInternal(); }
+
+        /// <summary>
+        /// 断开底层 TCP 连接并释放 Modbus 主站和 TCP 客户端的资源。
+        /// </summary>
+        private void DisconnectInternal()
+        {
+            if (_master != null)
+            {
+                _master.Dispose();
+                _master = null;
+            }
+            if (_tcpClient != null)
+            {
+                _tcpClient.Close();
+                _tcpClient = null;
+            }
+        }
+    }
+}

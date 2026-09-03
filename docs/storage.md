@@ -2,14 +2,14 @@
 
 SDK 提供 SQL Server 和 MySQL 两种 `IIndustrialHistoryStore` 实现。二者保存相同的 `IndustrialDataRecord`，支持初始化、批量写入、条件查询、分页、最新值、增量读取、删除和保留期清理。采集代码只依赖接口，数据库类型只在应用创建入口决定。
 
-Redis 不属于关系型历史库提供程序，仍是独立的 `IndustrialCommSdk.Protocols.Redis`，用于 Key/Value 通信与缓存集成。
+Redis 不属于关系型历史库提供程序，仍是独立的 `InduLink.Protocols.Redis`，用于 Key/Value 通信与缓存集成。
 
 ## 选择提供程序
 
 | 项目 | SQL Server | MySQL |
 | --- | --- | --- |
-| 程序集 | `IndustrialCommSdk.Storage.dll` | `IndustrialCommSdk.Storage.MySql.dll` |
-| 命名空间 | `IndustrialCommSdk.Storage` | `IndustrialCommSdk.Storage.MySql` |
+| 程序集 | `InduLink.Storage.dll` | `InduLink.Storage.MySql.dll` |
+| 命名空间 | `InduLink.Storage` | `InduLink.Storage.MySql` |
 | 驱动 | `System.Data.SqlClient` | `MySqlConnector 2.6.1` |
 | 服务端 | SQL Server | MySQL 8.0+ |
 | 表名 | `schema.table` | `table` 或 `database.table` |
@@ -18,7 +18,7 @@ Redis 不属于关系型历史库提供程序，仍是独立的 `IndustrialCommS
 业务层保持数据库无关：
 
 ```csharp
-using IndustrialCommSdk.Storage;
+using InduLink.Storage;
 
 public sealed class HistoryService
 {
@@ -33,7 +33,7 @@ public sealed class HistoryService
 }
 ```
 
-SQL Server 和 MySQL 都实现 `IIndustrialHistoryStore`；`IIndustrialDataStore` 是缓冲记录器所需的基础契约。只引用 `IndustrialCommSdk.Storage` 不会携带 MySQL 驱动；完整聚合入口会包含内置 MySQL 提供程序。
+SQL Server 和 MySQL 都实现 `IIndustrialHistoryStore`；`IIndustrialDataStore` 是缓冲记录器所需的基础契约。只引用 `InduLink.Storage` 不会携带 MySQL 驱动；完整聚合入口会包含内置 MySQL 提供程序。
 
 ## 生命周期和缓冲写入
 
@@ -117,7 +117,7 @@ using (var queryStore = new SqlServerIndustrialDataStore(options))
 
 ## MySQL
 
-MySQL 要求 8.0+，因为最新值查询使用 `ROW_NUMBER()` 窗口函数。提供程序程序集为 `IndustrialCommSdk.Storage.MySql.dll`，驱动为 `MySqlConnector 2.6.1`。`TableName` 支持 `IndustrialDataHistory` 或 `UpperComputerDb.IndustrialDataHistory`，标识符只能包含字母、数字和下划线，数据库必须已经存在。
+MySQL 要求 8.0+，因为最新值查询使用 `ROW_NUMBER()` 窗口函数。提供程序程序集为 `InduLink.Storage.MySql.dll`，驱动为 `MySqlConnector 2.6.1`。`TableName` 支持 `IndustrialDataHistory` 或 `UpperComputerDb.IndustrialDataHistory`，标识符只能包含字母、数字和下划线，数据库必须已经存在。
 
 ```csharp
 var options = new MySqlDataStoreOptions

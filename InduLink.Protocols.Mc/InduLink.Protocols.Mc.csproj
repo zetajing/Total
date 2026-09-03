@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>InduLink</RootNamespace>
+    <AssemblyName>InduLink.Protocols.Mc</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\InduLink.Abstractions\InduLink.Abstractions.csproj" />
+    <ProjectReference Include="..\InduLink.Runtime\InduLink.Runtime.csproj" />
+    <ProjectReference Include="..\InduLink.Transport\InduLink.Transport.csproj" />
+    <ProjectReference Include="..\InduLink.Protocols.Common\InduLink.Protocols.Common.csproj" />
+  </ItemGroup>
+</Project>

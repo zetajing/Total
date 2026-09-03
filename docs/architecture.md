@@ -5,28 +5,28 @@
 ## 使用路线
 
 - 只连接一种 PLC：引用对应协议程序集，直接创建 `Options + Client`。
-- 配置驱动、多设备运行：引用 `IndustrialCommSdk`，使用 `IndustrialSdk`、`IndustrialDeviceHost`。
-- 只做 MES JSON：引用 `IndustrialCommSdk.Mes.Http`。
-- 只做 TCP/Socket：引用 `IndustrialCommSdk.Transport`。
+- 配置驱动、多设备运行：引用 `InduLink`，使用 `IndustrialSdk`、`IndustrialDeviceHost`。
+- 只做 MES JSON：引用 `InduLink.Mes.Http`。
+- 只做 TCP/Socket：引用 `InduLink.Transport`。
 - 需要历史数据：业务层依赖 `IIndustrialHistoryStore`，数据库选择只放在创建入口。
 
-SDK 类库当前目标框架为 `net8.0`，WPF/WinForms 应用目标框架为 `net8.0-windows`，Snap7Server 为 x86 的 `net8.0` 控制台项目。快捷扩展、Tag 和轮询位于 `IndustrialCommSdk.Runtime`；配置位于 `IndustrialCommSdk.Runtime.Configuration`；存储公共类型位于 `IndustrialCommSdk.Storage`。
+SDK 类库当前目标框架为 `net8.0`，WPF/WinForms 应用目标框架为 `net8.0-windows`，Snap7Server 为 x86 的 `net8.0` 控制台项目。快捷扩展、Tag 和轮询位于 `InduLink.Runtime`；配置位于 `InduLink.Runtime.Configuration`；存储公共类型位于 `InduLink.Storage`。
 
 ## 程序集边界
 
 | 程序集 | 责任 |
 | --- | --- |
-| `IndustrialCommSdk.Abstractions` | 客户端契约、请求/返回模型、枚举、能力、日志、诊断和异常 |
-| `IndustrialCommSdk.Runtime` | 客户端基类、轮询、DeviceHost、配置、协议注册表、TagTable、快捷扩展 |
-| `IndustrialCommSdk.Transport` | TCP 客户端/服务端、会话、分帧、原始 Socket |
-| `IndustrialCommSdk.Protocols.Common` | 寄存器、文本编解码等协议共享实现 |
-| `IndustrialCommSdk.Protocols.*` | 各协议的 Options、地址解析、连接和读写实现 |
-| `IndustrialCommSdk.Mes.Http` | 开放式 MES HTTP JSON 发送和接收 |
-| `IndustrialCommSdk.Web` | HTTP/HTTPS、工业 WebAPI、WebSocket 客户端/服务端 |
-| `IndustrialCommSdk.FileTransfer.Ftp` | FTP/FTPS 文件客户端 |
-| `IndustrialCommSdk.Storage` | 历史存储契约、SQL Server、缓冲记录器和 CSV |
-| `IndustrialCommSdk.Storage.MySql` | MySQL 8.0+ 历史存储提供程序 |
-| `IndustrialCommSdk` | 引用全部内置模块并提供默认注册表 |
+| `InduLink.Abstractions` | 客户端契约、请求/返回模型、枚举、能力、日志、诊断和异常 |
+| `InduLink.Runtime` | 客户端基类、轮询、DeviceHost、配置、协议注册表、TagTable、快捷扩展 |
+| `InduLink.Transport` | TCP 客户端/服务端、会话、分帧、原始 Socket |
+| `InduLink.Protocols.Common` | 寄存器、文本编解码等协议共享实现 |
+| `InduLink.Protocols.*` | 各协议的 Options、地址解析、连接和读写实现 |
+| `InduLink.Mes.Http` | 开放式 MES HTTP JSON 发送和接收 |
+| `InduLink.Web` | HTTP/HTTPS、工业 WebAPI、WebSocket 客户端/服务端 |
+| `InduLink.FileTransfer.Ftp` | FTP/FTPS 文件客户端 |
+| `InduLink.Storage` | 历史存储契约、SQL Server、缓冲记录器和 CSV |
+| `InduLink.Storage.MySql` | MySQL 8.0+ 历史存储提供程序 |
+| `InduLink` | 引用全部内置模块并提供默认注册表 |
 
 这是一次有意的破坏性模块化升级。旧 `SimpleClient`、`IndustrialClientFactory`、`IndustrialDeployment` 和旧配置兼容层已删除，不提供类型转发或旧 JSON 自动迁移。
 

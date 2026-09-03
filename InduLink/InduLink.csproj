@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>InduLink</RootNamespace>
+    <AssemblyName>InduLink</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\InduLink.Abstractions\InduLink.Abstractions.csproj" />
+    <ProjectReference Include="..\InduLink.Runtime\InduLink.Runtime.csproj" />
+    <ProjectReference Include="..\InduLink.Transport\InduLink.Transport.csproj" />
+    <ProjectReference Include="..\InduLink.Protocols.Common\InduLink.Protocols.Common.csproj" />
+    <ProjectReference Include="..\InduLink.Protocols.Modbus\InduLink.Protocols.Modbus.csproj" />
+    <ProjectReference Include="..\InduLink.Protocols.S7\InduLink.Protocols.S7.csproj" />
+    <ProjectReference Include="..\InduLink.Protocols.Mc\InduLink.Protocols.Mc.csproj" />
+    <ProjectReference Include="..\InduLink.Protocols.Ads\InduLink.Protocols.Ads.csproj" />
+    <ProjectReference Include="..\InduLink.Protocols.OpcUa\InduLink.Protocols.OpcUa.csproj" />
+    <ProjectReference Include="..\InduLink.Protocols.Mqtt\InduLink.Protocols.Mqtt.csproj" />
+    <ProjectReference Include="..\InduLink.Protocols.Redis\InduLink.Protocols.Redis.csproj" />
+    <ProjectReference Include="..\InduLink.Mes.Http\InduLink.Mes.Http.csproj" />
+    <ProjectReference Include="..\InduLink.Web\InduLink.Web.csproj" />
+    <ProjectReference Include="..\InduLink.FileTransfer.Ftp\InduLink.FileTransfer.Ftp.csproj" />
+    <ProjectReference Include="..\InduLink.Storage\InduLink.Storage.csproj" />
+    <ProjectReference Include="..\InduLink.Storage.MySql\InduLink.Storage.MySql.csproj" />
+  </ItemGroup>
+</Project>

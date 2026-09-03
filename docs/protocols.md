@@ -4,33 +4,33 @@
 
 | canonical key | 客户端 | 直接引用的程序集 |
 | --- | --- | --- |
-| `modbus-tcp` | `ModbusTcpClient` | `IndustrialCommSdk.Protocols.Modbus` |
-| `modbus-rtu` | `ModbusRtuClient` | `IndustrialCommSdk.Protocols.Modbus` |
-| `siemens-s7` | `SiemensS7Client` | `IndustrialCommSdk.Protocols.S7` |
-| `mitsubishi-mc` | `MitsubishiMcClient` | `IndustrialCommSdk.Protocols.Mc` |
-| `ads` | `AdsClient` | `IndustrialCommSdk.Protocols.Ads` |
-| `opc-ua` | `OpcUaClient` | `IndustrialCommSdk.Protocols.OpcUa` |
-| `mqtt` | `MqttClient` | `IndustrialCommSdk.Protocols.Mqtt` |
-| `redis` | `RedisClient` | `IndustrialCommSdk.Protocols.Redis` |
+| `modbus-tcp` | `ModbusTcpClient` | `InduLink.Protocols.Modbus` |
+| `modbus-rtu` | `ModbusRtuClient` | `InduLink.Protocols.Modbus` |
+| `siemens-s7` | `SiemensS7Client` | `InduLink.Protocols.S7` |
+| `mitsubishi-mc` | `MitsubishiMcClient` | `InduLink.Protocols.Mc` |
+| `ads` | `AdsClient` | `InduLink.Protocols.Ads` |
+| `opc-ua` | `OpcUaClient` | `InduLink.Protocols.OpcUa` |
+| `mqtt` | `MqttClient` | `InduLink.Protocols.Mqtt` |
+| `redis` | `RedisClient` | `InduLink.Protocols.Redis` |
 
 ## 通用规则
 
 - 当前 SDK 目标框架是 `net8.0`；WPF/WinForms 应用使用 Windows 专用目标框架。
-- 项目直接引用对应协议项目即可，传递依赖会带入 `IndustrialCommSdk.Runtime`、`IndustrialCommSdk.Abstractions` 及协议自己的第三方包。
-- `IndustrialCommSdk.Runtime` 提供 `UseAsync`、强类型读取和写入扩展。
+- 项目直接引用对应协议项目即可，传递依赖会带入 `InduLink.Runtime`、`InduLink.Abstractions` 及协议自己的第三方包。
+- `InduLink.Runtime` 提供 `UseAsync`、强类型读取和写入扩展。
 - `UseAsync` 依次完成连接、业务操作、断开和释放；需要长连接时自行调用 `ConnectAsync`、`DisconnectAsync` 和 `Dispose`。
 - 示例地址、端口和账号都是占位值。写入前必须替换成测试设备上的安全地址，并确认数据类型、长度和字节序。
 - 配置驱动场景使用各模块的 Provider；本页专门展示单模块直接构造客户端。
 
 ## Modbus TCP
 
-所需程序集：`IndustrialCommSdk.Protocols.Modbus`，快捷扩展来自 `IndustrialCommSdk.Runtime`。
+所需程序集：`InduLink.Protocols.Modbus`，快捷扩展来自 `InduLink.Runtime`。
 
 ```csharp
 using System;
 using System.Threading.Tasks;
-using IndustrialCommSdk.Protocols.Modbus;
-using IndustrialCommSdk.Runtime;
+using InduLink.Protocols.Modbus;
+using InduLink.Runtime;
 
 public static class ModbusTcpExample
 {
@@ -71,8 +71,8 @@ Modbus TCP 本身没有认证和加密。生产环境应使用工业防火墙、
 using System;
 using System.IO.Ports;
 using System.Threading.Tasks;
-using IndustrialCommSdk.Protocols.Modbus;
-using IndustrialCommSdk.Runtime;
+using InduLink.Protocols.Modbus;
+using InduLink.Runtime;
 
 public static class ModbusRtuExample
 {
@@ -114,8 +114,8 @@ public static class ModbusRtuExample
 ```csharp
 using System;
 using System.Threading.Tasks;
-using IndustrialCommSdk.Protocols.S7;
-using IndustrialCommSdk.Runtime;
+using InduLink.Protocols.S7;
+using InduLink.Runtime;
 using S7.Net;
 
 public static class SiemensS7Example
@@ -155,8 +155,8 @@ S7-1200/1500 使用绝对 DB 地址时，通常需要在 TIA Portal 中关闭对
 ```csharp
 using System;
 using System.Threading.Tasks;
-using IndustrialCommSdk.Protocols.Mc;
-using IndustrialCommSdk.Runtime;
+using InduLink.Protocols.Mc;
+using InduLink.Runtime;
 
 public static class MitsubishiMcExample
 {
@@ -191,8 +191,8 @@ PLC 侧需要启用一致的 MC/SLMP 二进制 3E TCP 监听端口。当前实�
 ```csharp
 using System;
 using System.Threading.Tasks;
-using IndustrialCommSdk.Protocols.OpcUa;
-using IndustrialCommSdk.Runtime;
+using InduLink.Protocols.OpcUa;
+using InduLink.Runtime;
 
 public static class OpcUaExample
 {
@@ -231,8 +231,8 @@ public static class OpcUaExample
 ```csharp
 using System;
 using System.Threading.Tasks;
-using IndustrialCommSdk.Protocols.Ads;
-using IndustrialCommSdk.Runtime;
+using InduLink.Protocols.Ads;
+using InduLink.Runtime;
 
 public static class AdsExample
 {
@@ -270,9 +270,9 @@ public static class AdsExample
 
 ADS 地址直接使用 PLC 符号名，例如截图中的 `MAIN.xStart`、`MAIN.nTarget`、`MAIN.rSpeed`、`MAIN.lrTemperature`、`MAIN.sStatus` 和 `MAIN.tDelay`；字符串长度通过请求的 `length` 指定，`TIME` 映射为 `TimeSpan`。`AdsClient` 的订阅使用 ADS 原生 OnChange/Cyclic 通知，不需要 SDK 轮询；批量读写使用官方 SumCommand 并自动按项目数和报文大小分包。结构体需按 TwinCAT 内存布局声明 `[StructLayout(LayoutKind.Sequential, Pack = 1)]`，再使用 `ReadAnyAsync<T>`/`WriteAnyAsync`。核心项目直接依赖 `Beckhoff.TwinCAT.Ads 7.0.317`，不再携带旧版本地 DLL。
 
-不安装 TwinCAT 的电脑可选部署 `IndustrialCommSdk.AdsRouter.Host.exe` 和 `IndustrialCommSdk.Protocols.Ads.Router.dll`。编辑宿主输出目录中的 `appsettings.json`：设置本机 `AmsRouter:Name`、本机 `AmsRouter:NetId` 和虚拟 PLC 的 `RemoteConnections`；远程 PLC 还必须添加指向本机 AMS Net ID 的返回路由。默认端口是 TCP `48898`，PLC Runtime 1 的 ADS 端口通常是 `851`。独立 Router 不提供 ADS Secure 和系统服务端口 `10000`，只能部署在受防火墙保护的可信工业网络，并且不能与系统 TwinCAT Router 同时占用 `48898`。
+不安装 TwinCAT 的电脑可选部署 `InduLink.AdsRouter.Host.exe` 和 `InduLink.Protocols.Ads.Router.dll`。编辑宿主输出目录中的 `appsettings.json`：设置本机 `AmsRouter:Name`、本机 `AmsRouter:NetId` 和虚拟 PLC 的 `RemoteConnections`；远程 PLC 还必须添加指向本机 AMS Net ID 的返回路由。默认端口是 TCP `48898`，PLC Runtime 1 的 ADS 端口通常是 `851`。独立 Router 不提供 ADS Secure 和系统服务端口 `10000`，只能部署在受防火墙保护的可信工业网络，并且不能与系统 TwinCAT Router 同时占用 `48898`。
 
-虚拟 PLC 的显式集成测试位于 `IndustrialCommSdk.Tests/AdsVirtualPlcIntegrationTests.cs`。运行前设置 `ADS_VIRTUAL_PLC_TARGET_AMS_NET_ID`，可选设置 `ADS_VIRTUAL_PLC_TARGET_IP`、`ADS_VIRTUAL_PLC_LOCAL_AMS_NET_ID`、`ADS_VIRTUAL_PLC_ROUTER_MODE`、`ADS_VIRTUAL_PLC_PORT` 和 `ADS_VIRTUAL_PLC_STATUS_LENGTH`，再执行测试过滤器 `AdsVirtualPlcIntegrationTests`。测试只写入 `MAIN.nTarget`、`MAIN.rSpeed`、`MAIN.tDelay`，并在 `finally` 中恢复原值，不写入电机状态或故障变量。
+虚拟 PLC 的显式集成测试位于 `InduLink.Tests/AdsVirtualPlcIntegrationTests.cs`。运行前设置 `ADS_VIRTUAL_PLC_TARGET_AMS_NET_ID`，可选设置 `ADS_VIRTUAL_PLC_TARGET_IP`、`ADS_VIRTUAL_PLC_LOCAL_AMS_NET_ID`、`ADS_VIRTUAL_PLC_ROUTER_MODE`、`ADS_VIRTUAL_PLC_PORT` 和 `ADS_VIRTUAL_PLC_STATUS_LENGTH`，再执行测试过滤器 `AdsVirtualPlcIntegrationTests`。测试只写入 `MAIN.nTarget`、`MAIN.rSpeed`、`MAIN.tDelay`，并在 `finally` 中恢复原值，不写入电机状态或故障变量。
 
 ## MQTT
 
@@ -280,8 +280,8 @@ ADS 地址直接使用 PLC 符号名，例如截图中的 `MAIN.xStart`、`MAIN.
 using System;
 using System.Threading;
 using System.Threading.Tasks;
-using IndustrialCommSdk.Protocols.Mqtt;
-using IndustrialCommSdk.Runtime;
+using InduLink.Protocols.Mqtt;
+using InduLink.Runtime;
 
 public static class MqttExample
 {
@@ -326,8 +326,8 @@ public static class MqttExample
 ```csharp
 using System;
 using System.Threading.Tasks;
-using IndustrialCommSdk.Protocols.Redis;
-using IndustrialCommSdk.Runtime;
+using InduLink.Protocols.Redis;
+using InduLink.Runtime;
 
 public static class RedisExample
 {

@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>InduLink.Protocols.Ads</RootNamespace>
+    <AssemblyName>InduLink.Protocols.Ads</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\InduLink.Abstractions\InduLink.Abstractions.csproj" />
+    <ProjectReference Include="..\InduLink.Runtime\InduLink.Runtime.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Beckhoff.TwinCAT.Ads" Version="7.0.317" />
+  </ItemGroup>
+</Project>

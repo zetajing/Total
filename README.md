@@ -1,26 +1,26 @@
-# IndustrialCommSdk
+# InduLink
 
-面向工业现场的 .NET 8 通信 SDK，统一封装 PLC、工业协议、MES、网络服务和历史存储。SDK 将公共契约、运行时、传输、协议、存储拆成独立程序集；应用可以只引用需要的模块，也可以引用 `IndustrialCommSdk` 聚合入口。
+面向工业现场的 .NET 8 通信 SDK，统一封装 PLC、工业协议、MES、网络服务和历史存储。SDK 将公共契约、运行时、传输、协议、存储拆成独立程序集；应用可以只引用需要的模块，也可以引用 `InduLink` 聚合入口。
 
 ## 能做什么
 
 | 能力 | 程序集 |
 | --- | --- |
-| 公共契约、数据值、诊断、异常 | `IndustrialCommSdk.Abstractions` |
-| 配置、DeviceHost、轮询、TagTable、快捷扩展 | `IndustrialCommSdk.Runtime` |
-| TCP、分帧、会话、Socket | `IndustrialCommSdk.Transport` |
-| Modbus TCP/RTU | `IndustrialCommSdk.Protocols.Modbus` |
-| Siemens S7 | `IndustrialCommSdk.Protocols.S7` |
-| Mitsubishi MC 3E | `IndustrialCommSdk.Protocols.Mc` |
-| TwinCAT ADS | `IndustrialCommSdk.Protocols.Ads` |
-| OPC UA | `IndustrialCommSdk.Protocols.OpcUa` |
-| MQTT | `IndustrialCommSdk.Protocols.Mqtt` |
-| Redis Key/Value | `IndustrialCommSdk.Protocols.Redis` |
-| 开放式 MES HTTP JSON | `IndustrialCommSdk.Mes.Http` |
-| HTTP/HTTPS、WebAPI、WebSocket | `IndustrialCommSdk.Web` |
-| FTP/FTPS | `IndustrialCommSdk.FileTransfer.Ftp` |
-| SQL Server 历史存储、缓冲记录、CSV | `IndustrialCommSdk.Storage` |
-| MySQL 8.0+ 历史存储 | `IndustrialCommSdk.Storage.MySql` |
+| 公共契约、数据值、诊断、异常 | `InduLink.Abstractions` |
+| 配置、DeviceHost、轮询、TagTable、快捷扩展 | `InduLink.Runtime` |
+| TCP、分帧、会话、Socket | `InduLink.Transport` |
+| Modbus TCP/RTU | `InduLink.Protocols.Modbus` |
+| Siemens S7 | `InduLink.Protocols.S7` |
+| Mitsubishi MC 3E | `InduLink.Protocols.Mc` |
+| TwinCAT ADS | `InduLink.Protocols.Ads` |
+| OPC UA | `InduLink.Protocols.OpcUa` |
+| MQTT | `InduLink.Protocols.Mqtt` |
+| Redis Key/Value | `InduLink.Protocols.Redis` |
+| 开放式 MES HTTP JSON | `InduLink.Mes.Http` |
+| HTTP/HTTPS、WebAPI、WebSocket | `InduLink.Web` |
+| FTP/FTPS | `InduLink.FileTransfer.Ftp` |
+| SQL Server 历史存储、缓冲记录、CSV | `InduLink.Storage` |
+| MySQL 8.0+ 历史存储 | `InduLink.Storage.MySql` |
 
 协议程序集之间互不引用，也不引用聚合程序集；第三方驱动只由所属模块携带。Redis 是独立的缓存/键值协议，不属于 SQL Server/MySQL 历史存储。
 
@@ -31,14 +31,14 @@
 ```powershell
 dotnet restore Total.sln
 dotnet build Total.sln -c Release
-dotnet test IndustrialCommSdk.Tests/IndustrialCommSdk.Tests.csproj -c Release
+dotnet test InduLink.Tests/InduLink.Tests.csproj -c Release
 ```
 
 只连接一种协议时，直接引用对应模块并构造具体 Client：
 
 ```csharp
-using IndustrialCommSdk.Protocols.Modbus;
-using IndustrialCommSdk.Runtime;
+using InduLink.Protocols.Modbus;
+using InduLink.Runtime;
 
 using (var client = new ModbusTcpClient(new ModbusTcpClientOptions
 {
@@ -94,9 +94,9 @@ using (var host = sdk.CreateDeviceHost(config, "Config"))
 
 ## 示例程序
 
-- `IndustrialCommDemo`：WPF 完整 Demo，包含协议页、配置页、运行中心、MES、数据库和网络服务页面。
-- `IndustrialCommDemo.Snap7Server`：x86 本地 Snap7 通信模拟器，用于在没有实体 PLC 时验证 S7 Demo 的 DB1 多个 Bool/INT/DINT/REAL 点位读写。
-- `IndustrialCommMinimal.WinForms`：直接引用所需模块的最小验证程序，不依赖聚合程序集。
+- `InduLinkDemo`：WPF 完整 Demo，包含协议页、配置页、运行中心、MES、数据库和网络服务页面。
+- `InduLinkDemo.Snap7Server`：x86 本地 Snap7 通信模拟器，用于在没有实体 PLC 时验证 S7 Demo 的 DB1 多个 Bool/INT/DINT/REAL 点位读写。
+- `InduLinkMinimal.WinForms`：直接引用所需模块的最小验证程序，不依赖聚合程序集。
 
 ## 重要边界
 

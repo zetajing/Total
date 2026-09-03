@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>InduLinkMinimal.WinForms</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\InduLink.Runtime\InduLink.Runtime.csproj" />
+    <ProjectReference Include="..\InduLink.Transport\InduLink.Transport.csproj" />
+    <ProjectReference Include="..\InduLink.Protocols.Modbus\InduLink.Protocols.Modbus.csproj" />
+    <ProjectReference Include="..\InduLink.Protocols.S7\InduLink.Protocols.S7.csproj" />
+    <ProjectReference Include="..\InduLink.Protocols.Mc\InduLink.Protocols.Mc.csproj" />
+    <ProjectReference Include="..\InduLink.Mes.Http\InduLink.Mes.Http.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Update="MainForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Update="MainForm.Designer.cs">
+      <AutoGen>true</AutoGen>
+      <DesignTime>true</DesignTime>
+      <DependentUpon>MainForm.cs</DependentUpon>
+    </Compile>
+    <EmbeddedResource Update="MainForm.resx">
+      <DependentUpon>MainForm.cs</DependentUpon>
+      <SubType>Designer</SubType>
+    </EmbeddedResource>
+  </ItemGroup>
+</Project>

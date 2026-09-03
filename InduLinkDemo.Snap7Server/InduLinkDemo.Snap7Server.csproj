@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <PlatformTarget>x86</PlatformTarget>
+    <RuntimeIdentifiers>win-x86</RuntimeIdentifiers>
+    <AppendPlatformToOutputPath>false</AppendPlatformToOutputPath>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>InduLinkDemo.Snap7Server</RootNamespace>
+    <AssemblyName>InduLinkDemo.Snap7Server</AssemblyName>
+    <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- The package carries the native x86 Snap7 server library. The managed
+         package assembly is not referenced because this host uses a small
+         .NET Framework P/Invoke wrapper below. -->
+    <PackageReference Include="Snap7Server.Net"
+                      Version="1.0.1"
+                      GeneratePathProperty="true"
+                      ExcludeAssets="compile;runtime" />
+  </ItemGroup>
+
+  <Target Name="CopySnap7NativeLibrary" AfterTargets="Build">
+    <Copy SourceFiles="$(PkgSnap7Server_Net)\lib\netcoreapp3.1\snap7.dll"
+          DestinationFolder="$(TargetDir)"
+          SkipUnchangedFiles="true" />
+  </Target>
+
+  <Target Name="CopySnap7NativeLibraryToPublish" AfterTargets="Publish">
+    <Copy SourceFiles="$(PkgSnap7Server_Net)\lib\netcoreapp3.1\snap7.dll"
+          DestinationFolder="$(PublishDir)"
+          SkipUnchangedFiles="true" />
+  </Target>
+</Project>

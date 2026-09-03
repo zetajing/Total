@@ -123,7 +123,7 @@ MQTT 客户端支持连接超时、KeepAlive、遗嘱、持久/清理会话、TL
 
 ## HTTP/HTTPS 与 WebAPI
 
-`IndustrialCommSdk.Web.Http.IHttpApiClient` 支持 GET、POST、PUT、PATCH、DELETE 及其他 `HttpMethod`，可发送 JSON、文本或二进制，支持自定义 Header、取消、超时和响应大小上限。
+`InduLink.Web.Http.IHttpApiClient` 支持 GET、POST、PUT、PATCH、DELETE 及其他 `HttpMethod`，可发送 JSON、文本或二进制，支持自定义 Header、取消、超时和响应大小上限。
 
 工业 Web 网关提供：
 
@@ -188,7 +188,7 @@ netsh http add sslcert ipport=0.0.0.0:8088 certhash=<证书指纹> appid="{11111
 
 ## FTP/FTPS
 
-`IndustrialCommSdk.FileTransfer.Ftp.IFtpFileClient` 基于 FluentFTP，支持连接/断开、健康检查、能力探测、目录浏览/创建、上传/下载/删除/重命名、断点续传、进度、取消和服务端校验和。默认采用“临时文件上传、校验、远端改名”的原子上传流程。
+`InduLink.FileTransfer.Ftp.IFtpFileClient` 基于 FluentFTP，支持连接/断开、健康检查、能力探测、目录浏览/创建、上传/下载/删除/重命名、断点续传、进度、取消和服务端校验和。默认采用“临时文件上传、校验、远端改名”的原子上传流程。
 
 客户端默认使用显式 FTPS 和被动模式。明文 FTP 必须同时设置 `UseTls=false` 和 `AllowInsecureFtp=true`。`RemoteRoot` 是客户端可见根目录，路径规范化会拒绝原始或多重 URL 编码的 `..` 越界。
 

@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>InduLink</RootNamespace>
+    <AssemblyName>InduLink.Protocols.Redis</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\InduLink.Abstractions\InduLink.Abstractions.csproj" />
+    <ProjectReference Include="..\InduLink.Runtime\InduLink.Runtime.csproj" />
+    <ProjectReference Include="..\InduLink.Protocols.Common\InduLink.Protocols.Common.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="StackExchange.Redis" Version="3.0.11" />
+  </ItemGroup>
+</Project>

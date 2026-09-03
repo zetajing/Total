@@ -1,0 +1,660 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
+using InduLink.Abstractions;
+using InduLink.Diagnostics;
+using InduLink.Exceptions;
+using InduLink.Runtime;
+using InduLink.Runtime.Polling;
+using S7.Net;
+using PlcArea = S7.Net.DataType;
+using PlcVarType = S7.Net.VarType;
+
+namespace InduLink.Protocols.S7
+{
+    public sealed class SiemensS7ClientOptions
+    {
+        public string DeviceId { get; set; }
+        public string Host { get; set; }
+        public short Rack { get; set; }
+        public short Slot { get; set; } = 1;
+        public CpuType CpuType { get; set; } = CpuType.S71200;
+        /// <summary>读取失败后是否允许自动重连并重试一次读取。</summary>
+        public bool AutoReconnect { get; set; } = true;
+        /// <summary>
+        /// 写入失败后是否允许重连并重放写入。默认关闭，因为网络中断时设备可能已经执行了原写入。
+        /// </summary>
+        public bool AutoReconnectWrites { get; set; } = false;
+        public int ConnectTimeoutMilliseconds { get; set; } = 5000;
+        public int OperationTimeoutMilliseconds { get; set; } = 5000;
+    }
+
+    /// <summary>
+    /// Siemens S7 client built on S7.NetPlus. The wrapper owns connection lifecycle,
+    /// serializes access through IndustrialClientBase, and retries reads one time after a stale session.
+    /// Writes are never replayed by default.
+    /// </summary>
+    public sealed class SiemensS7Client : IndustrialClientBase, IBatchOperationPlanner, IRegisterClient, IEventSubscriptionClient
+    {
+        private readonly SiemensS7ClientOptions _options;
+        private readonly S7AddressParser _parser;
+        private Plc _plc;
+
+        public SiemensS7Client(
+            SiemensS7ClientOptions options,
+            IIndustrialLogger logger = null,
+            IPollingScheduler pollingScheduler = null,
+            S7AddressParser parser = null)
+            : base(GetDeviceId(options), ProtocolKind.SiemensS7,
+                pollingScheduler ?? new PollingScheduler(logger),
+                logger ?? NullIndustrialLogger.Instance,
+                options.OperationTimeoutMilliseconds)
+        {
+            _options = options ?? throw new ArgumentNullException(nameof(options));
+            if (string.IsNullOrWhiteSpace(_options.Host))
+                throw new ArgumentException("S7 host is required.", nameof(options));
+            if (_options.Rack < 0) throw new ArgumentOutOfRangeException(nameof(options), "Rack cannot be negative.");
+            if (_options.Slot < 0) throw new ArgumentOutOfRangeException(nameof(options), "Slot cannot be negative.");
+            if (_options.ConnectTimeoutMilliseconds <= 0) throw new ArgumentOutOfRangeException(nameof(options), "Connect timeout must be positive.");
+            if (_options.OperationTimeoutMilliseconds <= 0) throw new ArgumentOutOfRangeException(nameof(options), "Operation timeout must be positive.");
+            _parser = parser ?? new S7AddressParser();
+        }
+
+        private static string GetDeviceId(SiemensS7ClientOptions options)
+        {
+            if (options == null) throw new ArgumentNullException(nameof(options));
+            if (string.IsNullOrWhiteSpace(options.DeviceId))
+                throw new ArgumentException("Device ID is required.", nameof(options));
+            return options.DeviceId;
+        }
+
+        public override bool IsConnected
+        {
+            get
+            {
+                try { return _plc != null && _plc.IsConnected; }
+                catch { return false; }
+            }
+        }
+
+        public BatchSplitPlan PlanRead(IReadOnlyCollection<ReadRequest> requests, BatchReadOptions options, ProtocolCapabilities capabilities)
+        {
+            if (requests == null) throw new ArgumentNullException(nameof(requests));
+            options = options ?? BatchReadOptions.Default;
+            capabilities = capabilities ?? Capabilities;
+
+            var planned = requests
+                .Select(request =>
+                {
+                    var address = _parser.ParseTyped(request.Address);
+                    return new PlannedS7Read(request, address, S7BatchValueDecoder.EstimateEndOffset(address, request));
+                })
+                .OrderBy(item => item.Address.Area)
+                .ThenBy(item => item.Address.DbNumber)
+                .ThenBy(item => item.Address.ByteOffset)
+                .ThenBy(item => item.Address.BitOffset)
+                .ToList();
+
+            var groups = BuildReadGroups(planned, options, capabilities);
+            return new BatchSplitPlan(ProtocolKind.SiemensS7, BatchOperationKind.Read, groups, requests.Count);
+        }
+
+        public BatchSplitPlan PlanWrite(IReadOnlyCollection<WriteRequest> requests, BatchWriteOptions options, ProtocolCapabilities capabilities)
+        {
+            if (requests == null) throw new ArgumentNullException(nameof(requests));
+            var groups = new List<BatchRequestGroup>();
+            var sequence = 0;
+            foreach (var request in requests)
+            {
+                var address = _parser.ParseTyped(request.Address);
+                groups.Add(BatchRequestGroup.ForWrite(
+                    sequence++,
+                    BuildAreaKey(address),
+                    address.ByteOffset,
+                    EstimateEndOffset(address, request),
+                    request.DataType,
+                    new[] { request }));
+            }
+            return new BatchSplitPlan(ProtocolKind.SiemensS7, BatchOperationKind.Write, groups, requests.Count);
+        }
+
+        protected override async Task ConnectCoreAsync(CancellationToken cancellationToken)
+        {
+            ClosePlc();
+            var plc = new Plc(_options.CpuType, _options.Host, _options.Rack, _options.Slot);
+            try
+            {
+                using (var timeoutCts = new CancellationTokenSource(_options.ConnectTimeoutMilliseconds))
+                using (var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutCts.Token))
+                {
+                    try { await plc.OpenAsync(linkedCts.Token).ConfigureAwait(false); }
+                    catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+                    { throw new IndustrialTimeoutException("Siemens S7 connect timeout."); }
+                }
+                if (!plc.IsConnected)
+                    throw new IndustrialConnectionException("S7.NetPlus completed OpenAsync but the PLC is not connected.");
+                _plc = plc;
+            }
+            catch (IndustrialTimeoutException)
+            {
+                SafeClose(plc);
+                throw;
+            }
+            catch (OperationCanceledException)
+            {
+                SafeClose(plc);
+                throw;
+            }
+            catch (Exception ex)
+            {
+                SafeClose(plc);
+                throw new IndustrialConnectionException("Failed to connect Siemens S7 device.", ex);
+            }
+        }
+
+        protected override Task DisconnectCoreAsync(CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            ClosePlc();
+            return Task.CompletedTask;
+        }
+
+        protected override void OnOperationTimeout() { ClosePlc(); }
+
+        protected override Task<DataValue> ReadCoreAsync(ReadRequest request, CancellationToken cancellationToken)
+        {
+            var address = _parser.ParseTyped(request.Address);
+            S7BatchValueDecoder.ValidateAddress(request, address);
+            return ExecuteWithReconnectAsync(async token =>
+            {
+                var value = await ReadValueAsync(address, request, token).ConfigureAwait(false);
+                if (value == null)
+                {
+                    throw new IndustrialDataConversionException(
+                        string.Format(
+                            "S7 read returned no decoded value. Address={0}, DataType={1}, Length={2}.",
+                            address.Normalized,
+                            request.DataType,
+                            request.Length));
+                }
+
+                return new DataValue(request.Address, request.DataType, value, null,
+                    QualityStatus.Good, DateTimeOffset.UtcNow, null);
+            }, cancellationToken);
+        }
+
+        protected override async Task<BatchReadResult> ReadManyCoreAsync(
+            IReadOnlyCollection<ReadRequest> requests,
+            CancellationToken cancellationToken)
+        {
+            var plan = PlanRead(requests, BatchReadOptions.Default, Capabilities);
+            var values = new Dictionary<ReadRequest, DataValue>();
+
+            foreach (var group in plan.Groups)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var firstAddress = _parser.ParseTyped(group.ReadRequests[0].Address);
+                var startOffset = group.StartOffset.Value;
+                var byteCount = group.EndOffset.Value - startOffset + 1;
+
+                try
+                {
+                    var bytes = await ExecuteWithReconnectAsync(
+                        token => _plc.ReadBytesAsync(
+                            ToPlcArea(firstAddress.Area),
+                            firstAddress.DbNumber,
+                            startOffset,
+                            byteCount,
+                            token),
+                        cancellationToken).ConfigureAwait(false);
+
+                    foreach (var request in group.ReadRequests)
+                    {
+                        try
+                        {
+                            values[request] = S7BatchValueDecoder.Decode(
+                                request,
+                                _parser.ParseTyped(request.Address),
+                                bytes,
+                                startOffset);
+                        }
+                        catch (OperationCanceledException) { throw; }
+                        catch (Exception ex)
+                        {
+                            values[request] = BadBatchValue(request, ex.Message);
+                        }
+                    }
+                }
+                catch (OperationCanceledException) { throw; }
+                catch (Exception ex)
+                {
+                    foreach (var request in group.ReadRequests)
+                        values[request] = BadBatchValue(request, ex.Message);
+                }
+            }
+
+            return new BatchReadResult(requests.Select(request => values[request]).ToList());
+        }
+
+        protected override Task WriteCoreAsync(WriteRequest request, CancellationToken cancellationToken)
+        {
+            var address = _parser.ParseTyped(request.Address);
+            return ExecuteWithReconnectAsync(async token =>
+            {
+                await WriteValueAsync(address, request, token).ConfigureAwait(false);
+                return true;
+            }, cancellationToken, _options.AutoReconnectWrites, true);
+        }
+
+        private async Task<T> ExecuteWithReconnectAsync<T>(
+            Func<CancellationToken, Task<T>> operation,
+            CancellationToken cancellationToken,
+            bool allowRetry = true,
+            bool writeOperation = false)
+        {
+            EnsureConnected();
+            try
+            {
+                return await operation(cancellationToken).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException ex)
+            {
+                if (writeOperation)
+                {
+                    ClosePlc();
+                    throw new IndustrialWriteUncertainException(
+                        "S7 write outcome is unknown; the write was not replayed.", ex);
+                }
+                throw;
+            }
+            catch (IndustrialAddressParseException) { throw; }
+            catch (IndustrialDataConversionException) { throw; }
+            catch (Exception first)
+            {
+                ClosePlc();
+                if (!_options.AutoReconnect || !allowRetry)
+                {
+                    if (writeOperation)
+                    {
+                        throw new IndustrialWriteUncertainException(
+                            "S7 write outcome is unknown; the write was not replayed.", first);
+                    }
+                    throw new IndustrialConnectionException("S7 communication failed.", first);
+                }
+
+                try
+                {
+                    await ConnectCoreAsync(cancellationToken).ConfigureAwait(false);
+                    return await operation(cancellationToken).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException) { throw; }
+                catch (Exception retry)
+                {
+                    ClosePlc();
+                    throw new IndustrialConnectionException("S7 communication failed after reconnect.", retry);
+                }
+            }
+        }
+
+        public Task<T> ReadDbClassAsync<T>(int dbNumber, int startByteAddress = 0,
+            CancellationToken cancellationToken = default(CancellationToken)) where T : class, new()
+        {
+            ValidateDbBlockArguments(dbNumber, startByteAddress);
+            return ExecuteExclusiveAsync(token => ExecuteWithReconnectAsync(async inner =>
+            {
+                var value = await _plc.ReadClassAsync<T>(dbNumber, startByteAddress, inner).ConfigureAwait(false);
+                if (value == null) throw new IndustrialProtocolException("S7 DB class read returned no data.");
+                return value;
+            }, token), cancellationToken);
+        }
+
+        /// <summary>
+        /// Reads a native Siemens S7 STRING[n] value from a data block.
+        /// The PLC stores two header bytes before the characters: reserved length and current length.
+        /// </summary>
+        /// <param name="dbNumber">The data block number.</param>
+        /// <param name="startByteAddress">The byte offset of the STRING[n] header.</param>
+        /// <param name="reservedLength">The STRING[n] maximum length, excluding the two header bytes.</param>
+        /// <param name="cancellationToken">Cancels the read operation.</param>
+        /// <returns>The characters currently stored in the PLC string.</returns>
+        public Task<string> ReadDbStringAsync(
+            int dbNumber,
+            int startByteAddress,
+            int reservedLength,
+            CancellationToken cancellationToken = default(CancellationToken))
+        {
+            ValidateDbBlockArguments(dbNumber, startByteAddress);
+            S7StringCodec.ValidateReservedLength(reservedLength);
+            return ExecuteExclusiveAsync(token => ExecuteWithReconnectAsync(async inner =>
+            {
+                var bytes = await _plc.ReadBytesAsync(
+                    PlcArea.DataBlock,
+                    dbNumber,
+                    startByteAddress,
+                    S7StringCodec.GetByteLength(reservedLength),
+                    inner).ConfigureAwait(false);
+                return S7StringCodec.Decode(bytes, reservedLength);
+            }, token), cancellationToken);
+        }
+
+        /// <summary>
+        /// Reads a native Siemens S7 STRING[n] value using a TIA Portal absolute DB address.
+        /// Both DB2000.DBX6.0 and DB2000.DBB6 identify a string beginning at byte 6.
+        /// </summary>
+        /// <param name="address">A byte-aligned DB address such as DB2000.DBX6.0 or DB2000.DBB6.</param>
+        /// <param name="reservedLength">The STRING[n] maximum length, excluding the two header bytes.</param>
+        /// <param name="cancellationToken">Cancels the read operation.</param>
+        /// <returns>The characters currently stored in the PLC string.</returns>
+        public Task<string> ReadDbStringAsync(
+            string address,
+            int reservedLength,
+            CancellationToken cancellationToken = default(CancellationToken))
+        {
+            if (string.IsNullOrWhiteSpace(address))
+                throw new ArgumentException("S7 string address is required.", nameof(address));
+
+            var parsed = _parser.ParseTyped(address);
+            if (parsed.Area != S7Area.Db)
+                throw new IndustrialAddressParseException("S7 string address must point to a data block: " + address);
+            if (parsed.IsBitAddress && parsed.BitOffset != 0)
+                throw new IndustrialAddressParseException(
+                    "S7 STRING must start at bit 0 of its byte address: " + address);
+
+            return ReadDbStringAsync(parsed.DbNumber, parsed.ByteOffset, reservedLength, cancellationToken);
+        }
+
+        public Task<T> ReadDbClassAsync<T>(Func<T> factory, int dbNumber, int startByteAddress = 0,
+            CancellationToken cancellationToken = default(CancellationToken)) where T : class
+        {
+            if (factory == null) throw new ArgumentNullException(nameof(factory));
+            ValidateDbBlockArguments(dbNumber, startByteAddress);
+            return ExecuteExclusiveAsync(token => ExecuteWithReconnectAsync(async inner =>
+            {
+                var value = await _plc.ReadClassAsync(factory, dbNumber, startByteAddress, inner).ConfigureAwait(false);
+                if (value == null) throw new IndustrialProtocolException("S7 DB class read returned no data.");
+                return value;
+            }, token), cancellationToken);
+        }
+
+        public Task<int> ReadDbClassAsync(object instance, int dbNumber, int startByteAddress = 0,
+            CancellationToken cancellationToken = default(CancellationToken))
+        {
+            if (instance == null) throw new ArgumentNullException(nameof(instance));
+            ValidateDbBlockArguments(dbNumber, startByteAddress);
+            return ExecuteExclusiveAsync(token => ExecuteWithReconnectAsync(async inner =>
+            {
+                var result = await _plc.ReadClassAsync(instance, dbNumber, startByteAddress, inner).ConfigureAwait(false);
+                return result.Item1;
+            }, token), cancellationToken);
+        }
+
+        public Task WriteDbClassAsync(object value, int dbNumber, int startByteAddress = 0,
+            CancellationToken cancellationToken = default(CancellationToken))
+        {
+            if (value == null) throw new ArgumentNullException(nameof(value));
+            ValidateDbBlockArguments(dbNumber, startByteAddress);
+            return ExecuteExclusiveAsync(token => ExecuteWithReconnectAsync(async inner =>
+            {
+                await _plc.WriteClassAsync(value, dbNumber, startByteAddress, inner).ConfigureAwait(false);
+                return true;
+            }, token, _options.AutoReconnectWrites, true), cancellationToken);
+        }
+
+        protected override void DisposeCore()
+        {
+            ClosePlc();
+        }
+
+        private void EnsureConnected()
+        {
+            if (!IsConnected) throw new IndustrialConnectionException("S7 client is not connected.");
+        }
+
+        private async Task<object> ReadValueAsync(S7Address address, ReadRequest request, CancellationToken token)
+        {
+            var count = Math.Max(1, (int)request.Length);
+
+            switch (request.DataType)
+            {
+                case Abstractions.DataType.S7String:
+                    S7StringCodec.ValidateReservedLength(request.Length);
+                    var nativeStringBytes = await _plc.ReadBytesAsync(
+                        ToPlcArea(address.Area), address.DbNumber, address.ByteOffset,
+                        S7StringCodec.GetByteLength(request.Length), token).ConfigureAwait(false);
+                    return S7StringCodec.Decode(nativeStringBytes, request.Length);
+                case Abstractions.DataType.String:
+                    if (request.Length == 0)
+                        throw new IndustrialDataConversionException("S7 string read length must be greater than zero.");
+
+                    var stringBytes = await _plc.ReadBytesAsync(ToPlcArea(address.Area), address.DbNumber,
+                        address.ByteOffset, request.Length, token).ConfigureAwait(false);
+                    return Encoding.ASCII.GetString(stringBytes).TrimEnd('\0');
+                case Abstractions.DataType.ByteArray:
+                    if (request.Length == 0)
+                        throw new IndustrialDataConversionException("S7 byte-array read length must be greater than zero.");
+
+                    return await _plc.ReadBytesAsync(ToPlcArea(address.Area), address.DbNumber,
+                        address.ByteOffset, request.Length, token).ConfigureAwait(false);
+                case Abstractions.DataType.Char:
+                    return Convert.ToChar(Convert.ToByte(await ReadTypedValueAsync(address, PlcVarType.Byte, 1, token).ConfigureAwait(false)));
+                case Abstractions.DataType.Byte:
+                    return await ReadTypedValueAsync(address, PlcVarType.Byte, count, token).ConfigureAwait(false);
+                default:
+                    return await ReadTypedValueAsync(address, ToVarType(request.DataType), count, token).ConfigureAwait(false);
+            }
+        }
+
+        private Task<object> ReadTypedValueAsync(S7Address address, PlcVarType varType, int count, CancellationToken token)
+        {
+            return _plc.ReadAsync(ToPlcArea(address.Area), address.DbNumber, address.ByteOffset,
+                varType, count, address.BitOffset >= 0 ? (byte)address.BitOffset : (byte)0, token);
+        }
+
+        private async Task WriteValueAsync(S7Address address, WriteRequest request, CancellationToken token)
+        {
+            switch (request.DataType)
+            {
+                case Abstractions.DataType.Bool:
+                    if (address.BitOffset < 0)
+                        throw new IndustrialAddressParseException("S7 bool write requires a bit address: " + address.Normalized);
+                    await _plc.WriteBitAsync(ToPlcArea(address.Area), address.DbNumber, address.ByteOffset,
+                        address.BitOffset, Convert.ToBoolean(request.Value), token).ConfigureAwait(false);
+                    return;
+                case Abstractions.DataType.String:
+                    await _plc.WriteBytesAsync(ToPlcArea(address.Area), address.DbNumber, address.ByteOffset,
+                        S7WriteValueEncoder.EncodeString(request.Value, request.Length), token).ConfigureAwait(false);
+                    return;
+                case Abstractions.DataType.S7String:
+                    if (address.Area != S7Area.Db || (address.IsBitAddress && address.BitOffset != 0))
+                        throw new IndustrialAddressParseException(
+                            "S7 STRING[n] writes must start at a byte-aligned DB address: " + address.Normalized);
+                    await _plc.WriteBytesAsync(ToPlcArea(address.Area), address.DbNumber, address.ByteOffset,
+                        S7WriteValueEncoder.EncodeS7String(request.Value, request.Length), token).ConfigureAwait(false);
+                    return;
+                case Abstractions.DataType.ByteArray:
+                    await _plc.WriteBytesAsync(ToPlcArea(address.Area), address.DbNumber, address.ByteOffset,
+                        S7WriteValueEncoder.EncodeByteArray(request.Value, request.Length), token).ConfigureAwait(false);
+                    return;
+                case Abstractions.DataType.Char:
+                    var text = (request.Value ?? string.Empty).ToString();
+                    await _plc.WriteAsync(address.Normalized, (byte)(text.Length == 0 ? '\0' : text[0]), token).ConfigureAwait(false);
+                    return;
+                default:
+                    await _plc.WriteAsync(address.Normalized, request.Value, token).ConfigureAwait(false);
+                    return;
+            }
+        }
+
+        private static IReadOnlyList<BatchRequestGroup> BuildReadGroups(
+            IReadOnlyList<PlannedS7Read> planned,
+            BatchReadOptions options,
+            ProtocolCapabilities capabilities)
+        {
+            var groups = new List<BatchRequestGroup>();
+            if (planned.Count == 0) return groups;
+
+            var maxItems = options.MaxItemsPerBatch ?? capabilities.MaxReadItems;
+            var maxSpan = options.MaxAddressSpan ?? capabilities.MaxAddressSpan;
+            var current = new List<PlannedS7Read>();
+            var sequence = 0;
+
+            foreach (var item in planned)
+            {
+                if (current.Count == 0)
+                {
+                    current.Add(item);
+                    continue;
+                }
+
+                if (!CanJoin(current, item, maxItems, maxSpan))
+                {
+                    groups.Add(CreateReadGroup(sequence++, current));
+                    current = new List<PlannedS7Read>();
+                }
+                current.Add(item);
+            }
+
+            if (current.Count > 0)
+                groups.Add(CreateReadGroup(sequence, current));
+            return groups;
+        }
+
+        private static bool CanJoin(IReadOnlyList<PlannedS7Read> current, PlannedS7Read next, int maxItems, int maxSpan)
+        {
+            if (current.Count >= maxItems) return false;
+            var first = current[0];
+            if (first.Address.Area != next.Address.Area) return false;
+            if (first.Address.DbNumber != next.Address.DbNumber) return false;
+            var start = Math.Min(current.Min(item => item.Address.ByteOffset), next.Address.ByteOffset);
+            var end = Math.Max(current.Max(item => item.EndOffset), next.EndOffset);
+            return end - start + 1 <= maxSpan;
+        }
+
+        private static BatchRequestGroup CreateReadGroup(int sequence, IReadOnlyList<PlannedS7Read> current)
+        {
+            var start = current.Min(item => item.Address.ByteOffset);
+            var end = current.Max(item => item.EndOffset);
+            var dataType = current.All(item => item.Request.DataType == current[0].Request.DataType)
+                ? (InduLink.Abstractions.DataType?)current[0].Request.DataType
+                : null;
+            return BatchRequestGroup.ForRead(
+                sequence,
+                BuildAreaKey(current[0].Address),
+                start,
+                end,
+                dataType,
+                current.Select(item => item.Request).ToList());
+        }
+
+        private static string BuildAreaKey(S7Address address)
+        {
+            return address.Area == S7Area.Db
+                ? string.Format("DB{0}", address.DbNumber)
+                : address.Area.ToString();
+        }
+
+        private static int EstimateEndOffset(S7Address address, WriteRequest request)
+        {
+            if (request.DataType == Abstractions.DataType.Bool) return address.ByteOffset;
+            return address.ByteOffset + Math.Max(1, EstimateByteLength(request.DataType, request.Length)) - 1;
+        }
+
+        private static int EstimateByteLength(Abstractions.DataType dataType, ushort length)
+        {
+            var count = Math.Max(1, (int)length);
+            switch (dataType)
+            {
+                case Abstractions.DataType.Bool:
+                case Abstractions.DataType.Byte:
+                case Abstractions.DataType.Char:
+                case Abstractions.DataType.String:
+                case Abstractions.DataType.ByteArray:
+                    return count;
+                case Abstractions.DataType.S7String:
+                    return S7StringCodec.GetByteLength(length);
+                case Abstractions.DataType.Int16:
+                case Abstractions.DataType.UInt16:
+                    return count * 2;
+                case Abstractions.DataType.Int32:
+                case Abstractions.DataType.UInt32:
+                case Abstractions.DataType.Float:
+                    return count * 4;
+                case Abstractions.DataType.Double:
+                    return count * 8;
+                default:
+                    return count;
+            }
+        }
+
+        private static PlcArea ToPlcArea(S7Area area)
+        {
+            switch (area)
+            {
+                case S7Area.Db: return PlcArea.DataBlock;
+                case S7Area.Memory: return PlcArea.Memory;
+                case S7Area.Input: return PlcArea.Input;
+                case S7Area.Output: return PlcArea.Output;
+                default: throw new IndustrialAddressParseException("Unsupported S7 area.");
+            }
+        }
+
+        private static PlcVarType ToVarType(Abstractions.DataType dataType)
+        {
+            switch (dataType)
+            {
+                case Abstractions.DataType.Bool: return PlcVarType.Bit;
+                case Abstractions.DataType.Int16: return PlcVarType.Int;
+                case Abstractions.DataType.UInt16: return PlcVarType.Word;
+                case Abstractions.DataType.Int32: return PlcVarType.DInt;
+                case Abstractions.DataType.UInt32: return PlcVarType.DWord;
+                case Abstractions.DataType.Float: return PlcVarType.Real;
+                case Abstractions.DataType.Double: return PlcVarType.LReal;
+                case Abstractions.DataType.Byte:
+                case Abstractions.DataType.Char: return PlcVarType.Byte;
+                default: throw new IndustrialDataConversionException("S7 does not support data type " + dataType + ".");
+            }
+        }
+
+        private static void ValidateDbBlockArguments(int dbNumber, int startByteAddress)
+        {
+            if (dbNumber <= 0) throw new ArgumentOutOfRangeException(nameof(dbNumber));
+            if (startByteAddress < 0) throw new ArgumentOutOfRangeException(nameof(startByteAddress));
+        }
+
+        private void ClosePlc()
+        {
+            var plc = _plc;
+            _plc = null;
+            SafeClose(plc);
+        }
+
+        private static void SafeClose(Plc plc)
+        {
+            if (plc == null) return;
+            try { plc.Close(); } catch { }
+        }
+
+        private static DataValue BadBatchValue(ReadRequest request, string message)
+        {
+            return new DataValue(request.Address, request.DataType, null, null,
+                QualityStatus.Bad, DateTimeOffset.UtcNow, message);
+        }
+
+        private sealed class PlannedS7Read
+        {
+            public PlannedS7Read(ReadRequest request, S7Address address, int endOffset)
+            {
+                Request = request;
+                Address = address;
+                EndOffset = endOffset;
+            }
+
+            public ReadRequest Request { get; private set; }
+            public S7Address Address { get; private set; }
+            public int EndOffset { get; private set; }
+        }
+    }
+}
