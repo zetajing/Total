@@ -274,6 +274,177 @@ ADS 地址直接使用 PLC 符号名，例如截图中的 `MAIN.xStart`、`MAIN.
 
 虚拟 PLC 的显式集成测试位于 `InduLink.Tests/AdsVirtualPlcIntegrationTests.cs`。运行前设置 `ADS_VIRTUAL_PLC_TARGET_AMS_NET_ID`，可选设置 `ADS_VIRTUAL_PLC_TARGET_IP`、`ADS_VIRTUAL_PLC_LOCAL_AMS_NET_ID`、`ADS_VIRTUAL_PLC_ROUTER_MODE`、`ADS_VIRTUAL_PLC_PORT` 和 `ADS_VIRTUAL_PLC_STATUS_LENGTH`，再执行测试过滤器 `AdsVirtualPlcIntegrationTests`。测试只写入 `MAIN.nTarget`、`MAIN.rSpeed`、`MAIN.tDelay`，并在 `finally` 中恢复原值，不写入电机状态或故障变量。
 
+### ADS 控制台实战
+
+以下示例参考 ConsoleApp1 的 `IN1.*` 读写流程，并按当前 SDK API 整理。`IN1` 是该示例的符号前缀，不是 SDK 固定名称；实际项目可能使用 `MAIN` 或 GVL 名称，必须按 PLC 导出的完整符号替换。
+
+#### 创建项目与连接准备
+
+在本仓库根目录执行：
+
+```powershell
+dotnet new console -n AdsConsole -o samples/AdsConsole --framework net8.0
+dotnet add samples/AdsConsole/AdsConsole.csproj reference InduLink.Protocols.Ads/InduLink.Protocols.Ads.csproj
+dotnet build samples/AdsConsole/AdsConsole.csproj -c Release
+```
+
+生成的项目会通过项目引用获得 Runtime、Abstractions 和 Beckhoff ADS 包，不需要复制 DLL，也不需要引用聚合项目 `InduLink`。如果控制台在仓库外，`dotnet add ... reference ...` 的两个路径都应改成真实路径；不要直接复制另一台机器的相对 `ProjectReference`。
+
+- `DeviceId` 是 SDK 内的设备标识；`AmsNetId` 是目标 PLC 的六段 AMS Net ID，不是四段 IP 地址，也不应仅根据 IP 猜测。
+- `Port = 851` 表示目标 ADS Runtime 端口，与 Router 的 TCP 48898 端口不同。
+- 先配置系统 TwinCAT Router 或上文的独立 Router，再确认目标的返回路由。`AdsClientOptions` 本身不创建远程路由。
+- 从只读设备状态开始，再读取一个已存在的符号；示例所有变量必须存在，缺少任何一个都会使顺序读取在该处结束。
+
+#### PLC 类型与读取方法
+
+下表地址沿用参考项目，类型以实际 PLC 声明为准。位宽相同不代表数值语义相同，例如 `DWORD` 用 `uint` 读取，`REAL` 用 `float` 读取。
+
+| PLC 类型 | C# 类型 | 示例调用 |
+| --- | --- | --- |
+| BOOL | `bool` | `ReadBoolAsync("IN1.xStop")` |
+| SINT | `sbyte` | `ReadSByteAsync("IN1.sintValue")` |
+| USINT / BYTE | `byte` | `ReadAsync<byte>("IN1.usintValue")` / `ReadAsync<byte>("IN1.byteValue")` |
+| INT | `short` | `ReadInt16Async("IN1.intValue")` |
+| UINT / WORD | `ushort` | `ReadUInt16Async("IN1.uintValue")` / `ReadUInt16Async("IN1.wordValue")` |
+| DINT | `int` | `ReadInt32Async("IN1.nCount")` |
+| UDINT / DWORD | `uint` | `ReadUInt32Async("IN1.udintValue")` / `ReadUInt32Async("IN1.dwordValue")` |
+| LINT | `long` | `ReadInt64Async("IN1.lintValue")` |
+| ULINT / LWORD | `ulong` | `ReadUInt64Async("IN1.ulintValue")` / `ReadUInt64Async("IN1.lwordValue")` |
+| REAL / LREAL | `float` / `double` | `ReadFloatAsync("IN1.rSpeed")` / `ReadDoubleAsync("IN1.lrTemperature")` |
+| SDK `DataType.Char` 对应的单字符符号 | `char` | `ReadValueAsync<char>("IN1.charValue", DataType.Char)` |
+| STRING(80) | `string` | `ReadStringAsync("IN1.sStatus", 80)` |
+| WSTRING(80) | `string` | `ReadWStringAsync("IN1.wsStatus", 80)` |
+| TIME | `TimeSpan` | `ReadTimeAsync("IN1.tDelay")` |
+| LTIME | `TimeSpan` | `ReadLTimeAsync("IN1.lTimeValue")` |
+| TOD / TIME_OF_DAY | `TimeSpan` | `ReadTimeOfDayAsync("IN1.todValue")` |
+| DATE | `DateTimeOffset` | `ReadDateAsync("IN1.dateValue")` |
+| DT / DATE_AND_TIME | `DateTimeOffset` | `ReadDateTimeAsync("IN1.dateTimeValue")` |
+| ARRAY[0..4] OF DINT | `int[]` | `ReadArrayAsync<int>("IN1.aValues", 5)` |
+
+参考代码中的 CHAR 读取位置为空；上表提供 SDK 显式类型调用方式，但需要先核对 `charValue` 的真实 PLC 声明，不能把 `STRING(1)`、BYTE 或 WCHAR 自动当成该类型。
+
+字符串长度传 PLC 声明容量，例如 `STRING(80)` / `WSTRING(80)` 传 `80`，不是当前文字长度，也不手动加结束符。当前 ADS 实现分别使用 `Encoding.Default` 和 `Encoding.Unicode`；中文示例优先使用匹配的 WSTRING 符号，STRING 的编码需与 PLC 工程核对。TIME、TOD、LTIME 都返回 `TimeSpan`，写入时应使用各自的方法，避免将 LTIME 或 TOD 按 TIME 写入。DATE/DT 本身不携带业务时区，不应把返回的 `DateTimeOffset` 当成 PLC 已声明了时区。
+
+#### 可复制的 Program.cs
+
+替换新项目的 `Program.cs`。默认只读；只有带 `--write-test` 才会写入 `IN1.aValues`，并尝试恢复原数组。数组应是独立测试变量，避免 PLC 程序同时改写它。
+
+```csharp
+using System;
+using System.Linq;
+using InduLink.Abstractions;
+using InduLink.Protocols.Ads;
+using InduLink.Runtime;
+
+string targetAmsNetId = Environment.GetEnvironmentVariable("ADS_TARGET_AMS_NET_ID")
+    ?? throw new InvalidOperationException("请设置 ADS_TARGET_AMS_NET_ID 为目标 PLC 的 AMS Net ID。");
+bool enableWriteTest = args.Contains("--write-test");
+
+using var client = new AdsClient(new AdsClientOptions
+{
+    DeviceId = "console-plc",
+    AmsNetId = targetAmsNetId,
+    Port = 851,
+    ConnectTimeoutMilliseconds = 10000,
+    OperationTimeoutMilliseconds = 5000
+});
+
+try
+{
+    await client.ConnectAsync();
+    var state = await client.ReadDeviceStateAsync();
+    Console.WriteLine($"PLC 状态：{state.AdsState}");
+
+    Console.WriteLine($"BOOL={await client.ReadBoolAsync("IN1.xStop")}");
+    Console.WriteLine($"DINT={await client.ReadInt32Async("IN1.nCount")}");
+    Console.WriteLine($"Target={await client.ReadInt32Async("IN1.nTarget")}");
+    Console.WriteLine($"REAL={await client.ReadFloatAsync("IN1.rSpeed")}");
+    Console.WriteLine($"LREAL={await client.ReadDoubleAsync("IN1.lrTemperature")}");
+    Console.WriteLine($"STRING={await client.ReadStringAsync("IN1.sStatus", 80)}");
+    Console.WriteLine($"WSTRING={await client.ReadWStringAsync("IN1.wsStatus", 80)}");
+    Console.WriteLine($"SINT={await client.ReadSByteAsync("IN1.sintValue")}");
+    Console.WriteLine($"USINT={await client.ReadAsync<byte>("IN1.usintValue")}");
+    Console.WriteLine($"BYTE={await client.ReadAsync<byte>("IN1.byteValue")}");
+    Console.WriteLine($"INT={await client.ReadInt16Async("IN1.intValue")}");
+    Console.WriteLine($"UINT={await client.ReadUInt16Async("IN1.uintValue")}");
+    Console.WriteLine($"WORD={await client.ReadUInt16Async("IN1.wordValue")}");
+    Console.WriteLine($"DINT={await client.ReadInt32Async("IN1.dintValue")}");
+    Console.WriteLine($"UDINT={await client.ReadUInt32Async("IN1.udintValue")}");
+    Console.WriteLine($"DWORD={await client.ReadUInt32Async("IN1.dwordValue")}");
+    Console.WriteLine($"LINT={await client.ReadInt64Async("IN1.lintValue")}");
+    Console.WriteLine($"ULINT={await client.ReadUInt64Async("IN1.ulintValue")}");
+    Console.WriteLine($"LWORD={await client.ReadUInt64Async("IN1.lwordValue")}");
+    Console.WriteLine($"TIME={await client.ReadTimeAsync("IN1.tDelay")}");
+    Console.WriteLine($"LTIME={await client.ReadLTimeAsync("IN1.lTimeValue")}");
+    Console.WriteLine($"TOD={await client.ReadTimeOfDayAsync("IN1.todValue")}");
+    Console.WriteLine($"DATE={await client.ReadDateAsync("IN1.dateValue")}");
+    Console.WriteLine($"DT={await client.ReadDateTimeAsync("IN1.dateTimeValue")}");
+
+    int[] original = await client.ReadArrayAsync<int>("IN1.aValues", 5);
+    Console.WriteLine($"数组：{string.Join(", ", original)}");
+    if (enableWriteTest)
+    {
+        try
+        {
+            int[] expected = { 10, 20, 30, 40, 50 };
+            await client.WriteArrayAsync("IN1.aValues", expected);
+            int[] actual = await client.ReadArrayAsync<int>("IN1.aValues", 5);
+            if (!expected.SequenceEqual(actual))
+                throw new InvalidOperationException("数组读回不一致，请检查 PLC 是否同时写入该变量。");
+            Console.WriteLine("数组写入及读回验证通过。");
+        }
+        finally
+        {
+            await client.WriteArrayAsync("IN1.aValues", original);
+        }
+    }
+}
+finally
+{
+    if (client.IsConnected)
+        await client.DisconnectAsync();
+}
+```
+
+数组 `length = 5` 表示元素数量，不是字节数或最后一个索引。`WriteArrayAsync` 的数组类型和长度需匹配 PLC 声明。恢复写入在断线时仍可能失败；`finally` 是恢复尝试，不是事务回滚。
+
+运行前将下面的示例 AMS Net ID 替换为实际目标：
+
+```powershell
+$env:ADS_TARGET_AMS_NET_ID = "192.168.1.90.1.1"
+dotnet run --project samples/AdsConsole/AdsConsole.csproj -c Release
+# 确认数组是可写测试变量后，单独执行：
+dotnet run --project samples/AdsConsole/AdsConsole.csproj -c Release -- --write-test
+```
+
+其他类型的写入可按下列方式放进业务代码或显式测试开关内。数值后缀/转换用于确定 CLR 类型；字符串和时间类型使用专用入口：
+
+```csharp
+await client.WriteAsync("IN1.sintValue", (sbyte)-10);
+await client.WriteAsync("IN1.lintValue", 100L);
+await client.WriteAsync("IN1.ulintValue", 200UL);
+await client.WriteValueAsync("IN1.charValue", DataType.Char, 'B');
+await client.WriteWStringAsync("IN1.wsStatus", "运行中", 80);
+await client.WriteAsync("IN1.tDelay", TimeSpan.FromMilliseconds(800));
+await client.WriteLTimeAsync("IN1.lTimeValue", TimeSpan.FromMilliseconds(1200));
+await client.WriteTimeOfDayAsync("IN1.todValue", new TimeSpan(14, 30, 0));
+await client.WriteDateAsync("IN1.dateValue", DateTimeOffset.UtcNow);
+await client.WriteDateTimeAsync("IN1.dateTimeValue", DateTimeOffset.UtcNow);
+```
+
+#### 常见问题与验证范围
+
+| 现象 | 检查顺序 |
+| --- | --- |
+| 项目引用找不到 | 打开 csproj，确认 ProjectReference 相对于该 csproj 的目录确实存在 |
+| 连接或读状态失败 | 核对目标 AMS Net ID、Runtime 端口、Router 是否运行、双向路由及防火墙 |
+| 状态可读但符号不存在 | 使用 PLC 实际导出的完整符号路径；`IN1.*` 与 `MAIN.*` 不能混用 |
+| 数值异常或类型/长度错误 | 对照 PLC 声明检查整数位宽、REAL/LREAL、字符串容量、数组维度 |
+| 数组写入后读回不同 | 检查 PLC 周期逻辑是否覆盖数组，以及是否有其他客户端在写入 |
+| 读取失败时程序直接结束 | 顺序 await 遇异常即退出，并执行 finally；强类型读取会检查质量并抛异常，需要逐点容错时自行分组捕获 |
+
+本节示例按当前 SDK 源码核对并进行编译验证；不表示已连接读者的 PLC 或验证其符号声明。仓库现有 ADS 显式集成测试使用 `MAIN.*`，不能直接用来验收这里的 `IN1.*` 点表。参考项目中的本机地址与目录不作为部署默认值。
+
 ## MQTT
 
 ```csharp

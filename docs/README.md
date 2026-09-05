@@ -8,6 +8,7 @@
 | --- | --- |
 | 了解模块边界、命名空间、配置和运行时 | [架构与配置](architecture.md) |
 | 复制单协议 Options + Client 示例 | [协议参考](protocols.md) |
+| 从控制台接入 ADS，读取基础类型、字符串、时间和数组 | [ADS 控制台实战](protocols.md#ads-控制台实战) |
 | 接入 SQL Server 或 MySQL 历史库 | [历史存储](storage.md) |
 | 接入 MES、HTTP、MQTT Broker、WebSocket、FTP | [集成能力](integrations.md) |
 | 在没有实体 PLC 时验证 S7 Demo | [Snap7Server 本地虚拟 PLC](snap7-server.md) |
