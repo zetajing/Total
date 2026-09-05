@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
@@ -14,6 +15,25 @@ namespace InduLink.Tests
     [TestFixture]
     public sealed class PollingAndTimeoutStabilityTests
     {
+        [Test]
+        public async Task Polling_PreservesCaseSensitiveAddressesAndMergesExactDuplicates()
+        {
+            using (var scheduler = new PollingScheduler())
+            using (var client = new PollingClient("case-device"))
+            {
+                var received = new TaskCompletionSource<SubscriptionEvent>(TaskCreationOptions.RunContinuationsAsynchronously);
+                var addresses = new[] { "Line/Speed", "line/speed", "Line/Speed" };
+                var request = new SubscriptionRequest("case-subscription", client.DeviceId,
+                    addresses.Select(address => new ReadRequest(client.DeviceId, address, DataType.Int16, 1)).ToArray(),
+                    TimeSpan.FromSeconds(10), false);
+                await scheduler.SubscribeAsync(client, request,
+                    (sender, args) => received.TrySetResult(args), CancellationToken.None);
+                await CompletesWithin(received.Task, 2000);
+                CollectionAssert.AreEqual(addresses, received.Task.Result.Values.Select(value => value.Address).ToArray());
+                Assert.AreSame(received.Task.Result.Values[0], received.Task.Result.Values[2]);
+            }
+        }
+
         [Test]
         public async Task PollingWake_AfterTimedWait_IsNotConsumedByAnOldWaiter()
         {

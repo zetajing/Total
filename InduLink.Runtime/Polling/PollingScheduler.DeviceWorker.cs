@@ -176,7 +176,8 @@ namespace InduLink.Runtime.Polling
                 DateTimeOffset now)
             {
                 var mergedRequests = new List<ReadRequest>();
-                var requestIndexes = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+                // Addresses can be case-sensitive (for example MQTT topics and Redis keys).
+                var requestIndexes = new Dictionary<string, int>(StringComparer.Ordinal);
 
                 foreach (var registration in due)
                 {
@@ -256,7 +257,7 @@ namespace InduLink.Runtime.Polling
 
             private async Task<Dictionary<string, DataValue>> ExecutePollingReadsAsync(IReadOnlyList<ReadRequest> mergedRequests)
             {
-                var valuesByKey = new Dictionary<string, DataValue>(StringComparer.OrdinalIgnoreCase);
+                var valuesByKey = new Dictionary<string, DataValue>(StringComparer.Ordinal);
                 var batches = CreatePollingReadBatches(mergedRequests);
 
                 for (var i = 0; i < batches.Count; i++)
