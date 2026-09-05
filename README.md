@@ -105,4 +105,5 @@ using (var host = sdk.CreateDeviceHost(config, "Config"))
 - 数据库故障不应阻塞 PLC 实时通信；缓冲队列有界，满载时会记录丢弃计数。
 - 密码和 API Key 不应提交到源码或普通配置；生产环境接入受保护的凭据来源。
 - 当前目标为 .NET 8；WPF/WinForms 应用使用 Windows 专用目标框架，Snap7Server 保持 x86 sidecar。
+- Runtime 中的 `DpapiSecretStore` 仅支持 Windows，非 Windows 环境在构造时明确报错；其他平台应提供自己的 `ISecretStore` 实现，详见 [平台和密钥存储](docs/engineering-notes.md#平台和密钥存储)。
 - 本地构建/测试通过不等于真实 PLC、数据库、Broker 或 FTP 现场验收通过；现场集成需单独安排。

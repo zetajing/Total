@@ -2,19 +2,22 @@
 
 本文把原先分散在“可靠性更新、协议审查、核心扩展设计、后续修改意见”中的内容收敛为一份维护记录。这里区分当前设计、验证边界和后续建议；历史提交号不固化在文档中，当前分支和代码状态以 Git 为准。
 
-## 状态快照（0.x 内部迭代，2026-08-11）
+## 状态快照（0.x 内部迭代，2026-09-05）
 
 ### 已完成
 
-- `[0.x]` Modbus TCP/RTU、S7、MC、OPC UA、MQTT、Redis 客户端和统一 `IIndustrialClient` 入口。
+- `[0.x]` .NET 8 模块化 SDK，包含 Modbus TCP/RTU、S7、MC、ADS、OPC UA、MQTT、Redis 客户端和统一 `IIndustrialClient` 入口。
 - `[0.x]` 协议能力模型、轮询拆批、配置模板与 JSON Schema 校验。
 - `[0.x]` S7/MC 连续区协议级批量读取：同一存储区一次读取连续字节/字或位设备，再按请求分别解码；批量写入仍保持逐项执行。
 - `[0.x]` 基础连接生命周期、超时、重连、健康状态、诊断快照和 Demo 验证页面。
 
-### 进行中
+- `[0.x]` GitHub Actions 已配置全解决方案 restore、Release build/test 和测试结果上传；当前触发条件为 `master` 推送、目标为 `master` 的 PR 或手动运行，未配置独立 SDK-only 作业。
+- `[0.x]` 已提供 x86 Snap7 仿真 Server，以及需显式启用的 ADS 虚拟 PLC 集成测试。
 
-- `[下一次 0.x]` GitHub Actions、SDK-only 构建、Release 测试门禁和 NuGet 版本元数据。
-- `[下一次 0.x]` S7 仿真 Server、MC 黄金报文、OPC UA 证书和数据库容器集成测试。
+### 尚待完善
+
+- `[下一次 0.x]` 独立 SDK-only 构建作业和 NuGet 版本元数据；PR 必需检查仍需在仓库分支保护中配置。
+- `[下一次 0.x]` S7 仿真自动化回归、MC 黄金报文、OPC UA 证书和数据库容器集成测试。
 - `[下一次 0.x]` 统一设备协议密钥引用，逐步从明文 `Password` 迁移到 DPAPI `ISecretStore`。
 
 ### 待办
@@ -60,6 +63,12 @@
 - 每个客户端串行化核心操作，避免同一 TCP/串口连接上的请求响应错位。
 - TCP 使用连接代际隔离旧连接错误；断线、重连、分帧失败会清理对应残帧，排队接收取消不会破坏活动接收的半帧。
 
+### 平台和密钥存储
+
+- Runtime 保持 `net8.0`；目标框架不代表其中每个实现都支持所有操作系统。WPF/WinForms 使用 `net8.0-windows`。
+- `DpapiSecretStore` 标注为仅支持 Windows，非 Windows 环境在构造时抛出 `PlatformNotSupportedException`，在访问密钥文件前明确失败。面向通用 `net8.0` 的调用方应先使用 `OperatingSystem.IsWindows()` 判断平台。
+- DPAPI 使用 `CurrentUser` 保护数据，密钥文件不应视为可跨用户、跨机器迁移的凭据格式。其他操作系统通过 `ISecretStore` 接入适合部署环境的密钥实现；SDK 不自动降级为明文存储。
+
 ### 轮询和 Host
 
 - 同一设备/客户端使用一个 Worker 合并重复点位，轮询按固定计划推进，减少“读取耗时 + 间隔”造成的漂移。
@@ -101,7 +110,7 @@
 
 ### P0：质量门禁
 
-- 增加 GitHub Actions，至少覆盖 restore、SDK、Demo、全解决方案 build/test，并上传构建结果。
+- 在现有 GitHub Actions 全解决方案构建、测试及测试结果上传基础上，补充独立 SDK-only 作业，并按团队分支策略配置触发范围与 PR 必需检查。
 - 明确 SemVer、CHANGELOG、NuGet 元数据、包级兼容性和协议兼容矩阵。
 - 让文档、示例和配置 schema 在 API 变更时成为同一检查项。
 
@@ -114,7 +123,7 @@
 
 ### P2：测试和可观测性
 
-- Modbus 增加本地 loopback server；S7 引入 Snap7/仿真 Server；MC 增加帧和响应黄金样本。
+- Modbus 完善本地 loopback 覆盖；S7 将现有 Snap7 仿真 Server 纳入自动化回归；MC 增加帧和响应黄金样本。
 - 增加可选真实数据库集成测试，覆盖建表、事务回滚、时区往返和取消。
 - 评估 `IndustrialClientMetrics`、`PollingMetrics`、`TransportMetrics`、`StorageMetrics`，记录成功率、超时、延迟、连续失败、轮询周期和批量节省数。
 - 统一事件 ID，并提供脱敏诊断包；诊断包必须移除 Host、账号、连接字符串、密码和 API Key。

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Runtime.Versioning;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
@@ -17,7 +18,8 @@ namespace InduLink.Runtime.Security
         bool Remove(string name);
     }
 
-    /// <summary>使用 Windows DPAPI CurrentUser 保护每个敏感值的本地文件存储。</summary>
+    /// <summary>仅支持 Windows，使用 DPAPI CurrentUser 保护每个敏感值的本地文件存储。</summary>
+    [SupportedOSPlatform("windows")]
     public sealed class DpapiSecretStore : ISecretStore, IDisposable
     {
         private static readonly byte[] FileHeader = { (byte)'I', (byte)'C', (byte)'S', 1 };
@@ -28,6 +30,8 @@ namespace InduLink.Runtime.Security
 
         public DpapiSecretStore(string directory, byte[] optionalEntropy = null)
         {
+            if (!OperatingSystem.IsWindows())
+                throw new PlatformNotSupportedException("DpapiSecretStore requires Windows DPAPI. Use a platform-appropriate ISecretStore implementation on other operating systems.");
             if (string.IsNullOrWhiteSpace(directory)) throw new ArgumentException("Secret directory cannot be empty.", nameof(directory));
             _directory = Path.GetFullPath(directory);
             _optionalEntropy = optionalEntropy == null ? null : (byte[])optionalEntropy.Clone();
