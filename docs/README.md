@@ -9,6 +9,7 @@
 | 了解模块边界、命名空间、配置和运行时 | [架构与配置](architecture.md) |
 | 复制单协议 Options + Client 示例 | [协议参考](protocols.md) |
 | 从控制台接入 ADS，读取基础类型、字符串、时间和数组 | [ADS 控制台实战](protocols.md#ads-控制台实战) |
+| 从控制台接入 Modbus TCP/RTU、S7、MC、OPC UA、MQTT、Redis | [其他协议控制台实战](protocol-console.md) |
 | 接入 SQL Server 或 MySQL 历史库 | [历史存储](storage.md) |
 | 接入 MES、HTTP、MQTT Broker、WebSocket、FTP | [集成能力](integrations.md) |
 | 在没有实体 PLC 时验证 S7 Demo | [Snap7Server 本地虚拟 PLC](snap7-server.md) |
@@ -25,5 +26,6 @@
 - 根目录 README 只保留项目定位、快速开始和入口链接。
 - `architecture.md` 记录当前设计，不记录易过期的 Git 提交号。
 - `protocols.md` 和 `storage.md` 以可复制示例为主；示例地址、账号和密码都是占位值。
+- `protocol-console.md` 提供其他协议的完整控制台入口、类型对照和排错，配合 `protocols.md` 的能力与配置说明使用。
 - `engineering-notes.md` 区分“已完成”“待验证”和“后续建议”，避免把历史建议误读为当前功能。
 - 代码、配置和现场观察优先于文档中的旧示例；当公开 API 变化时，先更新主题文档再更新入口。

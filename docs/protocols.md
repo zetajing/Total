@@ -2,6 +2,8 @@
 
 本页集中收录所有 canonical 协议键的直接客户端示例。示例使用当前的 `Options + Client` API，不依赖已删除的静态工厂或 `SimpleClient`。
 
+从新建控制台开始接入时，可直接使用 [Modbus TCP/RTU、S7、MC、OPC UA、MQTT、Redis 完整实战](protocol-console.md)；[ADS 完整实战](#ads-控制台实战)见本页对应章节。完整实战默认只读，写入需要显式开启。
+
 | canonical key | 客户端 | 直接引用的程序集 |
 | --- | --- | --- |
 | `modbus-tcp` | `ModbusTcpClient` | `InduLink.Protocols.Modbus` |

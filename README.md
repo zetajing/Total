@@ -88,6 +88,7 @@ using (var host = sdk.CreateDeviceHost(config, "Config"))
 
 - [入门、选择引用方式和排错](docs/architecture.md#使用路线)
 - [协议最小示例与现场注意事项](docs/protocols.md)
+- [其他协议完整控制台示例、类型对照与排错](docs/protocol-console.md)
 - [SQL Server/MySQL 历史存储](docs/storage.md)
 - [MES、Web、MQTT Broker、WebSocket、FTP/FTPS](docs/integrations.md)
 - [可靠性、审查结论、验证边界和路线图](docs/engineering-notes.md)
