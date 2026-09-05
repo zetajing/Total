@@ -120,7 +120,7 @@ namespace InduLink.Protocols.Ads
         {
             cancellationToken.ThrowIfCancellationRequested();
             var existing = GetClientSnapshot();
-            if (existing != null && existing.IsConnected) return;
+            if (existing != null && existing.IsConnected && Volatile.Read(ref _transportLost) == 0) return;
 
             BeckhoffAdsClient client = null;
             try
@@ -773,6 +773,10 @@ namespace InduLink.Protocols.Ads
 
         private void OnAdsNotification(object sender, AdsNotificationExEventArgs eventArgs)
         {
+            lock (_clientSync)
+            {
+                if (!ReferenceEquals(sender, _adsClient) || _transportLost != 0) return;
+            }
             NotificationBinding binding;
             lock (_notificationSync)
             {
@@ -807,15 +811,19 @@ namespace InduLink.Protocols.Ads
         private void OnConnectionStateChanged(object sender, ConnectionStateChangedEventArgs eventArgs)
         {
             var connected = eventArgs.NewState == ConnectionState.Connected;
-            Interlocked.Exchange(ref _transportLost, connected ? 0 : 1);
+            lock (_clientSync)
+            {
+                // Ignore events from a retired client. A transport Connected event does not
+                // restore logical subscriptions; only ConnectCoreAsync can clear the loss.
+                if (!ReferenceEquals(sender, _adsClient)) return;
+                if (!connected)
+                {
+                    _transportLost = 1;
+                    lock (_notificationSync) { _notificationBindings.Clear(); }
+                }
+            }
             if (!connected)
             {
-                lock (_notificationSync)
-                {
-                    // Notification handles belong to the old ADS connection.
-                    // Ignore late events until the logical subscriptions are restored.
-                    _notificationBindings.Clear();
-                }
                 var detail = eventArgs.Exception == null ? string.Empty : " | " + eventArgs.Exception.Message;
                 Logger.Warn("ADS connection state changed to " + eventArgs.NewState + detail);
             }
@@ -894,8 +902,11 @@ namespace InduLink.Protocols.Ads
         {
             lock (_clientSync)
             {
-                if (ReferenceEquals(_adsClient, client)) _adsClient = null;
-                _transportLost = 1;
+                if (ReferenceEquals(_adsClient, client))
+                {
+                    _adsClient = null;
+                    _transportLost = 1;
+                }
             }
             try { client.ConnectionStateChanged -= _connectionStateHandler; } catch { }
             try { client.AdsNotificationEx -= _notificationHandler; } catch { }

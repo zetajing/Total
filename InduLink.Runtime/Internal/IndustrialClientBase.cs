@@ -239,7 +239,7 @@ namespace InduLink.Runtime
                         if (cancelled != null && cancellationToken.IsCancellationRequested &&
                             RetainOperationLockUntilCoreCompletes(coreTask, "write"))
                             releaseOperationLock = false;
-                        var reported = cancelled == null && IsWriteOutcomeUncertain(ex)
+                        var reported = (cancelled != null && coreTask != null) || (cancelled == null && IsWriteOutcomeUncertain(ex))
                             ? new IndustrialWriteUncertainException(
                                 "Industrial write outcome is unknown; the write was not replayed.", ex)
                             : ex;
@@ -294,7 +294,7 @@ namespace InduLink.Runtime
                         if (cancelled != null && cancellationToken.IsCancellationRequested &&
                             RetainOperationLockUntilCoreCompletes(coreTask, "batch write"))
                             releaseOperationLock = false;
-                        var reported = cancelled == null && IsWriteOutcomeUncertain(ex)
+                        var reported = (cancelled != null && coreTask != null) || (cancelled == null && IsWriteOutcomeUncertain(ex))
                             ? new IndustrialWriteUncertainException(
                                 "Industrial batch write outcome is unknown; the writes were not replayed.", ex)
                             : ex;

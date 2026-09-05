@@ -303,7 +303,7 @@ namespace InduLink.Protocols.S7
             CancellationToken cancellationToken = default(CancellationToken)) where T : class, new()
         {
             ValidateDbBlockArguments(dbNumber, startByteAddress);
-            return ExecuteExclusiveAsync(token => ExecuteWithReconnectAsync(async inner =>
+            return ExecuteDbOperationAsync(token => ExecuteWithReconnectAsync(async inner =>
             {
                 var value = await _plc.ReadClassAsync<T>(dbNumber, startByteAddress, inner).ConfigureAwait(false);
                 if (value == null) throw new IndustrialProtocolException("S7 DB class read returned no data.");
@@ -328,7 +328,7 @@ namespace InduLink.Protocols.S7
         {
             ValidateDbBlockArguments(dbNumber, startByteAddress);
             S7StringCodec.ValidateReservedLength(reservedLength);
-            return ExecuteExclusiveAsync(token => ExecuteWithReconnectAsync(async inner =>
+            return ExecuteDbOperationAsync(token => ExecuteWithReconnectAsync(async inner =>
             {
                 var bytes = await _plc.ReadBytesAsync(
                     PlcArea.DataBlock,
@@ -371,7 +371,7 @@ namespace InduLink.Protocols.S7
         {
             if (factory == null) throw new ArgumentNullException(nameof(factory));
             ValidateDbBlockArguments(dbNumber, startByteAddress);
-            return ExecuteExclusiveAsync(token => ExecuteWithReconnectAsync(async inner =>
+            return ExecuteDbOperationAsync(token => ExecuteWithReconnectAsync(async inner =>
             {
                 var value = await _plc.ReadClassAsync(factory, dbNumber, startByteAddress, inner).ConfigureAwait(false);
                 if (value == null) throw new IndustrialProtocolException("S7 DB class read returned no data.");
@@ -384,7 +384,7 @@ namespace InduLink.Protocols.S7
         {
             if (instance == null) throw new ArgumentNullException(nameof(instance));
             ValidateDbBlockArguments(dbNumber, startByteAddress);
-            return ExecuteExclusiveAsync(token => ExecuteWithReconnectAsync(async inner =>
+            return ExecuteDbOperationAsync(token => ExecuteWithReconnectAsync(async inner =>
             {
                 var result = await _plc.ReadClassAsync(instance, dbNumber, startByteAddress, inner).ConfigureAwait(false);
                 return result.Item1;
@@ -396,11 +396,26 @@ namespace InduLink.Protocols.S7
         {
             if (value == null) throw new ArgumentNullException(nameof(value));
             ValidateDbBlockArguments(dbNumber, startByteAddress);
-            return ExecuteExclusiveAsync(token => ExecuteWithReconnectAsync(async inner =>
+            return ExecuteDbOperationAsync(token => ExecuteWithReconnectAsync(async inner =>
             {
                 await _plc.WriteClassAsync(value, dbNumber, startByteAddress, inner).ConfigureAwait(false);
                 return true;
             }, token, _options.AutoReconnectWrites, true), cancellationToken);
+        }
+
+        private Task<T> ExecuteDbOperationAsync<T>(Func<CancellationToken, Task<T>> operation, CancellationToken cancellationToken)
+        {
+            return ExecuteExclusiveAsync(async callerToken =>
+            {
+                using var timeout = new CancellationTokenSource(_options.OperationTimeoutMilliseconds);
+                using var linked = CancellationTokenSource.CreateLinkedTokenSource(callerToken, timeout.Token);
+                try { return await operation(linked.Token).ConfigureAwait(false); }
+                catch (OperationCanceledException) when (!callerToken.IsCancellationRequested && timeout.IsCancellationRequested)
+                {
+                    ClosePlc();
+                    throw new IndustrialTimeoutException("S7 DB operation timed out.");
+                }
+            }, cancellationToken);
         }
 
         protected override void DisposeCore()

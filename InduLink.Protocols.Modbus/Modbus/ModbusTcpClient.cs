@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Net.Sockets;
 using System.Threading;
 using System.Threading.Tasks;
@@ -165,21 +166,47 @@ namespace InduLink.Protocols.Modbus
 
         protected override void OnOperationTimeout() { DisconnectInternal(); }
 
+        protected override Task<DataValue> ReadCoreAsync(ReadRequest request, CancellationToken cancellationToken)
+            => ExecuteWithTransportCancellationAsync(token => base.ReadCoreAsync(request, token), cancellationToken);
+
+        protected override Task<BatchReadResult> ReadManyCoreAsync(IReadOnlyCollection<ReadRequest> requests, CancellationToken cancellationToken)
+            => ExecuteWithTransportCancellationAsync(token => base.ReadManyCoreAsync(requests, token), cancellationToken);
+
+        protected override Task WriteCoreAsync(WriteRequest request, CancellationToken cancellationToken)
+            => ExecuteWithTransportCancellationAsync(async token =>
+            {
+                await base.WriteCoreAsync(request, token).ConfigureAwait(false);
+                return true;
+            }, cancellationToken);
+
+        private async Task<T> ExecuteWithTransportCancellationAsync<T>(Func<CancellationToken, Task<T>> operation, CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            // NModbus async I/O has no CancellationToken. Close only this transaction's
+            // socket so its pending receive completes before the operation lock is released.
+            var transport = _tcpClient;
+            using var registration = cancellationToken.Register(() => transport?.Close());
+            try
+            {
+                return await operation(cancellationToken).ConfigureAwait(false);
+            }
+            catch (IndustrialWriteUncertainException) { throw; }
+            catch (Exception) when (cancellationToken.IsCancellationRequested)
+            {
+                throw new OperationCanceledException(cancellationToken);
+            }
+        }
+
         /// <summary>
         /// 断开底层 TCP 连接并释放 Modbus 主站和 TCP 客户端的资源。
         /// </summary>
         private void DisconnectInternal()
         {
-            if (_master != null)
-            {
-                _master.Dispose();
-                _master = null;
-            }
-            if (_tcpClient != null)
-            {
-                _tcpClient.Close();
-                _tcpClient = null;
-            }
+            var transport = Interlocked.Exchange(ref _tcpClient, null);
+            var master = Interlocked.Exchange(ref _master, null);
+            // Unblock outstanding socket I/O before disposing the transport wrapper.
+            try { transport?.Close(); }
+            finally { master?.Dispose(); }
         }
     }
 }

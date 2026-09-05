@@ -13,6 +13,22 @@ namespace InduLink.Tests
     [TestFixture]
     public sealed class TimeoutAndDiagnosticsTests
     {
+        [TestCase(false)]
+        [TestCase(true)]
+        public void WriteCancelledBeforeDispatch_RemainsCancellation(bool batch)
+        {
+            using var client = new DelayedClient(500, 10);
+            using var cancellation = new CancellationTokenSource();
+            cancellation.Cancel();
+            var request = new WriteRequest(client.DeviceId, "A", DataType.Int16, (short)1);
+            Assert.CatchAsync<OperationCanceledException>(async () =>
+            {
+                if (batch) await client.WriteManyAsync(new[] { request }, cancellation.Token);
+                else await client.WriteAsync(request, cancellation.Token);
+            });
+            Assert.AreEqual(0, client.GetDiagnosticSnapshot().TotalOperations);
+        }
+
         [Test]
         public async Task DefaultTimeout_ReturnsBadValueAndUpdatesDiagnostics()
         {

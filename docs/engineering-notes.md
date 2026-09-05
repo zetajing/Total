@@ -55,6 +55,19 @@
 
 ## 可靠性设计
 
+### S7、ADS、Modbus TCP 第一轮收敛（2026-09-05）
+
+- S7：`ReadDbStringAsync`、各 `ReadDbClassAsync` 重载和 `WriteDbClassAsync` 使用 `OperationTimeoutMilliseconds`，超时预算覆盖该次操作及其内部重连；读取超时抛 `IndustrialTimeoutException`。写入仍遵循原有默认不重放及结果不确定语义。
+- ADS：保持 Beckhoff.TwinCAT.Ads 7.0.317。旧客户端连接事件、通知和释放不应改变新客户端状态；发生连接丢失后，仅有底层 Connected 事件不足以恢复 SDK 可用状态，需要重新执行 `ConnectAsync` 的连接及订阅安装流程。DeviceHost 可通过既有重连循环执行；直接客户端由调用方安排重连。订阅恢复的实机结果仍需单独验收。
+- Modbus TCP：NModbus 异步 I/O 不接收取消令牌，SDK 在在途事务取消时关闭该事务的 socket，使底层等待结束，允许后续断开/重连；清理时先关闭 socket，再释放主站对象。RTU 行为未改动。
+- 公共写入入口：进入底层写入后的取消保守报告 `IndustrialWriteUncertainException`，包括批量写入；在排队/开始前取消仍是 `OperationCanceledException`。结果不确定不能作为自动重放写入的依据。这是调用方需要注意的异常行为变更。
+
+本轮新增 13 项回归：S7 默认超时及取消边界、ADS 旧事件/旧客户端释放隔离、Modbus TCP 单点/批量读写取消后重连读回，以及写入开始前取消。Release 全解决方案构建通过；测试汇总 297 项通过、0 项失败、1 项跳过，ADS 显式虚拟 PLC 测试未执行。
+
+验证边界：S7 测试注入已建立的 S7.Net TCP 传输，不覆盖握手和真实 PLC；ADS 使用事件注入测试，不覆盖 Router/PLC 重启及程序下载；Modbus 使用本地 TCP 服务验证真实请求和响应。24 小时持续运行、现场断网恢复和 ADS 符号变更仍待验收，不应据此宣称整个稳定性计划已完成。
+
+参考入口：[S7NetPlus 测试说明](https://github.com/S7NetPlus/s7netplus)、[Beckhoff 官方 ADS .NET 示例](https://github.com/Beckhoff/TF6000_ADS_DOTNET_V5_Samples)、[NModbus 传输接口](https://nmodbus.github.io/api/NModbus.IModbusTransport.html)。官方示例与本地依赖可能不同版本，实际代码以当前依赖 API 为准。
+
 ### 客户端和连接
 
 - 单点和批量操作使用一致的请求级/默认超时策略；批量请求校验 DeviceId，空批量直接完成。
