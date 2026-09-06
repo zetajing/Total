@@ -185,15 +185,24 @@ namespace InduLink.Protocols.Modbus
             // NModbus async I/O has no CancellationToken. Close only this transaction's
             // socket so its pending receive completes before the operation lock is released.
             var transport = _tcpClient;
-            using var registration = cancellationToken.Register(() => transport?.Close());
+            var registration = cancellationToken.Register(() => transport?.Close());
             try
             {
-                return await operation(cancellationToken).ConfigureAwait(false);
+                var result = await operation(cancellationToken).ConfigureAwait(false);
+                // Dispose waits for an in-flight cancellation callback. Checking the token
+                // afterwards prevents returning success when that callback closed the socket.
+                registration.Dispose();
+                cancellationToken.ThrowIfCancellationRequested();
+                return result;
             }
             catch (IndustrialWriteUncertainException) { throw; }
             catch (Exception) when (cancellationToken.IsCancellationRequested)
             {
                 throw new OperationCanceledException(cancellationToken);
+            }
+            finally
+            {
+                registration.Dispose();
             }
         }
 
