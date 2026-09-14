@@ -6,20 +6,20 @@ using InduLink.Web.WebSockets;
 
 namespace InduLink.Web.Gateway
 {
-    public interface IIndustrialWebGateway : IDisposable
+    public interface IInduLinkWebGateway : IDisposable
     {
-        IndustrialWebGatewayOptions Options { get; }
+        InduLinkWebGatewayOptions Options { get; }
         bool IsRunning { get; }
         IReadOnlyCollection<WebSocketSessionInfo> WebSocketSessions { get; }
-        event EventHandler<IndustrialWebRequestEventArgs> RequestCompleted;
+        event EventHandler<InduLinkWebRequestEventArgs> RequestCompleted;
         Task StartAsync(CancellationToken cancellationToken);
         Task StopAsync(CancellationToken cancellationToken);
     }
 
     /// <summary>不包含认证头或请求正文的脱敏 Web 请求审计事件。</summary>
-    public sealed class IndustrialWebRequestEventArgs : EventArgs
+    public sealed class InduLinkWebRequestEventArgs : EventArgs
     {
-        internal IndustrialWebRequestEventArgs(string method, string path, int statusCode, string remoteEndpoint, DateTimeOffset timestampUtc)
+        internal InduLinkWebRequestEventArgs(string method, string path, int statusCode, string remoteEndpoint, DateTimeOffset timestampUtc)
         {
             Method = method;
             Path = path;

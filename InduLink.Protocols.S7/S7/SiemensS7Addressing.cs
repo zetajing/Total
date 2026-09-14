@@ -13,7 +13,7 @@ namespace InduLink.Protocols.S7
         Output,
     }
 
-    public sealed class S7Address : IIndustrialAddress
+    public sealed class S7Address : IInduLinkAddress
     {
         public S7Address(S7Area area, int dbNumber, int byteOffset, int bitOffset, string normalized, string original = null)
         {
@@ -34,9 +34,9 @@ namespace InduLink.Protocols.S7
         public string Normalized { get; private set; }
         public bool IsBitAddress { get { return BitOffset >= 0; } }
 
-        string IIndustrialAddress.Area { get { return Area.ToString(); } }
-        int IIndustrialAddress.Offset { get { return ByteOffset; } }
-        int? IIndustrialAddress.Bit { get { return IsBitAddress ? (int?)BitOffset : null; } }
+        string IInduLinkAddress.Area { get { return Area.ToString(); } }
+        int IInduLinkAddress.Offset { get { return ByteOffset; } }
+        int? IInduLinkAddress.Bit { get { return IsBitAddress ? (int?)BitOffset : null; } }
 
         public override string ToString() { return Normalized; }
     }
@@ -55,7 +55,7 @@ namespace InduLink.Protocols.S7
 
         public S7Address ParseTyped(string address)
         {
-            if (string.IsNullOrWhiteSpace(address)) throw new IndustrialAddressParseException("S7 address is required.");
+            if (string.IsNullOrWhiteSpace(address)) throw new InduLinkAddressParseException("S7 address is required.");
             var input = NormalizeAddress(address);
             var dbMatch = DbRegex.Match(input);
             if (dbMatch.Success)
@@ -64,7 +64,7 @@ namespace InduLink.Protocols.S7
                 var bit = ParseBit(dbMatch.Groups["bit"].Value);
                 ValidateBitUsage(type, bit, input);
                 var dbNumber = ParseNonNegative(dbMatch.Groups["db"].Value, "DB number");
-                if (dbNumber <= 0) throw new IndustrialAddressParseException("S7 DB number must be greater than zero.");
+                if (dbNumber <= 0) throw new InduLinkAddressParseException("S7 DB number must be greater than zero.");
                 return new S7Address(S7Area.Db, dbNumber,
                     ParseNonNegative(dbMatch.Groups["offset"].Value, "byte offset"), bit, input, address);
             }
@@ -78,7 +78,7 @@ namespace InduLink.Protocols.S7
                 return new S7Address(ParseArea(areaMatch.Groups["area"].Value), 0,
                     ParseNonNegative(areaMatch.Groups["offset"].Value, "byte offset"), bit, input, address);
             }
-            throw new IndustrialAddressParseException("Unsupported S7 address: " + address);
+            throw new InduLinkAddressParseException("Unsupported S7 address: " + address);
         }
 
         private static string NormalizeAddress(string address)
@@ -93,7 +93,7 @@ namespace InduLink.Protocols.S7
         {
             int value;
             if (!int.TryParse(token, out value) || value < 0)
-                throw new IndustrialAddressParseException("Invalid S7 " + name + ": " + token);
+                throw new InduLinkAddressParseException("Invalid S7 " + name + ": " + token);
             return value;
         }
 
@@ -102,15 +102,15 @@ namespace InduLink.Protocols.S7
             if (string.IsNullOrWhiteSpace(token)) return -1;
             int bit;
             if (!int.TryParse(token, out bit) || bit < 0 || bit > 7)
-                throw new IndustrialAddressParseException("S7 bit offset must be in the range 0-7.");
+                throw new InduLinkAddressParseException("S7 bit offset must be in the range 0-7.");
             return bit;
         }
 
         private static void ValidateBitUsage(string type, int bit, string address)
         {
-            if (type == "X" && bit < 0) throw new IndustrialAddressParseException("S7 bit address requires a bit index: " + address);
+            if (type == "X" && bit < 0) throw new InduLinkAddressParseException("S7 bit address requires a bit index: " + address);
             if (!string.IsNullOrEmpty(type) && type != "X" && bit >= 0)
-                throw new IndustrialAddressParseException("Only S7 bit addresses may contain a bit index: " + address);
+                throw new InduLinkAddressParseException("Only S7 bit addresses may contain a bit index: " + address);
         }
 
         private static S7Area ParseArea(string token)
@@ -120,7 +120,7 @@ namespace InduLink.Protocols.S7
                 case "M": return S7Area.Memory;
                 case "I": return S7Area.Input;
                 case "Q": return S7Area.Output;
-                default: throw new IndustrialAddressParseException("Unsupported S7 area: " + token);
+                default: throw new InduLinkAddressParseException("Unsupported S7 area: " + token);
             }
         }
     }

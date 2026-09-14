@@ -21,9 +21,9 @@ namespace InduLink.Protocols.Ads
 {
     /// <summary>
     /// TwinCAT ADS 客户端。变量地址使用 PLC 符号名，例如 MAIN.xStart、MAIN.nCount 或 MAIN.ComplexStruct1。
-    /// 标量和字符串使用 SDK 的通用 IIndustrialClient API；结构体、数组和其它任意 CLR 类型使用 ReadAnyAsync/WriteAnyAsync。
+    /// 标量和字符串使用 SDK 的通用 IInduLinkClient API；结构体、数组和其它任意 CLR 类型使用 ReadAnyAsync/WriteAnyAsync。
     /// </summary>
-    public sealed class AdsClient : IndustrialClientBase, INativeSubscriptionClient, IRegisterClient, IEventSubscriptionClient
+    public sealed class AdsClient : InduLinkClientBase, INativeSubscriptionClient, IRegisterClient, IEventSubscriptionClient
     {
         private const string NativeSubscriptionPrefix = "ads:";
         private const string AnySubscriptionPrefix = "ads:any:";
@@ -48,14 +48,14 @@ namespace InduLink.Protocols.Ads
 
         public AdsClient(
             AdsClientOptions options,
-            IIndustrialLogger logger = null,
+            IInduLinkLogger logger = null,
             IPollingScheduler pollingScheduler = null,
             AdsAddressParser parser = null)
             : base(
                 GetDeviceId(options),
                 ProtocolKind.TwinCatAds,
                 pollingScheduler ?? new PollingScheduler(logger),
-                logger ?? NullIndustrialLogger.Instance,
+                logger ?? NullInduLinkLogger.Instance,
                 GetOperationTimeout(options))
         {
             if (options == null) throw new ArgumentNullException(nameof(options));
@@ -191,7 +191,7 @@ namespace InduLink.Protocols.Ads
             catch (Exception ex)
             {
                 await CloseClientAsync(client ?? GetClientSnapshot(), CancellationToken.None).ConfigureAwait(false);
-                throw new IndustrialConnectionException("Failed to connect TwinCAT ADS endpoint.", ex);
+                throw new InduLinkConnectionException("Failed to connect TwinCAT ADS endpoint.", ex);
             }
         }
 
@@ -375,7 +375,7 @@ namespace InduLink.Protocols.Ads
                     ? await client.ReadAnyAsync(handle, typeof(T), token).ConfigureAwait(false)
                     : await client.ReadAnyAsync(handle, typeof(T), effectiveArgs, token).ConfigureAwait(false);
                 EnsureSucceeded(result, "ADS ReadAny '" + address.Normalized + "'");
-                if (result.Value == null) throw new IndustrialProtocolException("ADS ReadAny returned no value.");
+                if (result.Value == null) throw new InduLinkProtocolException("ADS ReadAny returned no value.");
                 return (T)result.Value;
             }, cancellationToken).ConfigureAwait(false);
         }
@@ -606,7 +606,7 @@ namespace InduLink.Protocols.Ads
             CancellationToken cancellationToken)
         {
             if (args == null || args.Length != 1 || args[0] <= 0)
-                throw new IndustrialDataConversionException("ADS string length must be greater than zero.");
+                throw new InduLinkDataConversionException("ADS string length must be greater than zero.");
 
             var result = await client.ReadAnyStringAsync(handle, args[0], encoding, cancellationToken).ConfigureAwait(false);
             EnsureSucceeded(result, "ADS read '" + address + "'");
@@ -676,7 +676,7 @@ namespace InduLink.Protocols.Ads
             if (request.DataType == DataType.String || request.DataType == DataType.WString)
             {
                 if (args == null || args.Length != 1 || args[0] <= 0)
-                    throw new IndustrialDataConversionException("ADS string length must be greater than zero.");
+                    throw new InduLinkDataConversionException("ADS string length must be greater than zero.");
 
                 var stringResult = await client.WriteAnyStringAsync(
                     handle,
@@ -917,7 +917,7 @@ namespace InduLink.Protocols.Ads
         {
             var client = GetClientSnapshot();
             if (client == null || !client.IsConnected || Volatile.Read(ref _transportLost) != 0)
-                throw new IndustrialConnectionException("TwinCAT ADS client is not connected.");
+                throw new InduLinkConnectionException("TwinCAT ADS client is not connected.");
             return client;
         }
 
@@ -1019,7 +1019,7 @@ namespace InduLink.Protocols.Ads
             EnsureSucceeded(symbolResult, "ADS read symbol '" + address + "'");
             if (symbolResult.Value == null || !(symbolResult.Value.DataType is IStringType stringType) || stringType.Length <= 0)
             {
-                throw new IndustrialProtocolException("ADS symbol '" + address + "' does not expose a valid PLC string length.");
+                throw new InduLinkProtocolException("ADS symbol '" + address + "' does not expose a valid PLC string length.");
             }
 
             return new AnyAccessOptions(args ?? new[] { stringType.Length }, stringType.Encoding);
@@ -1044,8 +1044,8 @@ namespace InduLink.Protocols.Ads
 
         private static void EnsureSucceeded(ResultAds result, string operation)
         {
-            if (result == null) throw new IndustrialProtocolException(operation + " returned no result.");
-            if (!result.Succeeded) throw new IndustrialProtocolException(operation + " failed: " + FormatAdsError(result.ErrorCode));
+            if (result == null) throw new InduLinkProtocolException(operation + " returned no result.");
+            if (!result.Succeeded) throw new InduLinkProtocolException(operation + " failed: " + FormatAdsError(result.ErrorCode));
         }
 
         private static string GetDeviceId(AdsClientOptions options)
@@ -1179,7 +1179,7 @@ namespace InduLink.Protocols.Ads
                 case DataType.LTime: return typeof(LTIME);
                 case DataType.ByteArray: return typeof(byte[]);
                 default:
-                    throw new IndustrialProtocolException("TwinCAT ADS does not map DataType " + dataType + "; use ReadAnyAsync/WriteAnyAsync for custom types.");
+                    throw new InduLinkProtocolException("TwinCAT ADS does not map DataType " + dataType + "; use ReadAnyAsync/WriteAnyAsync for custom types.");
             }
         }
 
@@ -1190,10 +1190,10 @@ namespace InduLink.Protocols.Ads
                 case DataType.String:
                 case DataType.WString:
                 case DataType.ByteArray:
-                    if (length == 0) throw new IndustrialDataConversionException("ADS string and byte-array lengths must be greater than zero.");
+                    if (length == 0) throw new InduLinkDataConversionException("ADS string and byte-array lengths must be greater than zero.");
                     return new[] { (int)length };
                 case DataType.S7String:
-                    throw new IndustrialProtocolException("S7String is not an ADS data type; use DataType.String with the PLC STRING length.");
+                    throw new InduLinkProtocolException("S7String is not an ADS data type; use DataType.String with the PLC STRING length.");
                 default:
                     return null;
             }
@@ -1296,10 +1296,10 @@ namespace InduLink.Protocols.Ads
                         throw new InvalidOperationException("Unreachable ADS data type branch.");
                 }
             }
-            catch (InduLinkunicationException) { throw; }
+            catch (InduLinkCommunicationException) { throw; }
             catch (Exception ex)
             {
-                throw new IndustrialDataConversionException("Cannot convert value to ADS " + dataType + ".", ex);
+                throw new InduLinkDataConversionException("Cannot convert value to ADS " + dataType + ".", ex);
             }
         }
 

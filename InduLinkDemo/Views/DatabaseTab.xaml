@@ -33,7 +33,7 @@
                     <TextBox x:Name="ConnectionStringTextBox" Grid.Row="2" Grid.Column="1" Margin="0,6"
                              Text="Server=localhost;Database=UpperComputerDb;Integrated Security=True;Encrypt=True;TrustServerCertificate=True;" />
                     <TextBlock Grid.Row="3" VerticalAlignment="Center" Text="历史表" />
-                    <TextBox x:Name="TableNameTextBox" Grid.Row="3" Grid.Column="1" Margin="0,6" Text="dbo.IndustrialDataHistory" />
+                    <TextBox x:Name="TableNameTextBox" Grid.Row="3" Grid.Column="1" Margin="0,6" Text="dbo.InduLinkDataHistory" />
                     <TextBlock Grid.Row="4" VerticalAlignment="Center" Text="自动记录" />
                     <CheckBox x:Name="EnabledCheckBox" Grid.Row="4" Grid.Column="1" Margin="0,10" VerticalAlignment="Center"
                               Focusable="False" IsHitTestVisible="False"

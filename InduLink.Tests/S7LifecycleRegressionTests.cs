@@ -21,7 +21,7 @@ namespace InduLink.Tests
             var read = fixture.Client.ReadDbStringAsync("DB1.DBX0.0", 20, cancellation.Token);
             try
             {
-                Assert.ThrowsAsync<InduLink.Exceptions.IndustrialTimeoutException>(async () =>
+                Assert.ThrowsAsync<InduLink.Exceptions.InduLinkTimeoutException>(async () =>
                     await read.WaitAsync(TimeSpan.FromSeconds(2)));
                 Assert.IsFalse(fixture.Client.IsConnected);
             }

@@ -4,7 +4,7 @@ using InduLink.Abstractions;
 namespace InduLink.Diagnostics
 {
     /// <summary>工业通讯失败的稳定分类，便于 UI、日志和监控按原因聚合。</summary>
-    public enum IndustrialFailureCategory
+    public enum InduLinkFailureCategory
     {
         None = 0,
         Connection = 1,
@@ -16,11 +16,11 @@ namespace InduLink.Diagnostics
     }
 
     /// <summary>客户端从创建至当前时刻累计形成的只读诊断快照。</summary>
-    public sealed class IndustrialDiagnosticSnapshot
+    public sealed class InduLinkDiagnosticSnapshot
     {
-        public IndustrialDiagnosticSnapshot(string deviceId, ProtocolKind protocol, long totalOperations, long successfulOperations,
+        public InduLinkDiagnosticSnapshot(string deviceId, ProtocolKind protocol, long totalOperations, long successfulOperations,
             long failedOperations, long timeoutCount, int consecutiveFailures, long lastOperationElapsedMilliseconds,
-            IndustrialFailureCategory lastFailureCategory, string lastError, DateTimeOffset? lastOperationUtc,
+            InduLinkFailureCategory lastFailureCategory, string lastError, DateTimeOffset? lastOperationUtc,
             long serialPortOpenFailureCount = 0, long responseTimeoutCount = 0, long frameErrorCount = 0)
         {
             DeviceId = deviceId;
@@ -47,33 +47,33 @@ namespace InduLink.Diagnostics
         public long TimeoutCount { get; private set; }
         public int ConsecutiveFailures { get; private set; }
         public long LastOperationElapsedMilliseconds { get; private set; }
-        public IndustrialFailureCategory LastFailureCategory { get; private set; }
+        public InduLinkFailureCategory LastFailureCategory { get; private set; }
         public string LastError { get; private set; }
         public DateTimeOffset? LastOperationUtc { get; private set; }
         public long SerialPortOpenFailureCount { get; private set; }
         public long ResponseTimeoutCount { get; private set; }
         public long FrameErrorCount { get; private set; }
 
-        public static IndustrialDiagnosticSnapshot Empty(string deviceId = null, ProtocolKind protocol = 0)
+        public static InduLinkDiagnosticSnapshot Empty(string deviceId = null, ProtocolKind protocol = 0)
         {
-            return new IndustrialDiagnosticSnapshot(deviceId, protocol, 0, 0, 0, 0, 0, 0, IndustrialFailureCategory.None, null, null);
+            return new InduLinkDiagnosticSnapshot(deviceId, protocol, 0, 0, 0, 0, 0, 0, InduLinkFailureCategory.None, null, null);
         }
     }
 
-    /// <summary>由支持结构化诊断的客户端选择性实现，不影响 IIndustrialClient 兼容性。</summary>
-    public interface IIndustrialDiagnosticsProvider
+    /// <summary>由支持结构化诊断的客户端选择性实现，不改变 IInduLinkClient 的通用调用方式。</summary>
+    public interface IInduLinkDiagnosticsProvider
     {
-        IndustrialDiagnosticSnapshot GetDiagnosticSnapshot();
+        InduLinkDiagnosticSnapshot GetDiagnosticSnapshot();
     }
 
-    public static class IndustrialDiagnosticsSnapshotExtensions
+    public static class InduLinkDiagnosticsSnapshotExtensions
     {
         /// <summary>获取诊断快照；自定义客户端未实现诊断接口时返回空快照。</summary>
-        public static IndustrialDiagnosticSnapshot GetDiagnosticSnapshot(this IIndustrialClient client)
+        public static InduLinkDiagnosticSnapshot GetDiagnosticSnapshot(this IInduLinkClient client)
         {
             if (client == null) throw new ArgumentNullException(nameof(client));
-            var provider = client as IIndustrialDiagnosticsProvider;
-            return provider == null ? IndustrialDiagnosticSnapshot.Empty(client.DeviceId, client.Kind) : provider.GetDiagnosticSnapshot();
+            var provider = client as IInduLinkDiagnosticsProvider;
+            return provider == null ? InduLinkDiagnosticSnapshot.Empty(client.DeviceId, client.Kind) : provider.GetDiagnosticSnapshot();
         }
     }
 }

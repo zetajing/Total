@@ -41,7 +41,7 @@ namespace InduLink.Protocols.OpcUa
     /// OPC UA client based on the OPC Foundation reference stack. Addresses are standard NodeId strings,
     /// for example ns=2;s=Machine/Temperature or ns=2;i=1001.
     /// </summary>
-    public sealed class OpcUaClient : IndustrialClientBase, INativeSubscriptionClient, IRegisterClient, IEventSubscriptionClient
+    public sealed class OpcUaClient : InduLinkClientBase, INativeSubscriptionClient, IRegisterClient, IEventSubscriptionClient
     {
         private const string NativeSubscriptionPrefix = "opcua:";
         private readonly OpcUaClientOptions _options;
@@ -50,10 +50,10 @@ namespace InduLink.Protocols.OpcUa
         private readonly SemaphoreSlim _nativeSubscriptionGate = new SemaphoreSlim(1, 1);
         private ISession _session;
 
-        public OpcUaClient(OpcUaClientOptions options, IIndustrialLogger logger = null,
+        public OpcUaClient(OpcUaClientOptions options, IInduLinkLogger logger = null,
             IPollingScheduler pollingScheduler = null)
             : base(GetDeviceId(options), ProtocolKind.OpcUa,
-                pollingScheduler ?? new PollingScheduler(logger), logger ?? NullIndustrialLogger.Instance,
+                pollingScheduler ?? new PollingScheduler(logger), logger ?? NullInduLinkLogger.Instance,
                 options.OperationTimeoutMilliseconds)
         {
             _options = options;
@@ -116,7 +116,7 @@ namespace InduLink.Protocols.OpcUa
             catch (Exception ex)
             {
                 await CloseSessionAsync(CancellationToken.None).ConfigureAwait(false);
-                throw new IndustrialConnectionException("Failed to connect OPC UA endpoint.", ex);
+                throw new InduLinkConnectionException("Failed to connect OPC UA endpoint.", ex);
             }
             finally
             {
@@ -285,13 +285,13 @@ namespace InduLink.Protocols.OpcUa
             ClientBase.ValidateResponse(results, writes);
             ClientBase.ValidateDiagnosticInfos(diagnostics, writes);
             for (var i = 0; i < results.Count; i++)
-                if (StatusCode.IsBad(results[i])) throw new IndustrialProtocolException("OPC UA write failed: " + results[i]);
+                if (StatusCode.IsBad(results[i])) throw new InduLinkProtocolException("OPC UA write failed: " + results[i]);
         }
 
         public static NodeId ParseNodeId(string address)
         {
             try { return NodeId.Parse(address); }
-            catch (Exception ex) { throw new IndustrialAddressParseException("Invalid OPC UA NodeId: " + address, ex); }
+            catch (Exception ex) { throw new InduLinkAddressParseException("Invalid OPC UA NodeId: " + address, ex); }
         }
 
         internal static object ConvertForWrite(WriteRequest request)
@@ -317,8 +317,8 @@ namespace InduLink.Protocols.OpcUa
                     default: throw new NotSupportedException("Unsupported OPC UA data type: " + request.DataType);
                 }
             }
-            catch (Exception ex) when (!(ex is IndustrialDataConversionException))
-            { throw new IndustrialDataConversionException("Cannot convert OPC UA write value to " + request.DataType + ".", ex); }
+            catch (Exception ex) when (!(ex is InduLinkDataConversionException))
+            { throw new InduLinkDataConversionException("Cannot convert OPC UA write value to " + request.DataType + ".", ex); }
         }
 
         private static DataValue ConvertValue(ReadRequest request, UaDataValue source)
@@ -376,7 +376,7 @@ namespace InduLink.Protocols.OpcUa
         {
             var session = Volatile.Read(ref _session);
             if (session == null || !session.Connected)
-                throw new IndustrialConnectionException("OPC UA client is not connected.");
+                throw new InduLinkConnectionException("OPC UA client is not connected.");
             return session;
         }
 

@@ -13,7 +13,7 @@ using InduLink.Diagnostics;
 
 namespace InduLink.Storage
 {
-    public sealed partial class SqlServerIndustrialDataStore
+    public sealed partial class SqlServerInduLinkDataStore
     {
         private static void ValidateFilter(HistoryQueryFilter filter)
         {
@@ -51,11 +51,11 @@ namespace InduLink.Storage
             return "%" + filter.Address.Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_").Replace("[", "\\[") + "%";
         }
 
-        private static IndustrialDataRecord ReadRecord(SqlDataReader reader)
+        private static InduLinkDataRecord ReadRecord(SqlDataReader reader)
         {
             ProtocolKind protocol; DataType dataType; QualityStatus quality;
             Enum.TryParse(reader.GetString(1), true, out protocol); Enum.TryParse(reader.GetString(4), true, out dataType); Enum.TryParse(reader.GetString(7), true, out quality);
-            return new IndustrialDataRecord { Id = reader.GetInt64(0), Protocol = protocol, DeviceId = reader.GetString(2), Address = reader.GetString(3), DataType = dataType,
+            return new InduLinkDataRecord { Id = reader.GetInt64(0), Protocol = protocol, DeviceId = reader.GetString(2), Address = reader.GetString(3), DataType = dataType,
                 ValueText = reader.IsDBNull(5) ? null : reader.GetString(5), RawData = reader.IsDBNull(6) ? null : (byte[])reader.GetValue(6),
                 Quality = quality, Timestamp = reader.GetDateTimeOffset(8), ErrorMessage = reader.IsDBNull(9) ? null : reader.GetString(9) };
         }
@@ -65,7 +65,7 @@ namespace InduLink.Storage
         {
         }
 
-        private async Task<IReadOnlyList<IndustrialDataRecord>> ReadAsync(
+        private async Task<IReadOnlyList<InduLinkDataRecord>> ReadAsync(
             string sql,
             long? afterId,
             int maxRows,
@@ -76,7 +76,7 @@ namespace InduLink.Storage
                 throw new ArgumentOutOfRangeException(nameof(maxRows), "单次查询行数必须在 1 到 1000 之间。");
             }
 
-            var records = new List<IndustrialDataRecord>(maxRows);
+            var records = new List<InduLinkDataRecord>(maxRows);
             using (var connection = new SqlConnection(_options.ConnectionString))
             using (var command = new SqlCommand(sql, connection))
             {
@@ -117,7 +117,7 @@ namespace InduLink.Storage
             return command;
         }
 
-        private static void SetParameterValues(SqlCommand command, IndustrialDataRecord record)
+        private static void SetParameterValues(SqlCommand command, InduLinkDataRecord record)
         {
             if (record == null) throw new ArgumentNullException(nameof(record));
             command.Parameters["@Protocol"].Value = record.Protocol.ToString();

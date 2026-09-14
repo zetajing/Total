@@ -29,10 +29,10 @@ namespace InduLink.Runtime.Polling
             private static DeviceWorker _dispatchingWorker;
 
             private readonly string _deviceId;
-            private IIndustrialClient _client;
+            private IInduLinkClient _client;
             private IBatchOperationPlanner _planner;
             private readonly ProtocolCapabilities _capabilities;
-            private readonly IIndustrialLogger _logger;
+            private readonly IInduLinkLogger _logger;
             private readonly Action<string, DeviceWorker> _onStopped;
             private readonly ConcurrentDictionary<string, SubscriptionRegistration> _registrations =
                 new ConcurrentDictionary<string, SubscriptionRegistration>(StringComparer.OrdinalIgnoreCase);
@@ -44,9 +44,9 @@ namespace InduLink.Runtime.Polling
             private int _resourcesDisposed;
 
             public DeviceWorker(
-                IIndustrialClient client,
+                IInduLinkClient client,
                 ProtocolCapabilities capabilities,
-                IIndustrialLogger logger,
+                IInduLinkLogger logger,
                 Action<string, DeviceWorker> onStopped)
             {
                 _client = client;
@@ -58,7 +58,7 @@ namespace InduLink.Runtime.Polling
                 _loopTask = Task.Run(LoopAsync);
             }
 
-            public bool TryAdd(IIndustrialClient client, SubscriptionRegistration registration)
+            public bool TryAdd(IInduLinkClient client, SubscriptionRegistration registration)
             {
                 lock (_lifecycleSync)
                 {

@@ -531,4 +531,4 @@ public static class RedisExample
 
 当前模块使用 Redis String 的 `GET`/`SET`，字符串和数值以 UTF-8 文本编码，字节数组按原始字节保存；它不是 Redis Hash、List 或 Stream 的通用封装。不存在的 Key 返回 Bad 质量，强类型快捷读取随后抛出协议异常；Key 应包含业务命名空间，批量读写会使用 Redis 批量 String API。
 
-Redis 与 SQL Server/MySQL 历史存储彻底独立，不实现 `IIndustrialHistoryStore`，也不提供关系型分页、汇总或保留期清理。生产环境不要暴露 6379，使用 TLS、ACL、网络白名单和独立账号；需要原子状态转换时在业务层增加版本、锁或事务语义。
+Redis 与 SQL Server/MySQL 历史存储彻底独立，不实现 `IInduLinkHistoryStore`，也不提供关系型分页、汇总或保留期清理。生产环境不要暴露 6379，使用 TLS、ACL、网络白名单和独立账号；需要原子状态转换时在业务层增加版本、锁或事务语义。

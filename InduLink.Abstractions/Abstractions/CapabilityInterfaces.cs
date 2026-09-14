@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 namespace InduLink.Abstractions
 {
     /// <summary>Common lifecycle contract shared by protocol capability clients.</summary>
-    public interface IIndustrialConnection : IDisposable
+    public interface IInduLinkConnection : IDisposable
     {
         string DeviceId { get; }
         ProtocolKind Kind { get; }
@@ -17,7 +17,7 @@ namespace InduLink.Abstractions
     }
 
     /// <summary>Register/bit address read and write capability for PLC-like protocols.</summary>
-    public interface IRegisterClient : IIndustrialConnection
+    public interface IRegisterClient : IInduLinkConnection
     {
         Task<DataValue> ReadAsync(ReadRequest request, CancellationToken cancellationToken);
         Task<BatchReadResult> ReadManyAsync(IReadOnlyCollection<ReadRequest> requests, CancellationToken cancellationToken);
@@ -26,7 +26,7 @@ namespace InduLink.Abstractions
     }
 
     /// <summary>Polling or native event subscription capability.</summary>
-    public interface IEventSubscriptionClient : IIndustrialConnection
+    public interface IEventSubscriptionClient : IInduLinkConnection
     {
         Task<string> SubscribeAsync(
             SubscriptionRequest request,
@@ -40,7 +40,7 @@ namespace InduLink.Abstractions
     /// Protocol-neutral byte key/value capability. Keys are not interpreted as PLC addresses,
     /// and values are not decoded into a PLC DataType.
     /// </summary>
-    public interface IKeyValueClient : IIndustrialConnection
+    public interface IKeyValueClient : IInduLinkConnection
     {
         Task<KeyValueValue> GetAsync(string key, CancellationToken cancellationToken);
         Task<IReadOnlyList<KeyValueValue>> GetManyAsync(IReadOnlyCollection<string> keys, CancellationToken cancellationToken);

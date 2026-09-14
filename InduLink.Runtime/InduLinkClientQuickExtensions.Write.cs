@@ -8,7 +8,7 @@ using InduLink.Exceptions;
 namespace InduLink.Runtime
 {
     /// <summary>工业客户端的写入与值转换快捷扩展。</summary>
-    public static partial class IndustrialClientQuickExtensions
+    public static partial class InduLinkClientQuickExtensions
     {
         /// <summary>
         /// 向指定地址异步写入一个 16 位有符号整数。
@@ -19,8 +19,8 @@ namespace InduLink.Runtime
         /// <param name="cancellationToken">用于取消异步操作的取消令牌。</param>
         /// <returns>表示异步写入操作的任务。</returns>
         /// <exception cref="ArgumentNullException">当 <paramref name="client"/> 为 null 时抛出。</exception>
-        /// <exception cref="IndustrialProtocolException">写入操作失败时抛出。</exception>
-        public static Task WriteAsync(this IIndustrialClient client, string address, short value, CancellationToken cancellationToken = default)
+        /// <exception cref="InduLinkProtocolException">写入操作失败时抛出。</exception>
+        public static Task WriteAsync(this IInduLinkClient client, string address, short value, CancellationToken cancellationToken = default)
         {
             return WriteValueAsync(client, address, DataType.Int16, value, 1, cancellationToken);
         }
@@ -34,8 +34,8 @@ namespace InduLink.Runtime
         /// <param name="cancellationToken">用于取消异步操作的取消令牌。</param>
         /// <returns>表示异步写入操作的任务。</returns>
         /// <exception cref="ArgumentNullException">当 <paramref name="client"/> 为 null 时抛出。</exception>
-        /// <exception cref="IndustrialProtocolException">写入操作失败时抛出。</exception>
-        public static Task WriteAsync(this IIndustrialClient client, string address, ushort value, CancellationToken cancellationToken = default)
+        /// <exception cref="InduLinkProtocolException">写入操作失败时抛出。</exception>
+        public static Task WriteAsync(this IInduLinkClient client, string address, ushort value, CancellationToken cancellationToken = default)
         {
             return WriteValueAsync(client, address, DataType.UInt16, value, 1, cancellationToken);
         }
@@ -49,8 +49,8 @@ namespace InduLink.Runtime
         /// <param name="cancellationToken">用于取消异步操作的取消令牌。</param>
         /// <returns>表示异步写入操作的任务。</returns>
         /// <exception cref="ArgumentNullException">当 <paramref name="client"/> 为 null 时抛出。</exception>
-        /// <exception cref="IndustrialProtocolException">写入操作失败时抛出。</exception>
-        public static Task WriteAsync(this IIndustrialClient client, string address, int value, CancellationToken cancellationToken = default)
+        /// <exception cref="InduLinkProtocolException">写入操作失败时抛出。</exception>
+        public static Task WriteAsync(this IInduLinkClient client, string address, int value, CancellationToken cancellationToken = default)
         {
             return WriteValueAsync(client, address, DataType.Int32, value, 1, cancellationToken);
         }
@@ -64,8 +64,8 @@ namespace InduLink.Runtime
         /// <param name="cancellationToken">用于取消异步操作的取消令牌。</param>
         /// <returns>表示异步写入操作的任务。</returns>
         /// <exception cref="ArgumentNullException">当 <paramref name="client"/> 为 null 时抛出。</exception>
-        /// <exception cref="IndustrialProtocolException">写入操作失败时抛出。</exception>
-        public static Task WriteAsync(this IIndustrialClient client, string address, uint value, CancellationToken cancellationToken = default)
+        /// <exception cref="InduLinkProtocolException">写入操作失败时抛出。</exception>
+        public static Task WriteAsync(this IInduLinkClient client, string address, uint value, CancellationToken cancellationToken = default)
         {
             return WriteValueAsync(client, address, DataType.UInt32, value, 1, cancellationToken);
         }
@@ -79,8 +79,8 @@ namespace InduLink.Runtime
         /// <param name="cancellationToken">用于取消异步操作的取消令牌。</param>
         /// <returns>表示异步写入操作的任务。</returns>
         /// <exception cref="ArgumentNullException">当 <paramref name="client"/> 为 null 时抛出。</exception>
-        /// <exception cref="IndustrialProtocolException">写入操作失败时抛出。</exception>
-        public static Task WriteAsync(this IIndustrialClient client, string address, float value, CancellationToken cancellationToken = default)
+        /// <exception cref="InduLinkProtocolException">写入操作失败时抛出。</exception>
+        public static Task WriteAsync(this IInduLinkClient client, string address, float value, CancellationToken cancellationToken = default)
         {
             return WriteValueAsync(client, address, DataType.Float, value, 1, cancellationToken);
         }
@@ -94,8 +94,8 @@ namespace InduLink.Runtime
         /// <param name="cancellationToken">用于取消异步操作的取消令牌。</param>
         /// <returns>表示异步写入操作的任务。</returns>
         /// <exception cref="ArgumentNullException">当 <paramref name="client"/> 为 null 时抛出。</exception>
-        /// <exception cref="IndustrialProtocolException">写入操作失败时抛出。</exception>
-        public static Task WriteAsync(this IIndustrialClient client, string address, double value, CancellationToken cancellationToken = default)
+        /// <exception cref="InduLinkProtocolException">写入操作失败时抛出。</exception>
+        public static Task WriteAsync(this IInduLinkClient client, string address, double value, CancellationToken cancellationToken = default)
         {
             return WriteValueAsync(client, address, DataType.Double, value, 1, cancellationToken);
         }
@@ -108,7 +108,7 @@ namespace InduLink.Runtime
         /// <param name="value">要写入的字符串值。如果为 null，则写入空字符串。</param>
         /// <param name="cancellationToken">用于取消异步操作的取消令牌。</param>
         /// <returns>表示异步写入操作的任务。</returns>
-        public static Task WriteAsync(this IIndustrialClient client, string address, string value, CancellationToken cancellationToken = default)
+        public static Task WriteAsync(this IInduLinkClient client, string address, string value, CancellationToken cancellationToken = default)
         {
             var text = value ?? string.Empty;
             return WriteValueAsync(client, address, DataType.String, text, ToUShortLength(text.Length), cancellationToken);
@@ -122,26 +122,26 @@ namespace InduLink.Runtime
         /// <param name="value">要写入的字节数组。如果为 null，则写入空数组。</param>
         /// <param name="cancellationToken">用于取消异步操作的取消令牌。</param>
         /// <returns>表示异步写入操作的任务。</returns>
-        public static Task WriteAsync(this IIndustrialClient client, string address, byte[] value, CancellationToken cancellationToken = default)
+        public static Task WriteAsync(this IInduLinkClient client, string address, byte[] value, CancellationToken cancellationToken = default)
         {
             var bytes = value ?? Array.Empty<byte>();
             return WriteValueAsync(client, address, DataType.ByteArray, bytes, ToUShortLength(bytes.Length), cancellationToken);
         }
 
-        public static Task WriteAsync<T>(this IIndustrialClient client, IndustrialTag<T> tag, T value, CancellationToken cancellationToken = default)
+        public static Task WriteAsync<T>(this IInduLinkClient client, InduLinkTag<T> tag, T value, CancellationToken cancellationToken = default)
         {
             if (tag == null) throw new ArgumentNullException(nameof(tag));
 
             return WriteValueAsync(client, tag.Address, tag.DataType, value, tag.Length, cancellationToken);
         }
 
-        public static Task WriteManyAsync(this IIndustrialClient client, params IndustrialWrite[] writes)
+        public static Task WriteManyAsync(this IInduLinkClient client, params InduLinkWrite[] writes)
         {
-            return WriteManyAsync(client, (IReadOnlyCollection<IndustrialWrite>)writes, CancellationToken.None);
+            return WriteManyAsync(client, (IReadOnlyCollection<InduLinkWrite>)writes, CancellationToken.None);
         }
 
         public static Task WriteManyAsync<T>(
-            this IIndustrialClient client,
+            this IInduLinkClient client,
             IReadOnlyDictionary<string, T> values,
             CancellationToken cancellationToken = default)
         {
@@ -164,8 +164,8 @@ namespace InduLink.Runtime
         }
 
         public static Task WriteManyAsync(
-            this IIndustrialClient client,
-            IReadOnlyCollection<IndustrialWrite> writes,
+            this IInduLinkClient client,
+            IReadOnlyCollection<InduLinkWrite> writes,
             CancellationToken cancellationToken = default)
         {
             if (client == null) throw new ArgumentNullException(nameof(client));
@@ -191,8 +191,8 @@ namespace InduLink.Runtime
         /// <param name="cancellationToken">用于取消异步操作的取消令牌。</param>
         /// <returns>表示异步写入操作的任务。</returns>
         /// <exception cref="ArgumentNullException">当 <paramref name="client"/> 为 null 时抛出。</exception>
-        /// <exception cref="IndustrialProtocolException">写入操作失败时抛出。</exception>
-        public static Task WriteStringAsync(this IIndustrialClient client, string address, string value, ushort length, CancellationToken cancellationToken = default)
+        /// <exception cref="InduLinkProtocolException">写入操作失败时抛出。</exception>
+        public static Task WriteStringAsync(this IInduLinkClient client, string address, string value, ushort length, CancellationToken cancellationToken = default)
         {
             return WriteValueAsync(client, address, DataType.String, value ?? string.Empty, length, cancellationToken);
         }
@@ -207,8 +207,8 @@ namespace InduLink.Runtime
         /// <param name="cancellationToken">用于取消异步操作的取消令牌。</param>
         /// <returns>表示异步写入操作的任务。</returns>
         /// <exception cref="ArgumentNullException">当 <paramref name="client"/> 为 null 时抛出。</exception>
-        /// <exception cref="IndustrialProtocolException">写入操作失败时抛出。</exception>
-        public static Task WriteByteArrayAsync(this IIndustrialClient client, string address, byte[] value, ushort length, CancellationToken cancellationToken = default)
+        /// <exception cref="InduLinkProtocolException">写入操作失败时抛出。</exception>
+        public static Task WriteByteArrayAsync(this IInduLinkClient client, string address, byte[] value, ushort length, CancellationToken cancellationToken = default)
         {
             return WriteValueAsync(client, address, DataType.ByteArray, value ?? Array.Empty<byte>(), length, cancellationToken);
         }
@@ -224,9 +224,9 @@ namespace InduLink.Runtime
         /// <param name="cancellationToken">用于取消异步操作的取消令牌。</param>
         /// <returns>表示异步写入操作的任务。</returns>
         /// <exception cref="ArgumentNullException">当 <paramref name="client"/> 为 null 时抛出。</exception>
-        /// <exception cref="IndustrialProtocolException">写入操作失败时抛出。</exception>
+        /// <exception cref="InduLinkProtocolException">写入操作失败时抛出。</exception>
         public static Task WriteValueAsync(
-            this IIndustrialClient client,
+            this IInduLinkClient client,
             string address,
             DataType dataType,
             object value,
@@ -244,7 +244,7 @@ namespace InduLink.Runtime
         /// 确保读取结果有效。如果结果为 null 或质量状态不为 Good，则抛出协议异常。
         /// </summary>
         /// <param name="result">要验证的 <see cref="DataValue"/> 读取结果实例。</param>
-        /// <exception cref="IndustrialProtocolException">
+        /// <exception cref="InduLinkProtocolException">
         /// 当 <paramref name="result"/> 为 null，或其 <see cref="DataValue.Quality"/> 不等于 <see cref="QualityStatus.Good"/> 时抛出。
         /// 异常消息会优先使用结果中的 <see cref="DataValue.ErrorMessage"/>，若为空则使用默认格式。
         /// </exception>
@@ -252,12 +252,12 @@ namespace InduLink.Runtime
         {
             if (result == null)
             {
-                throw new IndustrialProtocolException("Read result is null.");
+                throw new InduLinkProtocolException("Read result is null.");
             }
 
             if (result.Quality != QualityStatus.Good)
             {
-                throw new IndustrialProtocolException(
+                throw new InduLinkProtocolException(
                     string.IsNullOrWhiteSpace(result.ErrorMessage)
                         ? string.Format("Read failed for address {0}.", result.Address)
                         : result.ErrorMessage);
@@ -272,18 +272,18 @@ namespace InduLink.Runtime
         /// <param name="address">读取操作的目标地址，用于在转换失败时提供错误上下文。</param>
         /// <param name="dataType">读取操作指定的数据类型，用于在转换失败时提供错误上下文。</param>
         /// <returns>返回转换后的 <typeparamref name="T"/> 类型值。</returns>
-        /// <exception cref="IndustrialDataConversionException">
+        /// <exception cref="InduLinkDataConversionException">
         /// 当 <paramref name="value"/> 为 null，或无法将值转换为目标类型时抛出。
         /// </exception>
         /// <remarks>
         /// 该方法首先检查值是否为 null，然后尝试直接类型转换；如果失败，则使用 <see cref="Convert.ChangeType(object, Type)"/>
-        /// 进行基础类型转换。所有转换失败都会包装为 <see cref="IndustrialDataConversionException"/> 异常抛出。
+        /// 进行基础类型转换。所有转换失败都会包装为 <see cref="InduLinkDataConversionException"/> 异常抛出。
         /// </remarks>
         private static T ConvertValue<T>(object value, string address, DataType dataType)
         {
             if (value == null)
             {
-                throw new IndustrialDataConversionException(
+                throw new InduLinkDataConversionException(
                     string.Format("Read value is null for address {0}.", address));
             }
 
@@ -308,7 +308,7 @@ namespace InduLink.Runtime
             }
             catch (Exception ex)
             {
-                throw new IndustrialDataConversionException(
+                throw new InduLinkDataConversionException(
                     string.Format("Cannot convert address {0} value from {1} to {2} for data type {3}.",
                         address,
                         value.GetType().Name,
@@ -339,7 +339,7 @@ namespace InduLink.Runtime
             if (targetType == typeof(string)) return DataType.String;
             if (targetType == typeof(byte[])) return DataType.ByteArray;
 
-            throw new IndustrialDataConversionException(
+            throw new InduLinkDataConversionException(
                 string.Format("Cannot infer industrial data type from CLR type {0}. Use ReadValueAsync<T> with an explicit DataType.", type.Name));
         }
 
@@ -369,55 +369,55 @@ namespace InduLink.Runtime
         }
 
         /// <summary>写入 TwinCAT SINT。</summary>
-        public static Task WriteAsync(this IIndustrialClient client, string address, sbyte value, CancellationToken cancellationToken = default)
+        public static Task WriteAsync(this IInduLinkClient client, string address, sbyte value, CancellationToken cancellationToken = default)
         {
             return WriteValueAsync(client, address, DataType.SByte, value, 1, cancellationToken);
         }
 
         /// <summary>写入 TwinCAT LINT。</summary>
-        public static Task WriteAsync(this IIndustrialClient client, string address, long value, CancellationToken cancellationToken = default)
+        public static Task WriteAsync(this IInduLinkClient client, string address, long value, CancellationToken cancellationToken = default)
         {
             return WriteValueAsync(client, address, DataType.Int64, value, 1, cancellationToken);
         }
 
         /// <summary>写入 TwinCAT ULINT。</summary>
-        public static Task WriteAsync(this IIndustrialClient client, string address, ulong value, CancellationToken cancellationToken = default)
+        public static Task WriteAsync(this IInduLinkClient client, string address, ulong value, CancellationToken cancellationToken = default)
         {
             return WriteValueAsync(client, address, DataType.UInt64, value, 1, cancellationToken);
         }
 
         /// <summary>写入 TwinCAT TIME。</summary>
-        public static Task WriteAsync(this IIndustrialClient client, string address, TimeSpan value, CancellationToken cancellationToken = default)
+        public static Task WriteAsync(this IInduLinkClient client, string address, TimeSpan value, CancellationToken cancellationToken = default)
         {
             return WriteValueAsync(client, address, DataType.Time, value, 1, cancellationToken);
         }
 
         /// <summary>写入 TwinCAT DATE。</summary>
-        public static Task WriteDateAsync(this IIndustrialClient client, string address, DateTimeOffset value, CancellationToken cancellationToken = default)
+        public static Task WriteDateAsync(this IInduLinkClient client, string address, DateTimeOffset value, CancellationToken cancellationToken = default)
         {
             return WriteValueAsync(client, address, DataType.Date, value, 1, cancellationToken);
         }
 
         /// <summary>写入 TwinCAT DT/DATE_AND_TIME。</summary>
-        public static Task WriteDateTimeAsync(this IIndustrialClient client, string address, DateTimeOffset value, CancellationToken cancellationToken = default)
+        public static Task WriteDateTimeAsync(this IInduLinkClient client, string address, DateTimeOffset value, CancellationToken cancellationToken = default)
         {
             return WriteValueAsync(client, address, DataType.DateTime, value, 1, cancellationToken);
         }
 
         /// <summary>写入 TwinCAT TOD/TIME_OF_DAY。</summary>
-        public static Task WriteTimeOfDayAsync(this IIndustrialClient client, string address, TimeSpan value, CancellationToken cancellationToken = default)
+        public static Task WriteTimeOfDayAsync(this IInduLinkClient client, string address, TimeSpan value, CancellationToken cancellationToken = default)
         {
             return WriteValueAsync(client, address, DataType.TimeOfDay, value, 1, cancellationToken);
         }
 
         /// <summary>写入 TwinCAT LTIME。</summary>
-        public static Task WriteLTimeAsync(this IIndustrialClient client, string address, TimeSpan value, CancellationToken cancellationToken = default)
+        public static Task WriteLTimeAsync(this IInduLinkClient client, string address, TimeSpan value, CancellationToken cancellationToken = default)
         {
             return WriteValueAsync(client, address, DataType.LTime, value, 1, cancellationToken);
         }
 
         /// <summary>按字符数写入 TwinCAT WSTRING。</summary>
-        public static Task WriteWStringAsync(this IIndustrialClient client, string address, string value, ushort length, CancellationToken cancellationToken = default)
+        public static Task WriteWStringAsync(this IInduLinkClient client, string address, string value, ushort length, CancellationToken cancellationToken = default)
         {
             return WriteValueAsync(client, address, DataType.WString, value ?? string.Empty, length, cancellationToken);
         }

@@ -34,7 +34,7 @@ namespace InduLink.Protocols.Mqtt
         public bool WillRetain { get; set; }
     }
 
-    public sealed class MqttProtocolProvider : IndustrialProtocolProvider<MqttSettings>
+    public sealed class MqttProtocolProvider : InduLinkProtocolProvider<MqttSettings>
     {
         public override string Protocol { get { return "mqtt"; } }
 
@@ -54,7 +54,7 @@ namespace InduLink.Protocols.Mqtt
                 settings.WillPayload != null && string.IsNullOrWhiteSpace(settings.WillTopic) ? "willTopic is required when willPayload is configured." : null);
         }
 
-        protected override IIndustrialClient CreateClient(IndustrialDeviceConfig device, MqttSettings settings, IIndustrialLogger logger)
+        protected override IInduLinkClient CreateClient(InduLinkDeviceConfig device, MqttSettings settings, IInduLinkLogger logger)
         {
             return new MqttClient(new MqttClientOptions
             {

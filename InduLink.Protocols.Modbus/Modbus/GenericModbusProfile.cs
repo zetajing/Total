@@ -26,7 +26,7 @@ namespace InduLink.Protocols.Modbus
         public ModbusAddress ParseAddress(string address)
         {
             if (string.IsNullOrWhiteSpace(address))
-                throw new IndustrialAddressParseException("Address is required.");
+                throw new InduLinkAddressParseException("Address is required.");
 
             var normalized = address.Trim().ToUpperInvariant();
             var explicitMatch = ExplicitAddressPattern.Match(normalized);
@@ -42,11 +42,11 @@ namespace InduLink.Protocols.Modbus
                 var area = ParseReferenceArea(referenceMatch.Groups[1].Value[0]);
                 int reference;
                 if (!int.TryParse(referenceMatch.Groups[2].Value, out reference) || reference < 1 || reference > 65536)
-                    throw new IndustrialAddressParseException("Modbus reference address must be between 1 and 65536.");
+                    throw new InduLinkAddressParseException("Modbus reference address must be between 1 and 65536.");
                 return new ModbusAddress(area, (ushort)(reference - 1));
             }
 
-            throw new IndustrialAddressParseException(string.Format(
+            throw new InduLinkAddressParseException(string.Format(
                 "Unsupported generic Modbus address: {0}. Use HR0/IR0/C0/DI0 or 40001/30001/00001/10001 format.", address));
         }
 
@@ -57,7 +57,7 @@ namespace InduLink.Protocols.Modbus
         {
             ushort result;
             if (!ushort.TryParse(value, out result))
-                throw new IndustrialAddressParseException("Generic Modbus address is outside the 0-65535 range: " + originalAddress);
+                throw new InduLinkAddressParseException("Generic Modbus address is outside the 0-65535 range: " + originalAddress);
             return result;
         }
 

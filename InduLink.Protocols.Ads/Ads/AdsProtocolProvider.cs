@@ -6,7 +6,7 @@ using InduLink.Runtime.Configuration;
 namespace InduLink.Protocols.Ads
 {
     /// <summary>Industrial SDK 的 TwinCAT ADS 协议 Provider。</summary>
-    public sealed class AdsProtocolProvider : IndustrialProtocolProvider<AdsSettings>
+    public sealed class AdsProtocolProvider : InduLinkProtocolProvider<AdsSettings>
     {
         public override string Protocol { get { return "ads"; } }
 
@@ -20,7 +20,7 @@ namespace InduLink.Protocols.Ads
                 string.IsNullOrWhiteSpace(settings.AmsNetId) ? null : ValidateAmsNetId(settings.AmsNetId));
         }
 
-        protected override IIndustrialClient CreateClient(IndustrialDeviceConfig device, AdsSettings settings, IIndustrialLogger logger)
+        protected override IInduLinkClient CreateClient(InduLinkDeviceConfig device, AdsSettings settings, IInduLinkLogger logger)
         {
             return new AdsClient(new AdsClientOptions
             {

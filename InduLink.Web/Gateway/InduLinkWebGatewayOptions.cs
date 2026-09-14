@@ -4,9 +4,9 @@ using System.Collections.Generic;
 namespace InduLink.Web.Gateway
 {
     /// <summary>工业 Tag WebAPI 与 WebSocket 网关选项。</summary>
-    public sealed class IndustrialWebGatewayOptions
+    public sealed class InduLinkWebGatewayOptions
     {
-        public IndustrialWebGatewayOptions()
+        public InduLinkWebGatewayOptions()
         {
             ListenPrefix = "http://127.0.0.1:8088/";
             WebSocketPath = "/ws/v1/tags";
@@ -44,9 +44,9 @@ namespace InduLink.Web.Gateway
         public int MaxSubscriptionsPerSession { get; set; }
         public IList<string> AllowedOrigins { get; private set; }
 
-        internal IndustrialWebGatewayOptions Clone()
+        internal InduLinkWebGatewayOptions Clone()
         {
-            var clone = new IndustrialWebGatewayOptions
+            var clone = new InduLinkWebGatewayOptions
             {
                 ListenPrefix = ListenPrefix,
                 WebSocketPath = WebSocketPath,

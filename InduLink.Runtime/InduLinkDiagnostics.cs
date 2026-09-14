@@ -7,10 +7,10 @@ using InduLink.Abstractions;
 namespace InduLink.Runtime
 {
     /// <summary>表示一次设备连接诊断的耗时、健康状态和错误信息。</summary>
-    public sealed class IndustrialConnectionTestResult
+    public sealed class InduLinkConnectionTestResult
     {
         /// <summary>创建连接诊断结果。</summary>
-        public IndustrialConnectionTestResult(
+        public InduLinkConnectionTestResult(
             string deviceId,
             ProtocolKind protocol,
             bool isSuccess,
@@ -53,11 +53,11 @@ namespace InduLink.Runtime
     }
 
     /// <summary>提供设备连接自检扩展方法。</summary>
-    public static class IndustrialDiagnosticsExtensions
+    public static class InduLinkDiagnosticsExtensions
     {
         /// <summary>执行连接、读取健康状态和断开连接的完整诊断。</summary>
-        public static async Task<IndustrialConnectionTestResult> TestAsync(
-            this IIndustrialClient client,
+        public static async Task<InduLinkConnectionTestResult> TestAsync(
+            this IInduLinkClient client,
             CancellationToken cancellationToken = default)
         {
             if (client == null) throw new ArgumentNullException(nameof(client));
@@ -72,7 +72,7 @@ namespace InduLink.Runtime
                 }
 
                 stopwatch.Stop();
-                return new IndustrialConnectionTestResult(
+                return new InduLinkConnectionTestResult(
                     client.DeviceId,
                     client.Kind,
                     true,
@@ -84,7 +84,7 @@ namespace InduLink.Runtime
             catch (Exception ex)
             {
                 stopwatch.Stop();
-                return new IndustrialConnectionTestResult(
+                return new InduLinkConnectionTestResult(
                     client.DeviceId,
                     client.Kind,
                     false,

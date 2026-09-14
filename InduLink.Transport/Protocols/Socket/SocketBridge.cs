@@ -49,7 +49,7 @@ namespace InduLink.Protocols.Socket
     /// Socket 桥接客户端。通过 TCP 套接字与远程设备通信，读写操作委托给 <see cref="ISocketProtocolAdapter"/> 实现。
     /// 适用于需要通过原始 TCP Socket 与自定义协议设备通信的场景。
     /// </summary>
-    public sealed class SocketBridgeClient : IndustrialClientBase
+    public sealed class SocketBridgeClient : InduLinkClientBase
     {
         private readonly TcpTransportClient _transport;
         private readonly ISocketProtocolAdapter _adapter;
@@ -62,8 +62,8 @@ namespace InduLink.Protocols.Socket
         /// <param name="logger">可选的日志记录器实例。</param>
         /// <param name="pollingScheduler">可选的轮询调度器实例。</param>
         /// <exception cref="ArgumentNullException"><paramref name="options"/> 或 <paramref name="adapter"/> 为 null 时引发。</exception>
-        public SocketBridgeClient(SocketBridgeClientOptions options, ISocketProtocolAdapter adapter, IIndustrialLogger logger = null, IPollingScheduler pollingScheduler = null)
-            : base(GetDeviceId(options), ProtocolKind.TcpSocket, pollingScheduler ?? new PollingScheduler(logger), logger ?? NullIndustrialLogger.Instance)
+        public SocketBridgeClient(SocketBridgeClientOptions options, ISocketProtocolAdapter adapter, IInduLinkLogger logger = null, IPollingScheduler pollingScheduler = null)
+            : base(GetDeviceId(options), ProtocolKind.TcpSocket, pollingScheduler ?? new PollingScheduler(logger), logger ?? NullInduLinkLogger.Instance)
         {
             if (options == null) throw new ArgumentNullException(nameof(options));
             _adapter = adapter ?? throw new ArgumentNullException(nameof(adapter));

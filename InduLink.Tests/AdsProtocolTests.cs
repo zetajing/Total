@@ -13,7 +13,7 @@ namespace InduLink.Tests
         [Test]
         public void DefaultSdkRegistersAdsProvider()
         {
-            var sdk = IndustrialSdk.CreateDefault();
+            var sdk = InduLinkSdk.CreateDefault();
             var provider = sdk.Protocols.Get("ads");
 
             Assert.AreEqual("ads", provider.Protocol);

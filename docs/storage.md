@@ -1,6 +1,6 @@
 # 历史存储
 
-SDK 提供 SQL Server 和 MySQL 两种 `IIndustrialHistoryStore` 实现。二者保存相同的 `IndustrialDataRecord`，支持初始化、批量写入、条件查询、分页、最新值、增量读取、删除和保留期清理。采集代码只依赖接口，数据库类型只在应用创建入口决定。
+SDK 提供 SQL Server 和 MySQL 两种 `IInduLinkHistoryStore` 实现。二者保存相同的 `InduLinkDataRecord`，支持初始化、批量写入、条件查询、分页、最新值、增量读取、删除和保留期清理。采集代码只依赖接口，数据库类型只在应用创建入口决定。
 
 Redis 不属于关系型历史库提供程序，仍是独立的 `InduLink.Protocols.Redis`，用于 Key/Value 通信与缓存集成。
 
@@ -22,9 +22,9 @@ using InduLink.Storage;
 
 public sealed class HistoryService
 {
-    private readonly IIndustrialHistoryStore _store;
+    private readonly IInduLinkHistoryStore _store;
 
-    public HistoryService(IIndustrialHistoryStore store)
+    public HistoryService(IInduLinkHistoryStore store)
     {
         _store = store;
     }
@@ -33,11 +33,11 @@ public sealed class HistoryService
 }
 ```
 
-SQL Server 和 MySQL 都实现 `IIndustrialHistoryStore`；`IIndustrialDataStore` 是缓冲记录器所需的基础契约。只引用 `InduLink.Storage` 不会携带 MySQL 驱动；完整聚合入口会包含内置 MySQL 提供程序。
+SQL Server 和 MySQL 都实现 `IInduLinkHistoryStore`；`IInduLinkDataStore` 是缓冲记录器所需的基础契约。只引用 `InduLink.Storage` 不会携带 MySQL 驱动；完整聚合入口会包含内置 MySQL 提供程序。
 
 ## 生命周期和缓冲写入
 
-`InitializeAsync` 检查连接并幂等创建历史表。直接使用存储时，创建者负责初始化和 `Dispose`；使用 `BufferedIndustrialDataRecorder` 时，`StartAsync` 自动初始化。
+`InitializeAsync` 检查连接并幂等创建历史表。直接使用存储时，创建者负责初始化和 `Dispose`；使用 `BufferedInduLinkDataRecorder` 时，`StartAsync` 自动初始化。
 
 缓冲记录器的所有权和顺序：
 
@@ -50,7 +50,7 @@ SQL Server 和 MySQL 都实现 `IIndustrialHistoryStore`；`IIndustrialDataStore
 
 ## SQL Server
 
-目标框架为 `net8.0`，使用 `System.Data.SqlClient` NuGet 包，不需要 Entity Framework。`TableName` 必须是 `schema.table`，例如 `dbo.IndustrialDataHistory`；数据库和 schema 必须已经存在，`InitializeAsync` 只创建历史表及索引。
+目标框架为 `net8.0`，使用 `System.Data.SqlClient` NuGet 包，不需要 Entity Framework。`TableName` 必须是 `schema.table`，例如 `dbo.InduLinkDataHistory`；数据库和 schema 必须已经存在，`InitializeAsync` 只创建历史表及索引。
 
 Windows 上位机优先使用 Windows 身份验证：
 
@@ -60,7 +60,7 @@ var options = new SqlServerDataStoreOptions
     ConnectionString =
         "Server=localhost;Database=UpperComputerDb;Integrated Security=True;" +
         "Encrypt=True;TrustServerCertificate=True;",
-    TableName = "dbo.IndustrialDataHistory",
+    TableName = "dbo.InduLinkDataHistory",
     CommandTimeoutSeconds = 15,
 };
 ```
@@ -70,8 +70,8 @@ var options = new SqlServerDataStoreOptions
 最小写入和查询示例：
 
 ```csharp
-using (var recorder = new BufferedIndustrialDataRecorder(
-    new SqlServerIndustrialDataStore(options),
+using (var recorder = new BufferedInduLinkDataRecorder(
+    new SqlServerInduLinkDataStore(options),
     new BufferedDataRecorderOptions
     {
         BatchSize = 100,
@@ -102,7 +102,7 @@ using (var recorder = new BufferedIndustrialDataRecorder(
     await recorder.StopAsync(CancellationToken.None);
 }
 
-using (var queryStore = new SqlServerIndustrialDataStore(options))
+using (var queryStore = new SqlServerInduLinkDataStore(options))
 {
     var rows = await queryStore.QueryAsync(
         new HistoryQueryFilter { DeviceId = "plc-1", MaxRows = 10 },
@@ -117,7 +117,7 @@ using (var queryStore = new SqlServerIndustrialDataStore(options))
 
 ## MySQL
 
-MySQL 要求 8.0+，因为最新值查询使用 `ROW_NUMBER()` 窗口函数。提供程序程序集为 `InduLink.Storage.MySql.dll`，驱动为 `MySqlConnector 2.6.1`。`TableName` 支持 `IndustrialDataHistory` 或 `UpperComputerDb.IndustrialDataHistory`，标识符只能包含字母、数字和下划线，数据库必须已经存在。
+MySQL 要求 8.0+，因为最新值查询使用 `ROW_NUMBER()` 窗口函数。提供程序程序集为 `InduLink.Storage.MySql.dll`，驱动为 `MySqlConnector 2.6.1`。`TableName` 支持 `InduLinkDataHistory` 或 `UpperComputerDb.InduLinkDataHistory`，标识符只能包含字母、数字和下划线，数据库必须已经存在。
 
 ```csharp
 var options = new MySqlDataStoreOptions
@@ -126,7 +126,7 @@ var options = new MySqlDataStoreOptions
         "Server=127.0.0.1;Port=3306;Database=UpperComputerDb;" +
         "User ID=industrial_app;Password=<PASSWORD>;" +
         "SslMode=Preferred;DateTimeKind=Utc;",
-    TableName = "IndustrialDataHistory",
+    TableName = "InduLinkDataHistory",
     CommandTimeoutSeconds = 15,
 };
 ```
@@ -143,8 +143,8 @@ MySQL 没有与 SQL Server `DATETIMEOFFSET` 完全对应的列类型，提供程
 写入生命周期与 SQL Server 相同：
 
 ```csharp
-using (var recorder = new BufferedIndustrialDataRecorder(
-    new MySqlIndustrialDataStore(options),
+using (var recorder = new BufferedInduLinkDataRecorder(
+    new MySqlInduLinkDataStore(options),
     new BufferedDataRecorderOptions
     {
         BatchSize = 100,
@@ -172,7 +172,7 @@ using (var recorder = new BufferedIndustrialDataRecorder(
     await recorder.StopAsync(CancellationToken.None);
 }
 
-using (var queryStore = new MySqlIndustrialDataStore(options))
+using (var queryStore = new MySqlInduLinkDataStore(options))
 {
     var rows = await queryStore.QueryAsync(
         new HistoryQueryFilter { DeviceId = "plc-1", MaxRows = 10 },

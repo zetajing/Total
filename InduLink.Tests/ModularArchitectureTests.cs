@@ -30,7 +30,7 @@ namespace InduLink.Tests
         [Test]
         public void DefaultSdk_RegistersExactlyTheCanonicalProtocols()
         {
-            var sdk = IndustrialSdk.CreateDefault();
+            var sdk = InduLinkSdk.CreateDefault();
             CollectionAssert.AreEqual(CanonicalProtocols, sdk.Protocols.Providers.Select(item => item.Protocol).ToArray());
             foreach (var provider in sdk.Protocols.Providers)
             {
@@ -44,9 +44,9 @@ namespace InduLink.Tests
             Assert.Throws<KeyNotFoundException>(() => sdk.Protocols.Get("opcua"));
         }
 
-        [TestCase(typeof(IndustrialConfiguredClient), "InduLink.Runtime")]
-        [TestCase(typeof(BufferedIndustrialDataRecorder), "InduLink.Storage")]
-        [TestCase(typeof(MySqlIndustrialDataStore), "InduLink.Storage.MySql")]
+        [TestCase(typeof(InduLinkConfiguredClient), "InduLink.Runtime")]
+        [TestCase(typeof(BufferedInduLinkDataRecorder), "InduLink.Storage")]
+        [TestCase(typeof(MySqlInduLinkDataStore), "InduLink.Storage.MySql")]
         public void ModulePublicTypes_StayInsideTheAssemblyNamespace(Type representativeType, string expectedNamespace)
         {
             var misplaced = representativeType.Assembly.GetExportedTypes()
@@ -62,36 +62,36 @@ namespace InduLink.Tests
         [Test]
         public void Registry_RejectsDuplicateProtocolAndWrongSettingsType()
         {
-            var registry = new IndustrialProtocolRegistry();
+            var registry = new InduLinkProtocolRegistry();
             registry.Register(new StubProvider("test-protocol"));
             Assert.Throws<InvalidOperationException>(() => registry.Register(new StubProvider("test-protocol")));
 
             var provider = registry.Get("test-protocol");
             CollectionAssert.IsNotEmpty(provider.Validate(new OtherSettings()));
-            Assert.Throws<ArgumentException>(() => provider.CreateClient(new IndustrialDeviceConfig
+            Assert.Throws<ArgumentException>(() => provider.CreateClient(new InduLinkDeviceConfig
             {
                 Name = "device",
                 Protocol = "test-protocol",
-                Runtime = new IndustrialDeviceRuntimeOptions(),
+                Runtime = new InduLinkDeviceRuntimeOptions(),
                 Settings = new OtherSettings(),
-            }, NullIndustrialLogger.Instance));
+            }, NullInduLinkLogger.Instance));
         }
 
         [TestCaseSource(nameof(ValidSettings))]
         public void Configuration_RoundTripsStronglyTypedSettings(string protocol, IProtocolSettings settings)
         {
-            var sdk = IndustrialSdk.CreateDefault();
-            var config = new IndustrialSdkConfig
+            var sdk = InduLinkSdk.CreateDefault();
+            var config = new InduLinkSdkConfig
             {
-                Devices = new List<IndustrialDeviceConfig>
+                Devices = new List<InduLinkDeviceConfig>
                 {
-                    new IndustrialDeviceConfig
+                    new InduLinkDeviceConfig
                     {
                         Name = "device-1",
                         Protocol = protocol,
                         DeviceId = "device-1",
                         PointsFile = "points/device-1.json",
-                        Runtime = new IndustrialDeviceRuntimeOptions(),
+                        Runtime = new InduLinkDeviceRuntimeOptions(),
                         Settings = settings,
                     },
                 },
@@ -107,7 +107,7 @@ namespace InduLink.Tests
         [Test]
         public void Configuration_RejectsUnknownProtocolMissingSettingsAndInvalidSettings()
         {
-            var sdk = IndustrialSdk.CreateDefault();
+            var sdk = InduLinkSdk.CreateDefault();
             const string runtime = "\"runtime\":{\"pollingIntervalMilliseconds\":1000,\"reconnectDelayMilliseconds\":3000,\"operationTimeoutMilliseconds\":5000}";
             Assert.Throws<KeyNotFoundException>(() => sdk.ParseConfiguration(
                 "{\"devices\":[{\"name\":\"x\",\"protocol\":\"unknown\",\"pointsFile\":\"p.json\"," + runtime + ",\"settings\":{}}]}"));
@@ -160,7 +160,7 @@ namespace InduLink.Tests
         [Test]
         public void MySqlConnector_IsReferencedOnlyByTheMySqlStorageProvider()
         {
-            var providerReferences = typeof(MySqlIndustrialDataStore).Assembly
+            var providerReferences = typeof(MySqlInduLinkDataStore).Assembly
                 .GetReferencedAssemblies().Select(item => item.Name).ToArray();
 
             CollectionAssert.Contains(providerReferences, "MySqlConnector");
@@ -169,9 +169,9 @@ namespace InduLink.Tests
 
             var nonOwners = new[]
             {
-                typeof(IndustrialSdk).Assembly,
-                typeof(IndustrialConfiguredClient).Assembly,
-                typeof(SqlServerIndustrialDataStore).Assembly,
+                typeof(InduLinkSdk).Assembly,
+                typeof(InduLinkConfiguredClient).Assembly,
+                typeof(SqlServerInduLinkDataStore).Assembly,
                 typeof(ModbusTcpClient).Assembly,
                 typeof(SiemensS7Client).Assembly,
                 typeof(MitsubishiMcClient).Assembly,
@@ -197,7 +197,7 @@ namespace InduLink.Tests
 
             CollectionAssert.DoesNotContain(references, "InduLink.Storage");
             CollectionAssert.DoesNotContain(references, "InduLink.Storage.MySql");
-            Assert.IsFalse(typeof(IIndustrialHistoryStore).IsAssignableFrom(typeof(RedisClient)));
+            Assert.IsFalse(typeof(IInduLinkHistoryStore).IsAssignableFrom(typeof(RedisClient)));
         }
 
         private static IEnumerable<TestCaseData> ValidSettings()
@@ -215,13 +215,13 @@ namespace InduLink.Tests
         private sealed class StubSettings : IProtocolSettings { }
         private sealed class OtherSettings : IProtocolSettings { }
 
-        private sealed class StubProvider : IndustrialProtocolProvider<StubSettings>
+        private sealed class StubProvider : InduLinkProtocolProvider<StubSettings>
         {
             private readonly string _protocol;
             public StubProvider(string protocol) { _protocol = protocol; }
             public override string Protocol { get { return _protocol; } }
             protected override IReadOnlyList<string> Validate(StubSettings settings) { return new string[0]; }
-            protected override IIndustrialClient CreateClient(IndustrialDeviceConfig device, StubSettings settings, IIndustrialLogger logger)
+            protected override IInduLinkClient CreateClient(InduLinkDeviceConfig device, StubSettings settings, IInduLinkLogger logger)
             {
                 throw new NotSupportedException();
             }

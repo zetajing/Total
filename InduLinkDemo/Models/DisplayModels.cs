@@ -32,7 +32,7 @@ namespace InduLinkDemo
         public string ErrorMessage { get; set; }
 
         // 集中完成枚举、时间和空值格式化，避免 XAML 中重复转换。
-        public static DatabaseHistoryDisplayRow FromRecord(IndustrialDataRecord record)
+        public static DatabaseHistoryDisplayRow FromRecord(InduLinkDataRecord record)
         {
             return new DatabaseHistoryDisplayRow
             {

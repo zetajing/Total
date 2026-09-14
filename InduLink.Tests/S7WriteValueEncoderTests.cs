@@ -24,7 +24,7 @@ namespace InduLink.Tests
         [Test]
         public void EncodeString_RejectsPayloadLongerThanConfiguredLength()
         {
-            Assert.Throws<IndustrialDataConversionException>(
+            Assert.Throws<InduLinkDataConversionException>(
                 () => S7WriteValueEncoder.EncodeString("ABC", 2));
         }
 
@@ -47,7 +47,7 @@ namespace InduLink.Tests
         [Test]
         public void EncodeByteArray_RejectsZeroLength()
         {
-            Assert.Throws<IndustrialDataConversionException>(
+            Assert.Throws<InduLinkDataConversionException>(
                 () => S7WriteValueEncoder.EncodeByteArray(new byte[0], 0));
         }
     }

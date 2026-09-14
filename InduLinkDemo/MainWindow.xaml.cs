@@ -18,7 +18,7 @@ namespace InduLinkDemo
         private AppLogger _demoLogger;
         private AppLogger _sdkLogger;
         private UiStateStore _uiStateStore;
-        private IndustrialApplicationRuntime _runtime;
+        private InduLinkApplicationRuntime _runtime;
         private NetworkServicesRuntime _networkServices;
         private DemoUiState _uiState;
         private bool _logPanelVisible = true;
@@ -36,7 +36,7 @@ namespace InduLinkDemo
             // Create loggers
             _demoLogger = new AppLogger(Dispatcher, AppendLogBatch, "APP");
             _sdkLogger = new AppLogger(Dispatcher, AppendSdkLogBatch, "SDK");
-            _runtime = new IndustrialApplicationRuntime(
+            _runtime = new InduLinkApplicationRuntime(
                 Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Config", "devices.json"),
                 _sdkLogger);
             _networkServices = new NetworkServicesRuntime(_runtime, _sdkLogger);

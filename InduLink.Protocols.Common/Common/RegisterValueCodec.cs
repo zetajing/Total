@@ -20,7 +20,7 @@ namespace InduLink.Protocols.Common
         /// <param name="dataType">要查询的数据类型。</param>
         /// <param name="value">可选的数值，用于计算可变长度类型（如字符串和字节数组）所需的寄存器长度。</param>
         /// <returns>所需的 16 位寄存器数量。</returns>
-        /// <exception cref="IndustrialDataConversionException">当 <paramref name="dataType"/> 为不支持的数据类型时抛出。</exception>
+        /// <exception cref="InduLinkDataConversionException">当 <paramref name="dataType"/> 为不支持的数据类型时抛出。</exception>
         public static ushort GetRequiredRegisterLength(DataType dataType, object value = null)
         {
             switch (dataType)
@@ -43,7 +43,7 @@ namespace InduLink.Protocols.Common
                     var bytes = value as byte[];
                     return GetRegisterLengthFromByteCount(bytes == null ? 0 : bytes.Length);
                 default:
-                    throw new IndustrialDataConversionException("Unsupported data type.");
+                    throw new InduLinkDataConversionException("Unsupported data type.");
             }
         }
 
@@ -119,7 +119,7 @@ namespace InduLink.Protocols.Common
         /// <param name="request">读取请求，包含要读取的地址、数据类型和长度信息。</param>
         /// <param name="bytes">从设备读取的原始字节数组。</param>
         /// <returns>包含按指定数据类型解析后的值的 <see cref="DataValue"/> 对象。</returns>
-        /// <exception cref="IndustrialDataConversionException">当 <see cref="ReadRequest.DataType"/> 为不支持的数据类型时抛出。</exception>
+        /// <exception cref="InduLinkDataConversionException">当 <see cref="ReadRequest.DataType"/> 为不支持的数据类型时抛出。</exception>
         public static DataValue ToDataValue(ReadRequest request, byte[] bytes)
         {
             object value;
@@ -154,7 +154,7 @@ namespace InduLink.Protocols.Common
                     value = bytes;
                     break;
                 default:
-                    throw new IndustrialDataConversionException("Unsupported data type.");
+                    throw new InduLinkDataConversionException("Unsupported data type.");
             }
 
             return new DataValue(request.Address, request.DataType, value, bytes, QualityStatus.Good, DateTimeOffset.UtcNow, null);
@@ -196,7 +196,7 @@ namespace InduLink.Protocols.Common
         /// </summary>
         /// <param name="request">写入请求，包含要写入的地址、数据类型和值。</param>
         /// <returns>编码后的字节数组，可直接用于 Modbus 写入操作。</returns>
-        /// <exception cref="IndustrialDataConversionException">当 <see cref="WriteRequest.DataType"/> 为不支持的数据类型时抛出。</exception>
+        /// <exception cref="InduLinkDataConversionException">当 <see cref="WriteRequest.DataType"/> 为不支持的数据类型时抛出。</exception>
         public static byte[] EncodeBytes(WriteRequest request)
         {
             var registerLength = request.Length == 0 ? GetRequiredRegisterLength(request.DataType, request.Value) : request.Length;
@@ -222,7 +222,7 @@ namespace InduLink.Protocols.Common
                 case DataType.ByteArray:
                     return FitToRegisterLength((byte[])request.Value, registerLength);
                 default:
-                    throw new IndustrialDataConversionException("Unsupported data type.");
+                    throw new InduLinkDataConversionException("Unsupported data type.");
             }
         }
 
@@ -286,19 +286,19 @@ namespace InduLink.Protocols.Common
 
         /// <summary>
         /// 将字节数组适配到指定的寄存器长度。目标长度为 2 × registerLength 字节。
-        /// 如果源数组超过目标长度，则抛出 <see cref="IndustrialDataConversionException"/>；
+        /// 如果源数组超过目标长度，则抛出 <see cref="InduLinkDataConversionException"/>；
         /// 如果不足，则在高位补零填充。
         /// </summary>
         /// <param name="bytes">要适配的源字节数组。</param>
         /// <param name="registerLength">目标寄存器长度（16 位寄存器数量）。</param>
         /// <returns>适配后的字节数组，长度为 2 × registerLength 字节。</returns>
-        /// <exception cref="IndustrialDataConversionException">当 <paramref name="bytes"/> 的长度超过目标长度时抛出。</exception>
+        /// <exception cref="InduLinkDataConversionException">当 <paramref name="bytes"/> 的长度超过目标长度时抛出。</exception>
         private static byte[] FitToRegisterLength(byte[] bytes, ushort registerLength)
         {
             var targetLength = Math.Max(1, (int)registerLength) * 2;
             if (bytes.Length > targetLength)
             {
-                throw new IndustrialDataConversionException("Value length exceeds configured Modbus register length.");
+                throw new InduLinkDataConversionException("Value length exceeds configured Modbus register length.");
             }
 
             if (bytes.Length == targetLength)

@@ -4,16 +4,16 @@ using InduLink.Abstractions;
 namespace InduLink.Runtime
 {
     /// <summary>
-    /// Platform-level helpers for clients. These methods keep IIndustrialClient stable while allowing
+    /// Platform-level helpers for clients. These methods keep IInduLinkClient stable while allowing
     /// new SDK infrastructure to discover capabilities and make protocol-neutral decisions.
     /// </summary>
-    public static class IndustrialClientPlatformExtensions
+    public static class InduLinkClientPlatformExtensions
     {
         /// <summary>
         /// Gets protocol capabilities for any industrial client. Custom clients may implement
         /// IProtocolCapabilityProvider to override the built-in defaults.
         /// </summary>
-        public static ProtocolCapabilities GetCapabilities(this IIndustrialClient client)
+        public static ProtocolCapabilities GetCapabilities(this IInduLinkClient client)
         {
             if (client == null) throw new ArgumentNullException(nameof(client));
             var provider = client as IProtocolCapabilityProvider;
@@ -22,19 +22,19 @@ namespace InduLink.Runtime
         }
 
         /// <summary>Returns whether the client has protocol-level batch read optimization beyond sequential fallback.</summary>
-        public static bool HasOptimizedBatchRead(this IIndustrialClient client)
+        public static bool HasOptimizedBatchRead(this IInduLinkClient client)
         {
             return client.GetCapabilities().SupportsOptimizedBatchRead;
         }
 
         /// <summary>Returns whether the client has protocol-level batch write optimization beyond sequential fallback.</summary>
-        public static bool HasOptimizedBatchWrite(this IIndustrialClient client)
+        public static bool HasOptimizedBatchWrite(this IInduLinkClient client)
         {
             return client.GetCapabilities().SupportsOptimizedBatchWrite;
         }
 
         /// <summary>Returns whether the requested polling interval is at or above the protocol recommendation.</summary>
-        public static bool IsRecommendedPollingInterval(this IIndustrialClient client, TimeSpan interval)
+        public static bool IsRecommendedPollingInterval(this IInduLinkClient client, TimeSpan interval)
         {
             if (interval <= TimeSpan.Zero) throw new ArgumentOutOfRangeException(nameof(interval));
             return interval >= client.GetCapabilities().RecommendedMinPollingInterval;

@@ -29,7 +29,7 @@ namespace InduLink.Tests
         [Test]
         public void Configuration_SupportsEndpointAndCredentials()
         {
-            var sdk = IndustrialSdk.CreateDefault();
+            var sdk = InduLinkSdk.CreateDefault();
             var config = sdk.ParseConfiguration("{\"devices\":[{\"name\":\"ua-plc\",\"protocol\":\"opc-ua\",\"pointsFile\":\"points.json\",\"runtime\":{\"pollingIntervalMilliseconds\":1000,\"reconnectDelayMilliseconds\":3000,\"operationTimeoutMilliseconds\":5000},\"settings\":{\"endpointUrl\":\"opc.tcp://localhost:4840\",\"username\":\"operator\",\"password\":\"secret\"}}]}");
             using (var client = sdk.CreateClient(config.FindDevice("ua-plc")))
                 Assert.AreEqual(ProtocolKind.OpcUa, client.Kind);

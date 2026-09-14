@@ -3,13 +3,13 @@ using System;
 namespace InduLink.Abstractions
 {
     /// <summary>
-    /// Default immutable implementation of <see cref="IIndustrialAddress" />.
+    /// Default immutable implementation of <see cref="IInduLinkAddress" />.
     /// Protocols may use their own richer address objects, but this type is useful for tests, tooling,
     /// configuration validation, and capability documentation.
     /// </summary>
-    public sealed class IndustrialAddress : IIndustrialAddress
+    public sealed class InduLinkAddress : IInduLinkAddress
     {
-        public IndustrialAddress(string original, string normalized, string area, int offset, int? bit = null)
+        public InduLinkAddress(string original, string normalized, string area, int offset, int? bit = null)
         {
             if (string.IsNullOrWhiteSpace(original)) throw new ArgumentException("Original address cannot be null or empty.", nameof(original));
             if (string.IsNullOrWhiteSpace(normalized)) throw new ArgumentException("Normalized address cannot be null or empty.", nameof(normalized));

@@ -10,26 +10,26 @@ using InduLink.Diagnostics;
 namespace InduLink.Runtime
 {
     /// <summary>承载多个配置化设备的运行时，负责启动、轮询、状态通知和断线重连。</summary>
-    public sealed class IndustrialDeviceHost : IDisposable
+    public sealed class InduLinkDeviceHost : IDisposable
     {
-        private readonly Dictionary<string, IndustrialHostedDevice> _devices = new Dictionary<string, IndustrialHostedDevice>(StringComparer.OrdinalIgnoreCase);
-        private readonly IIndustrialLogger _logger;
+        private readonly Dictionary<string, InduLinkHostedDevice> _devices = new Dictionary<string, InduLinkHostedDevice>(StringComparer.OrdinalIgnoreCase);
+        private readonly IInduLinkLogger _logger;
         private readonly SemaphoreSlim _lifecycleGate = new SemaphoreSlim(1, 1);
         private int _started;
         private int _disposed;
 
         /// <summary>使用已解析配置创建设备主机，clientFactory 可用于自定义协议客户端或测试。</summary>
-        public IndustrialDeviceHost(
-            IndustrialSdkConfig config,
+        public InduLinkDeviceHost(
+            InduLinkSdkConfig config,
             string configDirectory,
-            Func<IndustrialDeviceConfig, IIndustrialClient> clientFactory,
-            IIndustrialLogger logger = null)
+            Func<InduLinkDeviceConfig, IInduLinkClient> clientFactory,
+            IInduLinkLogger logger = null)
         {
             if (config == null) throw new ArgumentNullException(nameof(config));
             if (string.IsNullOrWhiteSpace(configDirectory)) throw new ArgumentException("Config directory cannot be null or empty.", nameof(configDirectory));
             if (clientFactory == null) throw new ArgumentNullException(nameof(clientFactory));
 
-            _logger = logger ?? NullIndustrialLogger.Instance;
+            _logger = logger ?? NullInduLinkLogger.Instance;
             if (config.Devices == null)
             {
                 throw new InvalidOperationException("Device configuration collection cannot be null.");
@@ -64,12 +64,12 @@ namespace InduLink.Runtime
                         throw new InvalidOperationException("reconnectDelayMilliseconds must be greater than zero for device: " + deviceConfig.Name);
                     }
 
-                    IndustrialConfiguredClient configuredClient = null;
+                    InduLinkConfiguredClient configuredClient = null;
                     try
                     {
                         var tags = TagTable.Load(deviceConfig.ResolvePointsFile(configDirectory));
-                        configuredClient = new IndustrialConfiguredClient(deviceConfig.Name, clientFactory(deviceConfig), tags);
-                        var hostedDevice = new IndustrialHostedDevice(
+                        configuredClient = new InduLinkConfiguredClient(deviceConfig.Name, clientFactory(deviceConfig), tags);
+                        var hostedDevice = new InduLinkHostedDevice(
                             deviceConfig,
                             configuredClient,
                             RaiseStateChanged,
@@ -93,13 +93,13 @@ namespace InduLink.Runtime
         }
 
         /// <summary>获取所有已启用的托管设备。</summary>
-        public IReadOnlyDictionary<string, IndustrialHostedDevice> Devices { get { return _devices; } }
+        public IReadOnlyDictionary<string, InduLinkHostedDevice> Devices { get { return _devices; } }
 
         /// <summary>设备连接状态或错误变化时触发。</summary>
-        public event EventHandler<IndustrialDeviceStateChangedEventArgs> DeviceStateChanged;
+        public event EventHandler<InduLinkDeviceStateChangedEventArgs> DeviceStateChanged;
 
         /// <summary>设备轮询读取到一组点位时触发。</summary>
-        public event EventHandler<IndustrialDeviceValuesEventArgs> ValuesReceived;
+        public event EventHandler<InduLinkDeviceValuesEventArgs> ValuesReceived;
 
         /// <summary>启动全部已启用设备；单台设备连接失败不会阻止其他设备运行。</summary>
         public async Task StartAsync(CancellationToken cancellationToken = default)
@@ -176,11 +176,11 @@ namespace InduLink.Runtime
         }
 
         /// <summary>按名称取得托管设备，名称匹配不区分大小写。</summary>
-        public IndustrialHostedDevice Get(string deviceName)
+        public InduLinkHostedDevice Get(string deviceName)
         {
             if (string.IsNullOrWhiteSpace(deviceName)) throw new ArgumentException("Device name cannot be null or empty.", nameof(deviceName));
 
-            IndustrialHostedDevice device;
+            InduLinkHostedDevice device;
             if (_devices.TryGetValue(deviceName, out device))
             {
                 return device;
@@ -215,7 +215,7 @@ namespace InduLink.Runtime
             }
         }
 
-        private void RaiseStateChanged(IndustrialDeviceStateChangedEventArgs args)
+        private void RaiseStateChanged(InduLinkDeviceStateChangedEventArgs args)
         {
             try
             {
@@ -227,7 +227,7 @@ namespace InduLink.Runtime
             }
         }
 
-        private void RaiseValuesReceived(IndustrialDeviceValuesEventArgs args)
+        private void RaiseValuesReceived(InduLinkDeviceValuesEventArgs args)
         {
             try
             {
@@ -243,7 +243,7 @@ namespace InduLink.Runtime
         {
             if (Volatile.Read(ref _disposed) != 0)
             {
-                throw new ObjectDisposedException(nameof(IndustrialDeviceHost));
+                throw new ObjectDisposedException(nameof(InduLinkDeviceHost));
             }
         }
     }

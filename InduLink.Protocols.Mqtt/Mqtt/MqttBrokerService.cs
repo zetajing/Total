@@ -117,7 +117,7 @@ namespace InduLink.Protocols.Mqtt
     {
         private const string InternalPublishMarker = "InduLink.Mqtt.InternalPublish";
         private readonly MqttBrokerOptions _options;
-        private readonly IIndustrialLogger _logger;
+        private readonly IInduLinkLogger _logger;
         private readonly SemaphoreSlim _lifecycleLock = new SemaphoreSlim(1, 1);
         private readonly ConcurrentDictionary<string, MqttBrokerClientSession> _sessions =
             new ConcurrentDictionary<string, MqttBrokerClientSession>(StringComparer.Ordinal);
@@ -125,11 +125,11 @@ namespace InduLink.Protocols.Mqtt
         private IReadOnlyDictionary<string, string> _credentials = new Dictionary<string, string>();
         private int _disposeRequested;
 
-        public MqttBrokerService(MqttBrokerOptions options, IIndustrialLogger logger = null)
+        public MqttBrokerService(MqttBrokerOptions options, IInduLinkLogger logger = null)
         {
             if (options == null) throw new ArgumentNullException(nameof(options));
             _options = CloneOptions(options);
-            _logger = logger ?? NullIndustrialLogger.Instance;
+            _logger = logger ?? NullInduLinkLogger.Instance;
         }
 
         public MqttBrokerOptions Options { get { return CloneOptions(_options); } }

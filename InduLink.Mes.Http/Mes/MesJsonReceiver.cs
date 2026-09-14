@@ -18,7 +18,7 @@ namespace InduLink.Mes
 
         private readonly MesJsonReceiverOptions _options;
         private readonly MesJsonReceiveHandler _handler;
-        private readonly IIndustrialLogger _logger;
+        private readonly IInduLinkLogger _logger;
         private readonly SemaphoreSlim _lifecycleGate = new SemaphoreSlim(1, 1);
         private readonly SemaphoreSlim _requestSlots;
         private readonly ConcurrentDictionary<int, Task> _activeRequests = new ConcurrentDictionary<int, Task>();
@@ -37,11 +37,11 @@ namespace InduLink.Mes
         public MesJsonReceiver(
             MesJsonReceiverOptions options,
             MesJsonReceiveHandler handler,
-            IIndustrialLogger logger = null)
+            IInduLinkLogger logger = null)
         {
             _options = options ?? throw new ArgumentNullException(nameof(options));
             _handler = handler ?? throw new ArgumentNullException(nameof(handler));
-            _logger = logger ?? NullIndustrialLogger.Instance;
+            _logger = logger ?? NullInduLinkLogger.Instance;
             ValidateOptions(options);
             _requestSlots = new SemaphoreSlim(options.MaxConcurrentRequests, options.MaxConcurrentRequests);
         }

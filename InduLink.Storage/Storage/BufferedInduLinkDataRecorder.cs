@@ -51,14 +51,14 @@ namespace InduLink.Storage
     /// 以保证实时通信优先于历史数据完整性。
     /// </para>
     /// </summary>
-    public sealed class BufferedIndustrialDataRecorder : IDisposable
+    public sealed class BufferedInduLinkDataRecorder : IDisposable
     {
-        private readonly IIndustrialDataStore _store;
+        private readonly IInduLinkDataStore _store;
         private readonly BufferedDataRecorderOptions _options;
-        private readonly IIndustrialLogger _logger;
+        private readonly IInduLinkLogger _logger;
         // BlockingCollection 同时提供线程安全队列、容量限制和“完成添加”通知，
         // 很适合 .NET 8 下实现简单可靠的生产者/消费者模型。
-        private readonly BlockingCollection<IReadOnlyCollection<IndustrialDataRecord>> _queue;
+        private readonly BlockingCollection<IReadOnlyCollection<InduLinkDataRecord>> _queue;
 
         // 该取消源只属于后台工作任务。正常停止使用 CompleteAdding 排空队列，
         // Dispose 才会取消仍在等待的任务。
@@ -81,10 +81,10 @@ namespace InduLink.Storage
         /// 创建后台记录器，但此时还没有连接数据库或启动后台任务。
         /// 调用方必须继续调用 <see cref="StartAsync"/>。
         /// </summary>
-        public BufferedIndustrialDataRecorder(
-            IIndustrialDataStore store,
+        public BufferedInduLinkDataRecorder(
+            IInduLinkDataStore store,
             BufferedDataRecorderOptions options = null,
-            IIndustrialLogger logger = null)
+            IInduLinkLogger logger = null)
         {
             _store = store ?? throw new ArgumentNullException(nameof(store));
             _options = options ?? new BufferedDataRecorderOptions();
@@ -93,8 +93,8 @@ namespace InduLink.Storage
             if (_options.BatchSize <= 0) throw new ArgumentOutOfRangeException(nameof(options), "BatchSize 必须大于 0。");
             if (_options.QueueCapacity <= 0) throw new ArgumentOutOfRangeException(nameof(options), "QueueCapacity 必须大于 0。");
             if (_options.RetryCount < 0) throw new ArgumentOutOfRangeException(nameof(options), "RetryCount 不能小于 0。");
-            _logger = logger ?? NullIndustrialLogger.Instance;
-            _queue = new BlockingCollection<IReadOnlyCollection<IndustrialDataRecord>>(_options.QueueCapacity);
+            _logger = logger ?? NullInduLinkLogger.Instance;
+            _queue = new BlockingCollection<IReadOnlyCollection<InduLinkDataRecord>>(_options.QueueCapacity);
         }
 
         /// <summary>
@@ -103,17 +103,17 @@ namespace InduLink.Storage
         /// </summary>
         public async Task StartAsync(CancellationToken cancellationToken)
         {
-            if (Volatile.Read(ref _disposed) != 0) throw new ObjectDisposedException(nameof(BufferedIndustrialDataRecorder));
+            if (Volatile.Read(ref _disposed) != 0) throw new ObjectDisposedException(nameof(BufferedInduLinkDataRecorder));
             await _lifecycleGate.WaitAsync(cancellationToken).ConfigureAwait(false);
             try
             {
-                if (Volatile.Read(ref _disposed) != 0) throw new ObjectDisposedException(nameof(BufferedIndustrialDataRecorder));
+                if (Volatile.Read(ref _disposed) != 0) throw new ObjectDisposedException(nameof(BufferedInduLinkDataRecorder));
                 if (Volatile.Read(ref _started) != 0) return;
                 if (_stopTask != null || _queue.IsAddingCompleted)
                     throw new InvalidOperationException("A stopped database recorder cannot be restarted. Create a new recorder instance.");
 
                 await _store.InitializeAsync(cancellationToken).ConfigureAwait(false);
-                if (Volatile.Read(ref _disposed) != 0) throw new ObjectDisposedException(nameof(BufferedIndustrialDataRecorder));
+                if (Volatile.Read(ref _disposed) != 0) throw new ObjectDisposedException(nameof(BufferedInduLinkDataRecorder));
                 cancellationToken.ThrowIfCancellationRequested();
 
                 // Task.Run 把持续运行的队列消费者放到线程池，不占用 WPF UI 线程。
@@ -142,7 +142,7 @@ namespace InduLink.Storage
             }
 
             // 入队前转换并复制可变数据，确保后台线程读取的是调用时刻的稳定快照。
-            var records = values.Select(value => IndustrialDataRecord.FromDataValue(protocol, deviceId, value)).ToArray();
+            var records = values.Select(value => InduLinkDataRecord.FromDataValue(protocol, deviceId, value)).ToArray();
             try
             {
                 if (_queue.TryAdd(records))
@@ -249,10 +249,10 @@ namespace InduLink.Storage
         private async Task ProcessQueueAsync(CancellationToken cancellationToken)
         {
             // 复用 List 缓冲区，避免每一轮消费者循环都创建新的可增长集合。
-            var batch = new List<IndustrialDataRecord>(_options.BatchSize);
+            var batch = new List<InduLinkDataRecord>(_options.BatchSize);
             while (!_queue.IsCompleted)
             {
-                IReadOnlyCollection<IndustrialDataRecord> first;
+                IReadOnlyCollection<InduLinkDataRecord> first;
                 try
                 {
                     // 没有数据时 Take 会等待，不会让后台线程空转并持续占用 CPU。
@@ -266,7 +266,7 @@ namespace InduLink.Storage
 
                 batch.Clear();
                 batch.AddRange(first);
-                IReadOnlyCollection<IndustrialDataRecord> next;
+                IReadOnlyCollection<InduLinkDataRecord> next;
 
                 // 将队列中已经到达的小批次尽量合并，减少数据库事务和网络往返次数。
                 while (batch.Count < _options.BatchSize && _queue.TryTake(out next))
@@ -278,7 +278,7 @@ namespace InduLink.Storage
             }
         }
 
-        private async Task WriteWithRetryAsync(IReadOnlyCollection<IndustrialDataRecord> records, CancellationToken cancellationToken)
+        private async Task WriteWithRetryAsync(IReadOnlyCollection<InduLinkDataRecord> records, CancellationToken cancellationToken)
         {
             for (var attempt = 0; ; attempt++)
             {

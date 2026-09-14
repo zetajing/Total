@@ -29,17 +29,17 @@ namespace InduLink.Protocols.Redis
     }
 
     /// <summary>Redis 键值客户端。工业地址直接映射为 Redis key。</summary>
-    public sealed class RedisClient : IndustrialClientBase, IKeyValueClient
+    public sealed class RedisClient : InduLinkClientBase, IKeyValueClient
     {
         private readonly RedisClientOptions _options;
         private readonly IRedisConnectionProvider _connectionProvider;
         private ConnectionMultiplexer _connection;
         private IDatabase _database;
 
-        public RedisClient(RedisClientOptions options, IIndustrialLogger logger = null,
+        public RedisClient(RedisClientOptions options, IInduLinkLogger logger = null,
             IPollingScheduler pollingScheduler = null, IRedisConnectionProvider connectionProvider = null)
             : base(GetDeviceId(options), ProtocolKind.Redis, pollingScheduler ?? new PollingScheduler(logger),
-                logger ?? NullIndustrialLogger.Instance, options.OperationTimeoutMilliseconds)
+                logger ?? NullInduLinkLogger.Instance, options.OperationTimeoutMilliseconds)
         {
             _options = options;
             _connectionProvider = connectionProvider ?? RedisConnectionProvider.Shared;
@@ -98,7 +98,7 @@ namespace InduLink.Protocols.Redis
             {
                 EnsureConnected();
                 if (!await _database.StringSetAsync(key, value).ConfigureAwait(false))
-                    throw new IndustrialProtocolException("Redis SET returned false.");
+                    throw new InduLinkProtocolException("Redis SET returned false.");
                 token.ThrowIfCancellationRequested();
             }, cancellationToken);
         }
@@ -120,7 +120,7 @@ namespace InduLink.Protocols.Redis
                     .Select(entry => new KeyValuePair<RedisKey, RedisValue>(entry.Key, entry.Value))
                     .ToArray();
                 if (!await _database.StringSetAsync(pairs).ConfigureAwait(false))
-                    throw new IndustrialProtocolException("Redis batch SET returned false.");
+                    throw new InduLinkProtocolException("Redis batch SET returned false.");
                 token.ThrowIfCancellationRequested();
             }, cancellationToken);
         }
@@ -147,7 +147,7 @@ namespace InduLink.Protocols.Redis
                 _database = connection.GetDatabase(_options.Database);
             }
             catch (OperationCanceledException) { DetachConnection(); throw; }
-            catch (Exception ex) { DetachConnection(); throw new IndustrialConnectionException("Failed to connect Redis.", ex); }
+            catch (Exception ex) { DetachConnection(); throw new InduLinkConnectionException("Failed to connect Redis.", ex); }
         }
 
         protected override Task DisconnectCoreAsync(CancellationToken cancellationToken)
@@ -185,7 +185,7 @@ namespace InduLink.Protocols.Redis
         {
             EnsureConnected();
             if (!await _database.StringSetAsync(request.Address, TextValueCodec.Encode(request.DataType, request.Value)).ConfigureAwait(false))
-                throw new IndustrialProtocolException("Redis SET returned false.");
+                throw new InduLinkProtocolException("Redis SET returned false.");
             cancellationToken.ThrowIfCancellationRequested();
         }
 
@@ -193,11 +193,11 @@ namespace InduLink.Protocols.Redis
         {
             EnsureConnected();
             var entries = requests.Select(x => new KeyValuePair<RedisKey, RedisValue>(x.Address, TextValueCodec.Encode(x.DataType, x.Value))).ToArray();
-            if (!await _database.StringSetAsync(entries).ConfigureAwait(false)) throw new IndustrialProtocolException("Redis batch SET returned false.");
+            if (!await _database.StringSetAsync(entries).ConfigureAwait(false)) throw new InduLinkProtocolException("Redis batch SET returned false.");
             cancellationToken.ThrowIfCancellationRequested();
         }
 
-        private void EnsureConnected() { if (!IsConnected || _database == null) throw new IndustrialConnectionException("Redis client is not connected."); }
+        private void EnsureConnected() { if (!IsConnected || _database == null) throw new InduLinkConnectionException("Redis client is not connected."); }
 
         private static KeyValueValue ToKeyValueValue(string key, RedisValue value)
         {

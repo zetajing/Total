@@ -60,13 +60,13 @@ namespace InduLink.Protocols.Mc
             McDeviceMetadata metadata;
             if (!Devices.TryGetValue(type, out metadata))
             {
-                throw new Exceptions.IndustrialAddressParseException("Unsupported MC device type: " + type);
+                throw new Exceptions.InduLinkAddressParseException("Unsupported MC device type: " + type);
             }
             return metadata;
         }
     }
 
-    public sealed class McAddress : IIndustrialAddress
+    public sealed class McAddress : IInduLinkAddress
     {
         public McAddress(McDeviceType deviceType, int index, bool isBitDevice, string normalized = null, string original = null)
         {
@@ -83,10 +83,10 @@ namespace InduLink.Protocols.Mc
         public string Original { get; private set; }
         public string Normalized { get; private set; }
 
-        string IIndustrialAddress.Area { get { return DeviceType.ToString(); } }
-        int IIndustrialAddress.Offset { get { return Index; } }
-        int? IIndustrialAddress.Bit { get { return null; } }
-        bool IIndustrialAddress.IsBitAddress { get { return IsBitDevice; } }
+        string IInduLinkAddress.Area { get { return DeviceType.ToString(); } }
+        int IInduLinkAddress.Offset { get { return Index; } }
+        int? IInduLinkAddress.Bit { get { return null; } }
+        bool IInduLinkAddress.IsBitAddress { get { return IsBitDevice; } }
 
         public override string ToString()
         {
@@ -116,13 +116,13 @@ namespace InduLink.Protocols.Mc
             var match = Pattern.Match(input);
             if (!match.Success)
             {
-                throw new Exceptions.IndustrialAddressParseException("Unsupported MC address: " + address);
+                throw new Exceptions.InduLinkAddressParseException("Unsupported MC address: " + address);
             }
 
             McDeviceType type;
             if (!Enum.TryParse(match.Groups[1].Value, true, out type))
             {
-                throw new Exceptions.IndustrialAddressParseException("Unsupported MC device type.");
+                throw new Exceptions.InduLinkAddressParseException("Unsupported MC device type.");
             }
 
             var metadata = McDeviceCatalog.Get(type);
@@ -133,13 +133,13 @@ namespace InduLink.Protocols.Mc
             }
             catch (Exception ex)
             {
-                throw new Exceptions.IndustrialAddressParseException(
+                throw new Exceptions.InduLinkAddressParseException(
                     string.Format(CultureInfo.InvariantCulture, "Invalid {0} address: {1}", type, address), ex);
             }
 
             if (index < 0 || index > 0xFFFFFF)
             {
-                throw new Exceptions.IndustrialAddressParseException("MC device address must fit in 24 bits.");
+                throw new Exceptions.InduLinkAddressParseException("MC device address must fit in 24 bits.");
             }
 
             return new McAddress(type, index, metadata.IsBitDevice, input, address);
@@ -156,18 +156,18 @@ namespace InduLink.Protocols.Mc
         public int OperationTimeoutMilliseconds { get; set; } = 5000;
     }
 
-    public sealed class MitsubishiMcClient : IndustrialClientBase, IBatchOperationPlanner, IRegisterClient, IEventSubscriptionClient
+    public sealed class MitsubishiMcClient : InduLinkClientBase, IBatchOperationPlanner, IRegisterClient, IEventSubscriptionClient
     {
         private readonly ITransportClient _transport;
         private readonly McAddressParser _parser;
 
         public MitsubishiMcClient(
             MitsubishiMcClientOptions options,
-            IIndustrialLogger logger = null,
+            IInduLinkLogger logger = null,
             IPollingScheduler pollingScheduler = null,
             McAddressParser parser = null)
             : base(GetDeviceId(options), ProtocolKind.MitsubishiMc,
-                pollingScheduler ?? new PollingScheduler(logger), logger ?? NullIndustrialLogger.Instance, options.OperationTimeoutMilliseconds)
+                pollingScheduler ?? new PollingScheduler(logger), logger ?? NullInduLinkLogger.Instance, options.OperationTimeoutMilliseconds)
         {
             if (options == null) throw new ArgumentNullException(nameof(options));
             if (string.IsNullOrWhiteSpace(options.Host)) throw new ArgumentException("Host is required.", nameof(options));
@@ -187,11 +187,11 @@ namespace InduLink.Protocols.Mc
         internal MitsubishiMcClient(
             string deviceId,
             ITransportClient transport,
-            IIndustrialLogger logger = null,
+            IInduLinkLogger logger = null,
             IPollingScheduler pollingScheduler = null,
             McAddressParser parser = null)
             : base(deviceId, ProtocolKind.MitsubishiMc,
-                pollingScheduler ?? new PollingScheduler(logger), logger ?? NullIndustrialLogger.Instance)
+                pollingScheduler ?? new PollingScheduler(logger), logger ?? NullInduLinkLogger.Instance)
         {
             _transport = transport ?? throw new ArgumentNullException(nameof(transport));
             _parser = parser ?? new McAddressParser();
@@ -426,7 +426,7 @@ namespace InduLink.Protocols.Mc
         {
             if (!IsConnected)
             {
-                throw new Exceptions.IndustrialConnectionException("Mitsubishi MC client is not connected.");
+                throw new Exceptions.InduLinkConnectionException("Mitsubishi MC client is not connected.");
             }
         }
 
@@ -458,7 +458,7 @@ namespace InduLink.Protocols.Mc
             var expectedBytes = isBitDevice ? (count + 1) / 2 : checked(count * 2);
             if (payload == null || payload.Length != expectedBytes)
             {
-                throw new Exceptions.IndustrialProtocolException(string.Format(
+                throw new Exceptions.InduLinkProtocolException(string.Format(
                     "Invalid MC read payload length. Expected {0} bytes, received {1} bytes.",
                     expectedBytes,
                     payload == null ? 0 : payload.Length));

@@ -27,17 +27,17 @@ namespace InduLink.Runtime.Polling
         private readonly ConcurrentDictionary<DeviceWorker, byte> _retiringWorkers =
             new ConcurrentDictionary<DeviceWorker, byte>();
 
-        private readonly IIndustrialLogger _logger;
+        private readonly IInduLinkLogger _logger;
         private readonly object _lifecycleSync = new object();
         private int _disposed;
 
-        public PollingScheduler(IIndustrialLogger logger = null)
+        public PollingScheduler(IInduLinkLogger logger = null)
         {
-            _logger = logger ?? NullIndustrialLogger.Instance;
+            _logger = logger ?? NullInduLinkLogger.Instance;
         }
 
         public Task<string> SubscribeAsync(
-            IIndustrialClient client,
+            IInduLinkClient client,
             SubscriptionRequest request,
             EventHandler<SubscriptionEvent> handler,
             CancellationToken cancellationToken)
@@ -52,7 +52,7 @@ namespace InduLink.Runtime.Polling
                 if (request.Items == null || request.Items.Count == 0)
                     throw new ArgumentException("Subscription must contain at least one read request.", nameof(request));
 
-                var capabilities = InduLink.Runtime.IndustrialClientPlatformExtensions.GetCapabilities(client);
+                var capabilities = InduLink.Runtime.InduLinkClientPlatformExtensions.GetCapabilities(client);
                 if (!capabilities.SupportsSubscriptions)
                     throw new NotSupportedException(string.Format("Protocol '{0}' does not support polling subscriptions.", capabilities.DisplayName));
                 if (request.Interval < capabilities.RecommendedMinPollingInterval)

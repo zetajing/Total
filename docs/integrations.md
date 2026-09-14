@@ -180,7 +180,7 @@ Content-Type: application/json
 SDK 和 Demo 不会自动执行管理员命令。监听非本机前缀时，管理员需显式配置 URL ACL、证书绑定和防火墙：
 
 ```powershell
-netsh http add urlacl url=https://+:8088/ user="DOMAIN\\IndustrialUser"
+netsh http add urlacl url=https://+:8088/ user="DOMAIN\\InduLinkUser"
 netsh http add sslcert ipport=0.0.0.0:8088 certhash=<证书指纹> appid="{11111111-2222-3333-4444-555555555555}"
 ```
 

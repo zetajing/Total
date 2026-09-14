@@ -73,19 +73,19 @@ namespace InduLink.Tests
         [Test]
         public void DeviceHost_SkipsDisabledDevicesAndRejectsInvalidPointFiles()
         {
-            var disabled = new IndustrialSdkConfig
+            var disabled = new InduLinkSdkConfig
             {
-                Devices = new List<IndustrialDeviceConfig>
+                Devices = new List<InduLinkDeviceConfig>
                 {
                     Device("disabled", false, "missing.json"),
                 },
             };
-            using (var host = new IndustrialDeviceHost(disabled, Path.GetTempPath(), item => new FakeClient(item.EffectiveDeviceId)))
+            using (var host = new InduLinkDeviceHost(disabled, Path.GetTempPath(), item => new FakeClient(item.EffectiveDeviceId)))
                 Assert.That(host.Devices, Is.Empty);
 
-            var enabled = new IndustrialSdkConfig { Devices = new List<IndustrialDeviceConfig> { Device("enabled", true, "missing.json") } };
+            var enabled = new InduLinkSdkConfig { Devices = new List<InduLinkDeviceConfig> { Device("enabled", true, "missing.json") } };
             Assert.Throws<FileNotFoundException>(() =>
-                new IndustrialDeviceHost(enabled, Path.GetTempPath(), item => new FakeClient(item.EffectiveDeviceId)));
+                new InduLinkDeviceHost(enabled, Path.GetTempPath(), item => new FakeClient(item.EffectiveDeviceId)));
         }
 
         [Test]
@@ -97,16 +97,16 @@ namespace InduLink.Tests
             {
                 File.WriteAllText(Path.Combine(directory, "points.json"),
                     "{\"tags\":[{\"name\":\"Value\",\"address\":\"D0\",\"type\":\"Int16\"}]}");
-                var config = new IndustrialSdkConfig
+                var config = new InduLinkSdkConfig
                 {
-                    Devices = new List<IndustrialDeviceConfig>
+                    Devices = new List<InduLinkDeviceConfig>
                     {
                         Device("device", true, "points.json"),
                     },
                 };
                 config.Devices[0].Runtime.ReconnectDelayMilliseconds = 20;
                 var client = new FakeClient("device") { SubscribeFailuresRemaining = 1 };
-                using (var host = new IndustrialDeviceHost(config, directory, item => client))
+                using (var host = new InduLinkDeviceHost(config, directory, item => client))
                 {
                     await host.StartAsync(CancellationToken.None);
                     var timeout = DateTime.UtcNow.AddSeconds(2);
@@ -119,7 +119,7 @@ namespace InduLink.Tests
                 }
 
                 Assert.Throws<InvalidOperationException>(() =>
-                    new IndustrialDeviceHost(config, directory, item => throw new InvalidOperationException("provider failed")));
+                    new InduLinkDeviceHost(config, directory, item => throw new InvalidOperationException("provider failed")));
             }
             finally
             {
@@ -131,7 +131,7 @@ namespace InduLink.Tests
         public async Task BufferedRecorder_RetriesAndFlushesAcceptedRecordsOnStop()
         {
             var store = new FakeStore { FailuresRemaining = 1 };
-            using (var recorder = new BufferedIndustrialDataRecorder(store,
+            using (var recorder = new BufferedInduLinkDataRecorder(store,
                 new BufferedDataRecorderOptions { BatchSize = 10, QueueCapacity = 2, RetryCount = 1 }))
             {
                 await recorder.StartAsync(CancellationToken.None);
@@ -149,7 +149,7 @@ namespace InduLink.Tests
         public async Task BufferedRecorder_UsesBoundedQueueAndCallerCancellationOnlyCancelsWaiting()
         {
             var store = new FakeStore { BlockWrites = true };
-            using (var recorder = new BufferedIndustrialDataRecorder(store,
+            using (var recorder = new BufferedInduLinkDataRecorder(store,
                 new BufferedDataRecorderOptions { BatchSize = 1, QueueCapacity = 1, RetryCount = 0 }))
             {
                 await recorder.StartAsync(CancellationToken.None);
@@ -188,16 +188,16 @@ namespace InduLink.Tests
                 TimeSpan.FromMilliseconds(100), false);
         }
 
-        private static IndustrialDeviceConfig Device(string name, bool enabled, string pointsFile)
+        private static InduLinkDeviceConfig Device(string name, bool enabled, string pointsFile)
         {
-            return new IndustrialDeviceConfig
+            return new InduLinkDeviceConfig
             {
                 Name = name,
                 DeviceId = name,
                 Protocol = "modbus-tcp",
                 Enabled = enabled,
                 PointsFile = pointsFile,
-                Runtime = new IndustrialDeviceRuntimeOptions(),
+                Runtime = new InduLinkDeviceRuntimeOptions(),
             };
         }
 
@@ -206,7 +206,7 @@ namespace InduLink.Tests
             return new DataValue(address, DataType.Int16, value, null, QualityStatus.Good, DateTimeOffset.UtcNow, null);
         }
 
-        private sealed class FakeClient : IIndustrialClient
+        private sealed class FakeClient : IInduLinkClient
         {
             public FakeClient(string deviceId) { DeviceId = deviceId; }
             public string DeviceId { get; private set; }
@@ -238,7 +238,7 @@ namespace InduLink.Tests
             public void Dispose() { }
         }
 
-        private sealed class FakeStore : IIndustrialDataStore
+        private sealed class FakeStore : IInduLinkDataStore
         {
             public int FailuresRemaining { get; set; }
             public int WriteCalls { get; private set; }
@@ -248,16 +248,16 @@ namespace InduLink.Tests
             public TaskCompletionSource<bool> ReleaseWrites { get; } =
                 new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
             public Task InitializeAsync(CancellationToken token) { return Task.CompletedTask; }
-            public async Task WriteAsync(IReadOnlyCollection<IndustrialDataRecord> records, CancellationToken token)
+            public async Task WriteAsync(IReadOnlyCollection<InduLinkDataRecord> records, CancellationToken token)
             {
                 WriteCalls++;
                 if (FailuresRemaining-- > 0) throw new IOException("temporary failure");
                 WriteStarted.TrySetResult(true);
                 if (BlockWrites) await ReleaseWrites.Task;
             }
-            public Task<IReadOnlyList<IndustrialDataRecord>> QueryAsync(HistoryQueryFilter filter, CancellationToken token)
+            public Task<IReadOnlyList<InduLinkDataRecord>> QueryAsync(HistoryQueryFilter filter, CancellationToken token)
             {
-                return Task.FromResult((IReadOnlyList<IndustrialDataRecord>)new IndustrialDataRecord[0]);
+                return Task.FromResult((IReadOnlyList<InduLinkDataRecord>)new InduLinkDataRecord[0]);
             }
             public Task<int> DeleteAsync(HistoryQueryFilter filter, CancellationToken token) { return Task.FromResult(0); }
             public void Dispose() { }

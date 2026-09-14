@@ -53,7 +53,7 @@ namespace InduLink.Tests
                         // inside this receive or reports the closed generation to the caller.
                         frame = await WithTimeout(client.ReceiveFrameAsync(CancellationToken.None));
                     }
-                    catch (IndustrialConnectionException)
+                    catch (InduLinkConnectionException)
                     {
                         frame = await WithTimeout(client.ReceiveFrameAsync(CancellationToken.None));
                     }
@@ -137,7 +137,7 @@ namespace InduLink.Tests
                 {
                     await client.ConnectAsync(CancellationToken.None);
                     var framingFailure = await CaptureAsync(client.ReceiveFrameAsync(CancellationToken.None));
-                    Assert.That(framingFailure, Is.TypeOf<IndustrialProtocolException>());
+                    Assert.That(framingFailure, Is.TypeOf<InduLinkProtocolException>());
 
                     sendValidFrame.TrySetResult(true);
                     var frame = await WithTimeout(client.ReceiveFrameAsync(CancellationToken.None));

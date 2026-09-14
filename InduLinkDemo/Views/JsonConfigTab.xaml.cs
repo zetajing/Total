@@ -32,7 +32,7 @@ namespace InduLinkDemo.Views
 
         private const string EditorDefaultHost = "127.0.0.1";
 
-        private IndustrialSdk Sdk { get { return _ctx.Runtime.Sdk; } }
+        private InduLinkSdk Sdk { get { return _ctx.Runtime.Sdk; } }
 
         public JsonConfigTab()
         {
@@ -170,7 +170,7 @@ namespace InduLinkDemo.Views
                 device.DeviceId = EmptyToNull(DeviceIdTextBox.Text);
                 device.PointsFile = RequireText(PointsFileTextBox.Text, "点位文件不能为空。");
                 device.Enabled = EnabledCheckBox.IsChecked != false;
-                device.Runtime = new IndustrialDeviceRuntimeOptions
+                device.Runtime = new InduLinkDeviceRuntimeOptions
                 {
                     PollingIntervalMilliseconds = ParsePositiveInt(PollingIntervalTextBox.Text, "轮询周期"),
                     ReconnectDelayMilliseconds = ParsePositiveInt(ReconnectDelayTextBox.Text, "重连周期"),
@@ -197,13 +197,13 @@ namespace InduLinkDemo.Views
                 do { name = "device" + index++; }
                 while (config.Devices.Any(item => item != null && string.Equals(item.Name, name, StringComparison.OrdinalIgnoreCase)));
                 var provider = Sdk.Protocols.Get("modbus-tcp");
-                config.Devices.Add(new IndustrialDeviceConfig
+                config.Devices.Add(new InduLinkDeviceConfig
                 {
                     Name = name,
                     Protocol = provider.Protocol,
                     PointsFile = "points/" + name + ".json",
                     Enabled = false,
-                    Runtime = new IndustrialDeviceRuntimeOptions(),
+                    Runtime = new InduLinkDeviceRuntimeOptions(),
                     Settings = CreateEditorDefaultSettings(provider),
                 });
                 DeviceJsonTextBox.Text = Sdk.SerializeConfiguration(config);
@@ -341,7 +341,7 @@ namespace InduLinkDemo.Views
             });
         }
 
-        private IndustrialConfiguredClient OpenConfiguredDevice()
+        private InduLinkConfiguredClient OpenConfiguredDevice()
         {
             SaveDeviceConfig();
             return Sdk.Open(_deviceConfigPath, GetSelectedDeviceName());
@@ -366,7 +366,7 @@ namespace InduLinkDemo.Views
             PointConfigGroupBox.Header = GetPointConfigDisplayName(_pointConfigPath);
         }
 
-        private IndustrialSdkConfig SaveDeviceConfig()
+        private InduLinkSdkConfig SaveDeviceConfig()
         {
             var schemaResult = _jsonValidation.ValidateForSave(
                 JsonConfigurationDocument.Devices,
@@ -446,7 +446,7 @@ namespace InduLinkDemo.Views
             return type.GetProperty("Host") ?? type.GetProperty("EndpointUrl");
         }
 
-        private static IProtocolSettings CreateEditorDefaultSettings(IIndustrialProtocolProvider provider)
+        private static IProtocolSettings CreateEditorDefaultSettings(IInduLinkProtocolProvider provider)
         {
             if (provider == null) throw new ArgumentNullException(nameof(provider));
             var settings = provider.CreateDefaultSettings();

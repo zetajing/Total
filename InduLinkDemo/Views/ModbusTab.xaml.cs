@@ -24,7 +24,7 @@ namespace InduLinkDemo.Views
         };
 
         private DemoAppContext _ctx;
-        private IIndustrialClient _client;
+        private IInduLinkClient _client;
         private string _subscriptionId;
         private ModbusAddressParser _addressParser = new ModbusAddressParser(ModbusDeviceProfiles.InovanceEasyPlc);
         private IModbusDeviceProfile _profile = ModbusDeviceProfiles.InovanceEasyPlc;

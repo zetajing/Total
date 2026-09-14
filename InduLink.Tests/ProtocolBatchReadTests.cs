@@ -113,7 +113,7 @@ namespace InduLink.Tests
                 var request = new ReadRequest(
                     "s7-test", "DB1.DBX8.1", DataType.Float);
 
-                var exception = Assert.Throws<IndustrialAddressParseException>(() =>
+                var exception = Assert.Throws<InduLinkAddressParseException>(() =>
                     client.PlanRead(
                         new[] { request },
                         BatchReadOptions.Default,

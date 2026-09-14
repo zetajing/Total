@@ -31,7 +31,7 @@ namespace InduLink.Protocols.Modbus
         public string DeviceProfile { get; set; } = ModbusDeviceProfiles.Generic.Key;
     }
 
-    public sealed class ModbusTcpProtocolProvider : IndustrialProtocolProvider<ModbusTcpSettings>
+    public sealed class ModbusTcpProtocolProvider : InduLinkProtocolProvider<ModbusTcpSettings>
     {
         public override string Protocol { get { return "modbus-tcp"; } }
 
@@ -45,7 +45,7 @@ namespace InduLink.Protocols.Modbus
                 ResolveProfileError(settings.DeviceProfile));
         }
 
-        protected override IIndustrialClient CreateClient(IndustrialDeviceConfig device, ModbusTcpSettings settings, IIndustrialLogger logger)
+        protected override IInduLinkClient CreateClient(InduLinkDeviceConfig device, ModbusTcpSettings settings, IInduLinkLogger logger)
         {
             return new ModbusTcpClient(new ModbusTcpClientOptions
             {
@@ -66,7 +66,7 @@ namespace InduLink.Protocols.Modbus
         }
     }
 
-    public sealed class ModbusRtuProtocolProvider : IndustrialProtocolProvider<ModbusRtuSettings>
+    public sealed class ModbusRtuProtocolProvider : InduLinkProtocolProvider<ModbusRtuSettings>
     {
         public override string Protocol { get { return "modbus-rtu"; } }
 
@@ -87,7 +87,7 @@ namespace InduLink.Protocols.Modbus
                 profileError);
         }
 
-        protected override IIndustrialClient CreateClient(IndustrialDeviceConfig device, ModbusRtuSettings settings, IIndustrialLogger logger)
+        protected override IInduLinkClient CreateClient(InduLinkDeviceConfig device, ModbusRtuSettings settings, IInduLinkLogger logger)
         {
             return new ModbusRtuClient(new ModbusRtuClientOptions
             {

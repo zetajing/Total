@@ -9,9 +9,9 @@ using InduLink.Web.Internal;
 namespace InduLink.Web.WebSockets
 {
     /// <summary>保留消息边界、支持分片重组和指数退避重连的 WebSocket 客户端。</summary>
-    public sealed class IndustrialWebSocketClient : IWebSocketClient
+    public sealed class InduLinkWebSocketClient : IWebSocketClient
     {
-        private readonly IndustrialWebSocketClientOptions _options;
+        private readonly InduLinkWebSocketClientOptions _options;
         private readonly SemaphoreSlim _lifecycleGate = new SemaphoreSlim(1, 1);
         private readonly CancellationTokenSource _lifetimeSource = new CancellationTokenSource();
         private ManagedWebSocket _connection;
@@ -19,7 +19,7 @@ namespace InduLink.Web.WebSockets
         private int _reconnectRunning;
         private int _disposed;
 
-        public IndustrialWebSocketClient(IndustrialWebSocketClientOptions options)
+        public InduLinkWebSocketClient(InduLinkWebSocketClientOptions options)
         {
             if (options == null) throw new ArgumentNullException(nameof(options));
             _options = options.Clone();
@@ -231,7 +231,7 @@ namespace InduLink.Web.WebSockets
             }
         }
 
-        private static void ValidateOptions(IndustrialWebSocketClientOptions options)
+        private static void ValidateOptions(InduLinkWebSocketClientOptions options)
         {
             if (options.Uri == null || !options.Uri.IsAbsoluteUri ||
                 (options.Uri.Scheme != "ws" && options.Uri.Scheme != "wss"))
@@ -248,7 +248,7 @@ namespace InduLink.Web.WebSockets
 
         private void ThrowIfDisposed()
         {
-            if (Volatile.Read(ref _disposed) != 0) throw new ObjectDisposedException(nameof(IndustrialWebSocketClient));
+            if (Volatile.Read(ref _disposed) != 0) throw new ObjectDisposedException(nameof(InduLinkWebSocketClient));
         }
 
         public void Dispose()

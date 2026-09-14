@@ -21,15 +21,15 @@ namespace InduLink.Protocols.S7
 
             var requiredLength = GetByteLength(reservedLength);
             if (bytes.Length < requiredLength)
-                throw new IndustrialDataConversionException(
+                throw new InduLinkDataConversionException(
                     string.Format("S7 STRING requires {0} bytes, but only {1} bytes were received.", requiredLength, bytes.Length));
 
             if (bytes[0] != reservedLength)
-                throw new IndustrialDataConversionException(
+                throw new InduLinkDataConversionException(
                     string.Format("S7 STRING maximum length is {0}, but {1} was expected.", bytes[0], reservedLength));
 
             if (bytes[1] > reservedLength)
-                throw new IndustrialDataConversionException(
+                throw new InduLinkDataConversionException(
                     string.Format("S7 STRING current length {0} exceeds maximum length {1}.", bytes[1], reservedLength));
 
             return global::S7.Net.Types.S7String.FromByteArray(bytes);

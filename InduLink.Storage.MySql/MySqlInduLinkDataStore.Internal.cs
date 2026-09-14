@@ -10,7 +10,7 @@ using MySqlConnector;
 
 namespace InduLink.Storage.MySql
 {
-    public sealed partial class MySqlIndustrialDataStore
+    public sealed partial class MySqlInduLinkDataStore
     {
         private const string ColumnProjection =
             "`Id`, `Protocol`, `DeviceId`, `Address`, `DataType`, `ValueText`, `RawData`, `Quality`, `TimestampUtc`, `TimestampOffsetMinutes`, `ErrorMessage`";
@@ -67,7 +67,7 @@ namespace InduLink.Storage.MySql
             return "%" + filter.Address.Replace("!", "!!").Replace("%", "!%").Replace("_", "!_") + "%";
         }
 
-        private static IndustrialDataRecord ReadRecord(MySqlDataReader reader)
+        private static InduLinkDataRecord ReadRecord(MySqlDataReader reader)
         {
             ProtocolKind protocol;
             DataType dataType;
@@ -76,7 +76,7 @@ namespace InduLink.Storage.MySql
             Enum.TryParse(reader.GetString(4), true, out dataType);
             Enum.TryParse(reader.GetString(7), true, out quality);
 
-            return new IndustrialDataRecord
+            return new InduLinkDataRecord
             {
                 Id = reader.GetInt64(0),
                 Protocol = protocol,
@@ -104,7 +104,7 @@ namespace InduLink.Storage.MySql
             return DateTime.SpecifyKind(value.UtcDateTime, DateTimeKind.Unspecified);
         }
 
-        private async Task<IReadOnlyList<IndustrialDataRecord>> ReadAsync(
+        private async Task<IReadOnlyList<InduLinkDataRecord>> ReadAsync(
             string sql,
             long? afterId,
             int maxRows,
@@ -113,7 +113,7 @@ namespace InduLink.Storage.MySql
             if (maxRows <= 0 || maxRows > 1000)
                 throw new ArgumentOutOfRangeException(nameof(maxRows), "单次查询行数必须在 1 到 1000 之间。");
 
-            var records = new List<IndustrialDataRecord>(maxRows);
+            var records = new List<InduLinkDataRecord>(maxRows);
             using (var connection = new MySqlConnection(_options.ConnectionString))
             using (var command = new MySqlCommand(sql, connection))
             {
@@ -151,7 +151,7 @@ namespace InduLink.Storage.MySql
             return command;
         }
 
-        private static void SetParameterValues(MySqlCommand command, IndustrialDataRecord record)
+        private static void SetParameterValues(MySqlCommand command, InduLinkDataRecord record)
         {
             if (record == null) throw new ArgumentNullException(nameof(record));
             command.Parameters["@Protocol"].Value = record.Protocol.ToString();

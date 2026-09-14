@@ -11,13 +11,13 @@ using InduLink.Exceptions;
 namespace InduLink.Runtime
 {
     /// <summary>工业客户端公共基类，统一处理操作串行化、超时、健康状态和轮询订阅。</summary>
-    public abstract partial class IndustrialClientBase
+    public abstract partial class InduLinkClientBase
     {        protected void RecordSuccess(long elapsedMilliseconds = 0)
         {
             Interlocked.Increment(ref _totalOperations);
             Interlocked.Increment(ref _successfulOperations);
             Interlocked.Exchange(ref _lastOperationElapsedMilliseconds, elapsedMilliseconds);
-            lock (_diagnosticSync) { _lastFailureCategory = IndustrialFailureCategory.None; _lastOperationUtc = DateTimeOffset.UtcNow; }
+            lock (_diagnosticSync) { _lastFailureCategory = InduLinkFailureCategory.None; _lastOperationUtc = DateTimeOffset.UtcNow; }
             _lastSuccessUtc = DateTimeOffset.UtcNow;
             Interlocked.Exchange(ref _consecutiveFailures, 0);
             _lastError = null;
@@ -34,14 +34,14 @@ namespace InduLink.Runtime
             if (value != null && value.Quality == QualityStatus.Good)
                 RecordSuccess(elapsedMilliseconds);
             else
-                RecordFailure(new InduLinkunicationException(value == null ? "Read returned no value." : value.ErrorMessage ?? "Read returned bad quality."), false, elapsedMilliseconds);
+                RecordFailure(new InduLinkCommunicationException(value == null ? "Read returned no value." : value.ErrorMessage ?? "Read returned bad quality."), false, elapsedMilliseconds);
         }
 
         private void RecordBatchResult(BatchReadResult result, long elapsedMilliseconds)
         {
             if (result == null || result.Values == null || result.Values.Count == 0)
             {
-                RecordFailure(new InduLinkunicationException("Batch read returned no values."), false, elapsedMilliseconds);
+                RecordFailure(new InduLinkCommunicationException("Batch read returned no values."), false, elapsedMilliseconds);
                 return;
             }
 
@@ -51,7 +51,7 @@ namespace InduLink.Runtime
                 Interlocked.Increment(ref _totalOperations);
                 Interlocked.Increment(ref _successfulOperations);
                 Interlocked.Exchange(ref _lastOperationElapsedMilliseconds, elapsedMilliseconds);
-                lock (_diagnosticSync) { _lastOperationUtc = DateTimeOffset.UtcNow; _lastFailureCategory = IndustrialFailureCategory.None; }
+                lock (_diagnosticSync) { _lastOperationUtc = DateTimeOffset.UtcNow; _lastFailureCategory = InduLinkFailureCategory.None; }
                 _lastSuccessUtc = DateTimeOffset.UtcNow;
                 _status = IsConnected ? ConnectionStatus.Connected : _status;
                 if (goodCount == result.Values.Count)
@@ -67,7 +67,7 @@ namespace InduLink.Runtime
             }
             else
             {
-                RecordFailure(new InduLinkunicationException("Batch read returned only bad quality values."), false, elapsedMilliseconds);
+                RecordFailure(new InduLinkCommunicationException("Batch read returned only bad quality values."), false, elapsedMilliseconds);
             }
         }
 
@@ -84,11 +84,11 @@ namespace InduLink.Runtime
             _logger.Error(string.Format("Operation failed | Device={0} | Protocol={1}", DeviceId, Kind), ex);
         }
 
-        public IndustrialDiagnosticSnapshot GetDiagnosticSnapshot()
+        public InduLinkDiagnosticSnapshot GetDiagnosticSnapshot()
         {
             lock (_diagnosticSync)
             {
-                return new IndustrialDiagnosticSnapshot(DeviceId, Kind, Interlocked.Read(ref _totalOperations),
+                return new InduLinkDiagnosticSnapshot(DeviceId, Kind, Interlocked.Read(ref _totalOperations),
                     Interlocked.Read(ref _successfulOperations), Interlocked.Read(ref _failedOperations),
                     Interlocked.Read(ref _timeoutCount), Volatile.Read(ref _consecutiveFailures),
                     Interlocked.Read(ref _lastOperationElapsedMilliseconds), _lastFailureCategory, _lastError, _lastOperationUtc,
@@ -101,24 +101,24 @@ namespace InduLink.Runtime
         protected void RecordResponseTimeout() { Interlocked.Increment(ref _responseTimeoutCount); }
         protected void RecordFrameError() { Interlocked.Increment(ref _frameErrorCount); }
 
-        private static IndustrialFailureCategory ClassifyFailure(Exception ex)
+        private static InduLinkFailureCategory ClassifyFailure(Exception ex)
         {
-            if (ex == null) return IndustrialFailureCategory.Unknown;
-            if (ex is IndustrialTimeoutException || ex is TimeoutException) return IndustrialFailureCategory.Timeout;
-            if (ex is IndustrialAddressParseException) return IndustrialFailureCategory.Address;
-            if (ex is IndustrialDataConversionException) return IndustrialFailureCategory.DataConversion;
-            if (ex is IndustrialWriteUncertainException) return IndustrialFailureCategory.Connection;
-            if (ex is IndustrialProtocolException) return IndustrialFailureCategory.Protocol;
-            if (ex is IndustrialConnectionException || ex is System.IO.IOException || ex is System.Net.Sockets.SocketException) return IndustrialFailureCategory.Connection;
-            return ex.InnerException == null ? IndustrialFailureCategory.Unknown : ClassifyFailure(ex.InnerException);
+            if (ex == null) return InduLinkFailureCategory.Unknown;
+            if (ex is InduLinkTimeoutException || ex is TimeoutException) return InduLinkFailureCategory.Timeout;
+            if (ex is InduLinkAddressParseException) return InduLinkFailureCategory.Address;
+            if (ex is InduLinkDataConversionException) return InduLinkFailureCategory.DataConversion;
+            if (ex is InduLinkWriteUncertainException) return InduLinkFailureCategory.Connection;
+            if (ex is InduLinkProtocolException) return InduLinkFailureCategory.Protocol;
+            if (ex is InduLinkConnectionException || ex is System.IO.IOException || ex is System.Net.Sockets.SocketException) return InduLinkFailureCategory.Connection;
+            return ex.InnerException == null ? InduLinkFailureCategory.Unknown : ClassifyFailure(ex.InnerException);
         }
 
         private static bool IsConnectionFailure(Exception ex)
         {
             if (ex == null) return false;
-            return ex is IndustrialConnectionException ||
-                   ex is IndustrialWriteUncertainException ||
-                   ex is IndustrialTimeoutException ||
+            return ex is InduLinkConnectionException ||
+                   ex is InduLinkWriteUncertainException ||
+                   ex is InduLinkTimeoutException ||
                    ex is System.IO.IOException ||
                    ex is System.Net.Sockets.SocketException ||
                    IsConnectionFailure(ex.InnerException);
@@ -127,15 +127,15 @@ namespace InduLink.Runtime
         private static bool IsTimeoutFailure(Exception ex)
         {
             if (ex == null) return false;
-            return ex is IndustrialTimeoutException || ex is TimeoutException || IsTimeoutFailure(ex.InnerException);
+            return ex is InduLinkTimeoutException || ex is TimeoutException || IsTimeoutFailure(ex.InnerException);
         }
 
         private static bool IsWriteOutcomeUncertain(Exception ex)
         {
             if (ex == null) return false;
-            if (ex is IndustrialWriteUncertainException) return false;
-            if (ex is IndustrialTimeoutException || ex is TimeoutException ||
-                ex is IndustrialConnectionException || ex is System.IO.IOException ||
+            if (ex is InduLinkWriteUncertainException) return false;
+            if (ex is InduLinkTimeoutException || ex is TimeoutException ||
+                ex is InduLinkConnectionException || ex is System.IO.IOException ||
                 ex is System.Net.Sockets.SocketException)
                 return true;
             return IsWriteOutcomeUncertain(ex.InnerException);

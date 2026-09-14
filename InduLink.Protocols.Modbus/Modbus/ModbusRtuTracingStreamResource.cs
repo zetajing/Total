@@ -12,15 +12,15 @@ namespace InduLink.Protocols.Modbus
     internal sealed class ModbusRtuTracingStreamResource : IStreamResource
     {
         private readonly SerialPort _serialPort;
-        private readonly IIndustrialLogger _logger;
+        private readonly IInduLinkLogger _logger;
         private readonly object _sync = new object();
         private readonly List<byte> _responseBuffer = new List<byte>();
         private readonly Action<ModbusRtuFrameEventArgs> _frameTraced;
 
-        public ModbusRtuTracingStreamResource(SerialPort serialPort, IIndustrialLogger logger, Action<ModbusRtuFrameEventArgs> frameTraced = null)
+        public ModbusRtuTracingStreamResource(SerialPort serialPort, IInduLinkLogger logger, Action<ModbusRtuFrameEventArgs> frameTraced = null)
         {
             _serialPort = serialPort ?? throw new ArgumentNullException(nameof(serialPort));
-            _logger = logger ?? NullIndustrialLogger.Instance;
+            _logger = logger ?? NullInduLinkLogger.Instance;
             _frameTraced = frameTraced;
         }
 

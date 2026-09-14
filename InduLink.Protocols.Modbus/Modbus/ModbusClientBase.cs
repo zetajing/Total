@@ -19,7 +19,7 @@ namespace InduLink.Protocols.Modbus
     /// Modbus 协议客户端的公共基类，封装所有传输无关的 Modbus 读写逻辑。
     /// TCP 和 RTU 子类只需实现连接/断开和 <see cref="Master"/> 属性即可复用完整的协议能力。
     /// </summary>
-    public abstract class ModbusClientBase : IndustrialClientBase, IBatchOperationPlanner, IRegisterClient, IEventSubscriptionClient
+    public abstract class ModbusClientBase : InduLinkClientBase, IBatchOperationPlanner, IRegisterClient, IEventSubscriptionClient
     {
         /// <summary>设备配置文件，用于处理寄存器规范化和字节序。</summary>
         protected readonly IModbusDeviceProfile DeviceProfile;
@@ -40,9 +40,9 @@ namespace InduLink.Protocols.Modbus
             IModbusDeviceProfile deviceProfile,
             ModbusAddressParser addressParser,
             IPollingScheduler pollingScheduler,
-            IIndustrialLogger logger,
+            IInduLinkLogger logger,
             int operationTimeoutMilliseconds = 5000)
-            : base(deviceId, kind, pollingScheduler ?? new PollingScheduler(logger), logger ?? NullIndustrialLogger.Instance, operationTimeoutMilliseconds)
+            : base(deviceId, kind, pollingScheduler ?? new PollingScheduler(logger), logger ?? NullInduLinkLogger.Instance, operationTimeoutMilliseconds)
         {
             SlaveId = slaveId;
             DeviceProfile = deviceProfile ?? ModbusDeviceProfiles.InovanceEasyPlc;
@@ -75,7 +75,7 @@ namespace InduLink.Protocols.Modbus
                     return RegisterValueCodec.ToDataValue(normalizedRequest,
                         DeviceProfile.NormalizeRegistersForRead(normalizedRequest.DataType, hr));
                 default:
-                    throw new IndustrialProtocolException("Unsupported Modbus area.");
+                    throw new InduLinkProtocolException("Unsupported Modbus area.");
             }
         }
 
@@ -100,9 +100,9 @@ namespace InduLink.Protocols.Modbus
                             await master.WriteMultipleCoilsAsync(SlaveId, parsed.ZeroBasedAddress, bits).ConfigureAwait(false);
                         break;
                     case ModbusArea.DiscreteInput:
-                        throw new IndustrialProtocolException("Discrete inputs are read-only.");
+                        throw new InduLinkProtocolException("Discrete inputs are read-only.");
                     case ModbusArea.InputRegister:
-                        throw new IndustrialProtocolException("Input registers are read-only.");
+                        throw new InduLinkProtocolException("Input registers are read-only.");
                     case ModbusArea.HoldingRegister:
                         var registers = DeviceProfile.NormalizeRegistersForWrite(
                             normalizedRequest.DataType,
@@ -113,24 +113,24 @@ namespace InduLink.Protocols.Modbus
                             await master.WriteMultipleRegistersAsync(SlaveId, parsed.ZeroBasedAddress, registers).ConfigureAwait(false);
                         break;
                     default:
-                        throw new IndustrialProtocolException("Unsupported Modbus area.");
+                        throw new InduLinkProtocolException("Unsupported Modbus area.");
                 }
             }
-            catch (IndustrialAddressParseException)
+            catch (InduLinkAddressParseException)
             {
                 throw;
             }
-            catch (IndustrialDataConversionException)
+            catch (InduLinkDataConversionException)
             {
                 throw;
             }
-            catch (IndustrialProtocolException)
+            catch (InduLinkProtocolException)
             {
                 throw;
             }
             catch (Exception ex)
             {
-                throw new IndustrialWriteUncertainException(
+                throw new InduLinkWriteUncertainException(
                     "Modbus write outcome is unknown; the write was not replayed.", ex);
             }
             finally
@@ -273,7 +273,7 @@ namespace InduLink.Protocols.Modbus
                             break;
                         }
                         default:
-                            throw new IndustrialProtocolException("Unsupported Modbus area.");
+                            throw new InduLinkProtocolException("Unsupported Modbus area.");
                     }
 
                     batchStopwatch.Stop();
@@ -354,7 +354,7 @@ namespace InduLink.Protocols.Modbus
         {
             if (totalLength <= 0 || (long)startAddress + totalLength > ushort.MaxValue + 1L)
             {
-                throw new IndustrialProtocolException("Modbus read range exceeds the 16-bit address space.");
+                throw new InduLinkProtocolException("Modbus read range exceeds the 16-bit address space.");
             }
         }
 
@@ -363,7 +363,7 @@ namespace InduLink.Protocols.Modbus
         {
             if (!IsConnected)
             {
-                throw new IndustrialConnectionException("Modbus client is not connected.");
+                throw new InduLinkConnectionException("Modbus client is not connected.");
             }
         }
 

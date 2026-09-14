@@ -93,28 +93,28 @@ namespace InduLink.Protocols.Modbus
         /// 解析后的 <see cref="ModbusAddress"/> 对象，包含 <see cref="ModbusArea"/> 区域
         /// 和计算得到的 Modbus 绝对地址（基址偏移 + 索引）。
         /// </returns>
-        /// <exception cref="IndustrialAddressParseException">
+        /// <exception cref="InduLinkAddressParseException">
         /// 地址为 null/空、格式错误、前缀不支持、索引无效或超出范围时抛出。
         /// </exception>
         public ModbusAddress ParseAddress(string address)
         {
             if (string.IsNullOrWhiteSpace(address))
             {
-                throw new IndustrialAddressParseException("Address is required.");
+                throw new InduLinkAddressParseException("Address is required.");
             }
 
             var normalized = address.Trim().ToUpperInvariant();
             var match = AddressPattern.Match(normalized);
             if (!match.Success)
             {
-                throw new IndustrialAddressParseException(string.Format("Unsupported Mitsubishi Modbus variable: {0}", address));
+                throw new InduLinkAddressParseException(string.Format("Unsupported Mitsubishi Modbus variable: {0}", address));
             }
 
             var prefix = match.Groups["prefix"].Value;
             Tuple<ModbusArea, ushort, int, bool> rule;
             if (!AddressRules.TryGetValue(prefix, out rule))
             {
-                throw new IndustrialAddressParseException(string.Format("Unsupported Mitsubishi Modbus variable type: {0}", prefix));
+                throw new InduLinkAddressParseException(string.Format("Unsupported Mitsubishi Modbus variable type: {0}", prefix));
             }
 
             int index;
@@ -124,12 +124,12 @@ namespace InduLink.Protocols.Modbus
             }
             catch (Exception ex)
             {
-                throw new IndustrialAddressParseException("Invalid Mitsubishi Modbus variable index.", ex);
+                throw new InduLinkAddressParseException("Invalid Mitsubishi Modbus variable index.", ex);
             }
 
             if (index < 0 || index >= rule.Item3)
             {
-                throw new IndustrialAddressParseException("Mitsubishi Modbus variable index out of range.");
+                throw new InduLinkAddressParseException("Mitsubishi Modbus variable index out of range.");
             }
 
             return new ModbusAddress(rule.Item1, (ushort)(rule.Item2 + index));

@@ -34,10 +34,10 @@ namespace InduLink.Protocols.S7
 
     /// <summary>
     /// Siemens S7 client built on S7.NetPlus. The wrapper owns connection lifecycle,
-    /// serializes access through IndustrialClientBase, and retries reads one time after a stale session.
+    /// serializes access through InduLinkClientBase, and retries reads one time after a stale session.
     /// Writes are never replayed by default.
     /// </summary>
-    public sealed class SiemensS7Client : IndustrialClientBase, IBatchOperationPlanner, IRegisterClient, IEventSubscriptionClient
+    public sealed class SiemensS7Client : InduLinkClientBase, IBatchOperationPlanner, IRegisterClient, IEventSubscriptionClient
     {
         private readonly SiemensS7ClientOptions _options;
         private readonly S7AddressParser _parser;
@@ -45,12 +45,12 @@ namespace InduLink.Protocols.S7
 
         public SiemensS7Client(
             SiemensS7ClientOptions options,
-            IIndustrialLogger logger = null,
+            IInduLinkLogger logger = null,
             IPollingScheduler pollingScheduler = null,
             S7AddressParser parser = null)
             : base(GetDeviceId(options), ProtocolKind.SiemensS7,
                 pollingScheduler ?? new PollingScheduler(logger),
-                logger ?? NullIndustrialLogger.Instance,
+                logger ?? NullInduLinkLogger.Instance,
                 options.OperationTimeoutMilliseconds)
         {
             _options = options ?? throw new ArgumentNullException(nameof(options));
@@ -132,13 +132,13 @@ namespace InduLink.Protocols.S7
                 {
                     try { await plc.OpenAsync(linkedCts.Token).ConfigureAwait(false); }
                     catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
-                    { throw new IndustrialTimeoutException("Siemens S7 connect timeout."); }
+                    { throw new InduLinkTimeoutException("Siemens S7 connect timeout."); }
                 }
                 if (!plc.IsConnected)
-                    throw new IndustrialConnectionException("S7.NetPlus completed OpenAsync but the PLC is not connected.");
+                    throw new InduLinkConnectionException("S7.NetPlus completed OpenAsync but the PLC is not connected.");
                 _plc = plc;
             }
-            catch (IndustrialTimeoutException)
+            catch (InduLinkTimeoutException)
             {
                 SafeClose(plc);
                 throw;
@@ -151,7 +151,7 @@ namespace InduLink.Protocols.S7
             catch (Exception ex)
             {
                 SafeClose(plc);
-                throw new IndustrialConnectionException("Failed to connect Siemens S7 device.", ex);
+                throw new InduLinkConnectionException("Failed to connect Siemens S7 device.", ex);
             }
         }
 
@@ -173,7 +173,7 @@ namespace InduLink.Protocols.S7
                 var value = await ReadValueAsync(address, request, token).ConfigureAwait(false);
                 if (value == null)
                 {
-                    throw new IndustrialDataConversionException(
+                    throw new InduLinkDataConversionException(
                         string.Format(
                             "S7 read returned no decoded value. Address={0}, DataType={1}, Length={2}.",
                             address.Normalized,
@@ -265,13 +265,13 @@ namespace InduLink.Protocols.S7
                 if (writeOperation)
                 {
                     ClosePlc();
-                    throw new IndustrialWriteUncertainException(
+                    throw new InduLinkWriteUncertainException(
                         "S7 write outcome is unknown; the write was not replayed.", ex);
                 }
                 throw;
             }
-            catch (IndustrialAddressParseException) { throw; }
-            catch (IndustrialDataConversionException) { throw; }
+            catch (InduLinkAddressParseException) { throw; }
+            catch (InduLinkDataConversionException) { throw; }
             catch (Exception first)
             {
                 ClosePlc();
@@ -279,10 +279,10 @@ namespace InduLink.Protocols.S7
                 {
                     if (writeOperation)
                     {
-                        throw new IndustrialWriteUncertainException(
+                        throw new InduLinkWriteUncertainException(
                             "S7 write outcome is unknown; the write was not replayed.", first);
                     }
-                    throw new IndustrialConnectionException("S7 communication failed.", first);
+                    throw new InduLinkConnectionException("S7 communication failed.", first);
                 }
 
                 try
@@ -294,7 +294,7 @@ namespace InduLink.Protocols.S7
                 catch (Exception retry)
                 {
                     ClosePlc();
-                    throw new IndustrialConnectionException("S7 communication failed after reconnect.", retry);
+                    throw new InduLinkConnectionException("S7 communication failed after reconnect.", retry);
                 }
             }
         }
@@ -306,7 +306,7 @@ namespace InduLink.Protocols.S7
             return ExecuteDbOperationAsync(token => ExecuteWithReconnectAsync(async inner =>
             {
                 var value = await _plc.ReadClassAsync<T>(dbNumber, startByteAddress, inner).ConfigureAwait(false);
-                if (value == null) throw new IndustrialProtocolException("S7 DB class read returned no data.");
+                if (value == null) throw new InduLinkProtocolException("S7 DB class read returned no data.");
                 return value;
             }, token), cancellationToken);
         }
@@ -358,9 +358,9 @@ namespace InduLink.Protocols.S7
 
             var parsed = _parser.ParseTyped(address);
             if (parsed.Area != S7Area.Db)
-                throw new IndustrialAddressParseException("S7 string address must point to a data block: " + address);
+                throw new InduLinkAddressParseException("S7 string address must point to a data block: " + address);
             if (parsed.IsBitAddress && parsed.BitOffset != 0)
-                throw new IndustrialAddressParseException(
+                throw new InduLinkAddressParseException(
                     "S7 STRING must start at bit 0 of its byte address: " + address);
 
             return ReadDbStringAsync(parsed.DbNumber, parsed.ByteOffset, reservedLength, cancellationToken);
@@ -374,7 +374,7 @@ namespace InduLink.Protocols.S7
             return ExecuteDbOperationAsync(token => ExecuteWithReconnectAsync(async inner =>
             {
                 var value = await _plc.ReadClassAsync(factory, dbNumber, startByteAddress, inner).ConfigureAwait(false);
-                if (value == null) throw new IndustrialProtocolException("S7 DB class read returned no data.");
+                if (value == null) throw new InduLinkProtocolException("S7 DB class read returned no data.");
                 return value;
             }, token), cancellationToken);
         }
@@ -413,7 +413,7 @@ namespace InduLink.Protocols.S7
                 catch (OperationCanceledException) when (!callerToken.IsCancellationRequested && timeout.IsCancellationRequested)
                 {
                     ClosePlc();
-                    throw new IndustrialTimeoutException("S7 DB operation timed out.");
+                    throw new InduLinkTimeoutException("S7 DB operation timed out.");
                 }
             }, cancellationToken);
         }
@@ -425,7 +425,7 @@ namespace InduLink.Protocols.S7
 
         private void EnsureConnected()
         {
-            if (!IsConnected) throw new IndustrialConnectionException("S7 client is not connected.");
+            if (!IsConnected) throw new InduLinkConnectionException("S7 client is not connected.");
         }
 
         private async Task<object> ReadValueAsync(S7Address address, ReadRequest request, CancellationToken token)
@@ -442,14 +442,14 @@ namespace InduLink.Protocols.S7
                     return S7StringCodec.Decode(nativeStringBytes, request.Length);
                 case Abstractions.DataType.String:
                     if (request.Length == 0)
-                        throw new IndustrialDataConversionException("S7 string read length must be greater than zero.");
+                        throw new InduLinkDataConversionException("S7 string read length must be greater than zero.");
 
                     var stringBytes = await _plc.ReadBytesAsync(ToPlcArea(address.Area), address.DbNumber,
                         address.ByteOffset, request.Length, token).ConfigureAwait(false);
                     return Encoding.ASCII.GetString(stringBytes).TrimEnd('\0');
                 case Abstractions.DataType.ByteArray:
                     if (request.Length == 0)
-                        throw new IndustrialDataConversionException("S7 byte-array read length must be greater than zero.");
+                        throw new InduLinkDataConversionException("S7 byte-array read length must be greater than zero.");
 
                     return await _plc.ReadBytesAsync(ToPlcArea(address.Area), address.DbNumber,
                         address.ByteOffset, request.Length, token).ConfigureAwait(false);
@@ -474,7 +474,7 @@ namespace InduLink.Protocols.S7
             {
                 case Abstractions.DataType.Bool:
                     if (address.BitOffset < 0)
-                        throw new IndustrialAddressParseException("S7 bool write requires a bit address: " + address.Normalized);
+                        throw new InduLinkAddressParseException("S7 bool write requires a bit address: " + address.Normalized);
                     await _plc.WriteBitAsync(ToPlcArea(address.Area), address.DbNumber, address.ByteOffset,
                         address.BitOffset, Convert.ToBoolean(request.Value), token).ConfigureAwait(false);
                     return;
@@ -484,7 +484,7 @@ namespace InduLink.Protocols.S7
                     return;
                 case Abstractions.DataType.S7String:
                     if (address.Area != S7Area.Db || (address.IsBitAddress && address.BitOffset != 0))
-                        throw new IndustrialAddressParseException(
+                        throw new InduLinkAddressParseException(
                             "S7 STRING[n] writes must start at a byte-aligned DB address: " + address.Normalized);
                     await _plc.WriteBytesAsync(ToPlcArea(address.Area), address.DbNumber, address.ByteOffset,
                         S7WriteValueEncoder.EncodeS7String(request.Value, request.Length), token).ConfigureAwait(false);
@@ -612,7 +612,7 @@ namespace InduLink.Protocols.S7
                 case S7Area.Memory: return PlcArea.Memory;
                 case S7Area.Input: return PlcArea.Input;
                 case S7Area.Output: return PlcArea.Output;
-                default: throw new IndustrialAddressParseException("Unsupported S7 area.");
+                default: throw new InduLinkAddressParseException("Unsupported S7 area.");
             }
         }
 
@@ -629,7 +629,7 @@ namespace InduLink.Protocols.S7
                 case Abstractions.DataType.Double: return PlcVarType.LReal;
                 case Abstractions.DataType.Byte:
                 case Abstractions.DataType.Char: return PlcVarType.Byte;
-                default: throw new IndustrialDataConversionException("S7 does not support data type " + dataType + ".");
+                default: throw new InduLinkDataConversionException("S7 does not support data type " + dataType + ".");
             }
         }
 

@@ -15,14 +15,14 @@ namespace InduLink.Tests
         [Test]
         public void Providers_ImplementTheSameHistoryContractWithoutConnecting()
         {
-            using (var sqlServer = new SqlServerIndustrialDataStore(new SqlServerDataStoreOptions
+            using (var sqlServer = new SqlServerInduLinkDataStore(new SqlServerDataStoreOptions
             {
                 ConnectionString = "Server=localhost;Database=test;Integrated Security=True;",
             }))
             using (var mySql = CreateStore())
             {
-                Assert.That(sqlServer, Is.InstanceOf<IIndustrialHistoryStore>());
-                Assert.That(mySql, Is.InstanceOf<IIndustrialHistoryStore>());
+                Assert.That(sqlServer, Is.InstanceOf<IInduLinkHistoryStore>());
+                Assert.That(mySql, Is.InstanceOf<IInduLinkHistoryStore>());
             }
         }
 
@@ -32,7 +32,7 @@ namespace InduLink.Tests
         public void Options_RejectEmptyConnectionString(string connectionString)
         {
             var options = new MySqlDataStoreOptions { ConnectionString = connectionString };
-            Assert.Throws<InvalidOperationException>(() => new MySqlIndustrialDataStore(options));
+            Assert.Throws<InvalidOperationException>(() => new MySqlInduLinkDataStore(options));
         }
 
         [TestCase("history;DROP_TABLE")]
@@ -47,15 +47,15 @@ namespace InduLink.Tests
                 ConnectionString = ConnectionString,
                 TableName = tableName,
             };
-            Assert.Throws<InvalidOperationException>(() => new MySqlIndustrialDataStore(options));
+            Assert.Throws<InvalidOperationException>(() => new MySqlInduLinkDataStore(options));
         }
 
-        [TestCase("IndustrialDataHistory")]
-        [TestCase("industrial.IndustrialDataHistory")]
+        [TestCase("InduLinkDataHistory")]
+        [TestCase("industrial.InduLinkDataHistory")]
         [TestCase("_database._history_01")]
         public void Options_AcceptSafeTableNames(string tableName)
         {
-            using (var store = new MySqlIndustrialDataStore(new MySqlDataStoreOptions
+            using (var store = new MySqlInduLinkDataStore(new MySqlDataStoreOptions
             {
                 ConnectionString = ConnectionString,
                 TableName = tableName,
@@ -96,12 +96,12 @@ namespace InduLink.Tests
             }
         }
 
-        private static MySqlIndustrialDataStore CreateStore()
+        private static MySqlInduLinkDataStore CreateStore()
         {
-            return new MySqlIndustrialDataStore(new MySqlDataStoreOptions
+            return new MySqlInduLinkDataStore(new MySqlDataStoreOptions
             {
                 ConnectionString = ConnectionString,
-                TableName = "industrial.IndustrialDataHistory",
+                TableName = "industrial.InduLinkDataHistory",
             });
         }
     }

@@ -30,7 +30,7 @@ namespace InduLink.Storage
         /// <param name="stream">目标可写流（不负责关闭）。</param>
         /// <param name="cancellationToken">取消令牌。</param>
         public static async Task ExportAsync(
-            IEnumerable<IndustrialDataRecord> records,
+            IEnumerable<InduLinkDataRecord> records,
             Stream stream,
             CancellationToken cancellationToken)
         {
@@ -41,7 +41,7 @@ namespace InduLink.Storage
         }
 
         /// <summary>向同一流分批追加记录；首批设置 includeHeader=true，后续批次设置 false。</summary>
-        public static async Task WriteBatchAsync(IEnumerable<IndustrialDataRecord> records, Stream stream, bool includeHeader, CancellationToken cancellationToken)
+        public static async Task WriteBatchAsync(IEnumerable<InduLinkDataRecord> records, Stream stream, bool includeHeader, CancellationToken cancellationToken)
         {
             if (records == null) throw new ArgumentNullException(nameof(records));
             if (stream == null) throw new ArgumentNullException(nameof(stream));
@@ -83,7 +83,7 @@ namespace InduLink.Storage
         /// <summary>
         /// 同步导出为 CSV 字节（适合小数据集或内存操作）。
         /// </summary>
-        public static byte[] ExportToBytes(IEnumerable<IndustrialDataRecord> records)
+        public static byte[] ExportToBytes(IEnumerable<InduLinkDataRecord> records)
         {
             if (records == null) throw new ArgumentNullException(nameof(records));
 

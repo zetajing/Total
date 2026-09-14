@@ -55,7 +55,7 @@ namespace InduLink.Tests
             var framer = new LengthPrefixMessageFramer(2, 10);
             var buffer = new List<byte> { 0, 11 };
             byte[] frame;
-            Assert.Throws<IndustrialProtocolException>(() => framer.TryExtractFrame(buffer, out frame));
+            Assert.Throws<InduLinkProtocolException>(() => framer.TryExtractFrame(buffer, out frame));
         }
 
         [Test]
@@ -64,7 +64,7 @@ namespace InduLink.Tests
             var framer = new DelimiterMessageFramer(new byte[] { 10 }, 3);
             var buffer = new List<byte> { 1, 2, 3, 4 };
             byte[] frame;
-            Assert.Throws<IndustrialProtocolException>(() => framer.TryExtractFrame(buffer, out frame));
+            Assert.Throws<InduLinkProtocolException>(() => framer.TryExtractFrame(buffer, out frame));
         }
 
         [Test]

@@ -133,21 +133,21 @@ namespace InduLink.Protocols.Modbus
         /// </summary>
         /// <param name="address">设备特定的地址字符串，例如 "D100"、"SM50"。</param>
         /// <returns>解析后的 <see cref="ModbusAddress"/> 对象。</returns>
-        /// <exception cref="IndustrialAddressParseException">地址格式无效或前缀不受支持时抛出。</exception>
+        /// <exception cref="InduLinkAddressParseException">地址格式无效或前缀不受支持时抛出。</exception>
         public ModbusAddress ParseAddress(string address)
         {
             if (string.IsNullOrWhiteSpace(address))
-                throw new IndustrialAddressParseException("Address is required.");
+                throw new InduLinkAddressParseException("Address is required.");
 
             var match = _pattern.Match(address.Trim().ToUpperInvariant());
             if (!match.Success)
-                throw new IndustrialAddressParseException(string.Format(
+                throw new InduLinkAddressParseException(string.Format(
                     "Unsupported {0} variable: {1}", DisplayName, address));
 
             var prefix = match.Groups[1].Value;
             MappingRule rule;
             if (!_mappings.TryGetValue(prefix, out rule))
-                throw new IndustrialAddressParseException(string.Format(
+                throw new InduLinkAddressParseException(string.Format(
                     "Unsupported {0} variable type: {1}", DisplayName, prefix));
 
             int index;
@@ -162,12 +162,12 @@ namespace InduLink.Protocols.Modbus
             }
             catch (Exception ex)
             {
-                throw new IndustrialAddressParseException(
+                throw new InduLinkAddressParseException(
                     string.Format("Invalid {0} variable index.", DisplayName), ex);
             }
 
             if (index < 0 || index >= rule.Max)
-                throw new IndustrialAddressParseException(
+                throw new InduLinkAddressParseException(
                     string.Format("{0} variable index out of range.", DisplayName));
 
             return new ModbusAddress(rule.Area, checked((ushort)(rule.Base + index)));

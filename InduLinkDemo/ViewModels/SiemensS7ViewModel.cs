@@ -48,7 +48,7 @@ namespace InduLinkDemo.ViewModels
 
         protected override string ProtocolTag => "S7";
         protected override ProtocolKind ProtocolKind => ProtocolKind.SiemensS7;
-        protected override IIndustrialClient CreateClient()
+        protected override IInduLinkClient CreateClient()
         {
             return new SiemensS7Client(
                 new SiemensS7ClientOptions

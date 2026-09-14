@@ -28,7 +28,7 @@ namespace InduLink.Protocols.Modbus
     /// 表示一个已解析的 Modbus 地址，包含地址区域和基于零的偏移地址。
     /// 同时实现平台统一地址接口，便于批量规划、诊断、文档和 Demo 使用。
     /// </summary>
-    public sealed class ModbusAddress : IIndustrialAddress
+    public sealed class ModbusAddress : IInduLinkAddress
     {
         /// <summary>
         /// 使用指定的地址区域和基于零的偏移地址初始化 <see cref="ModbusAddress"/> 的新实例。
@@ -62,7 +62,7 @@ namespace InduLink.Protocols.Modbus
         public string Normalized { get; private set; }
 
         /// <summary>平台统一区域名。</summary>
-        string IIndustrialAddress.Area { get { return Area.ToString(); } }
+        string IInduLinkAddress.Area { get { return Area.ToString(); } }
 
         /// <summary>平台统一偏移量。</summary>
         public int Offset { get { return ZeroBasedAddress; } }
@@ -140,13 +140,13 @@ namespace InduLink.Protocols.Modbus
         {
             if (string.IsNullOrWhiteSpace(address))
             {
-                throw new IndustrialAddressParseException("Address is required.");
+                throw new InduLinkAddressParseException("Address is required.");
             }
 
             var parsed = _deviceProfile.ParseAddress(address);
             if (parsed == null)
             {
-                throw new IndustrialAddressParseException("Modbus address parser returned no address.");
+                throw new InduLinkAddressParseException("Modbus address parser returned no address.");
             }
 
             return parsed.WithSource(address);

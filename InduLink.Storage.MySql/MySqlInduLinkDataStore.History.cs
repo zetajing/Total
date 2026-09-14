@@ -9,10 +9,10 @@ using MySqlConnector;
 
 namespace InduLink.Storage.MySql
 {
-    public sealed partial class MySqlIndustrialDataStore
+    public sealed partial class MySqlInduLinkDataStore
     {
         /// <inheritdoc />
-        public async Task<IReadOnlyList<IndustrialDataRecord>> QueryAsync(
+        public async Task<IReadOnlyList<InduLinkDataRecord>> QueryAsync(
             HistoryQueryFilter filter,
             CancellationToken cancellationToken)
         {
@@ -101,7 +101,7 @@ namespace InduLink.Storage.MySql
                             CultureInfo.InvariantCulture);
                     }
 
-                    var records = new List<IndustrialDataRecord>(request.PageSize);
+                    var records = new List<InduLinkDataRecord>(request.PageSize);
                     using (var command = new MySqlCommand(pageSql, connection, transaction))
                     {
                         command.CommandTimeout = _options.CommandTimeoutSeconds;
@@ -230,7 +230,7 @@ FROM `Filtered`;",
         }
 
         /// <inheritdoc />
-        public Task<IReadOnlyList<IndustrialDataRecord>> GetLatestValuesAsync(
+        public Task<IReadOnlyList<InduLinkDataRecord>> GetLatestValuesAsync(
             HistoryQueryFilter filter,
             int maxRows,
             CancellationToken cancellationToken)
@@ -259,14 +259,14 @@ ORDER BY `h`.`TimestampUtc` DESC, `h`.`Id` DESC LIMIT @MaxRows;",
                 cancellationToken);
         }
 
-        private async Task<IReadOnlyList<IndustrialDataRecord>> ReadFilteredAsync(
+        private async Task<IReadOnlyList<InduLinkDataRecord>> ReadFilteredAsync(
             string sql,
             HistoryQueryFilter filter,
             int capacity,
             Action<MySqlCommand> configure,
             CancellationToken cancellationToken)
         {
-            var records = new List<IndustrialDataRecord>(capacity);
+            var records = new List<InduLinkDataRecord>(capacity);
             using (var connection = new MySqlConnection(_options.ConnectionString))
             using (var command = new MySqlCommand(sql, connection))
             {

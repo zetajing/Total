@@ -17,7 +17,7 @@ namespace InduLinkDemo.ViewModels
     /// </summary>
     internal abstract class ProtocolTabViewModel : ViewModelBase
     {
-        private IIndustrialClient _client;
+        private IInduLinkClient _client;
         private string _statusText = "未连接";
         private Brush _statusBrush = Brushes.IndianRed;
         private string _resultText = "等待中...";
@@ -78,9 +78,9 @@ namespace InduLinkDemo.ViewModels
         }
 
         /// <summary>
-        /// The underlying IIndustrialClient. Subclasses can access for protocol-specific casts.
+        /// The underlying IInduLinkClient. Subclasses can access for protocol-specific casts.
         /// </summary>
-        protected IIndustrialClient Client => _client;
+        protected IInduLinkClient Client => _client;
 
         // ── Commands ──
 
@@ -93,7 +93,7 @@ namespace InduLinkDemo.ViewModels
 
         protected abstract string ProtocolTag { get; }           // "S7", "MC"
         protected abstract ProtocolKind ProtocolKind { get; }
-        protected abstract IIndustrialClient CreateClient();
+        protected abstract IInduLinkClient CreateClient();
         protected abstract ReadRequest BuildReadRequest();
         protected abstract WriteRequest BuildWriteRequest();
 
@@ -229,7 +229,7 @@ namespace InduLinkDemo.ViewModels
             var client = _client;
             var capabilities = client == null
                 ? ProtocolCapabilities.ForProtocol(ProtocolKind)
-                : IndustrialClientPlatformExtensions.GetCapabilities(client);
+                : InduLinkClientPlatformExtensions.GetCapabilities(client);
             CapabilityText = CapabilityDisplayHelper.Format(capabilities);
         }
 

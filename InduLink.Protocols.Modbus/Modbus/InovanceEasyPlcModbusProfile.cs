@@ -102,16 +102,16 @@ namespace InduLink.Protocols.Modbus
         /// 解析后的 <see cref="ModbusAddress"/> 对象，包含 <see cref="ModbusArea"/> 区域
         /// 和计算得到的基于零的 Modbus 绝对地址。
         /// </returns>
-        /// <exception cref="IndustrialAddressParseException">
+        /// <exception cref="InduLinkAddressParseException">
         /// <paramref name="address"/> 为 <c>null</c> 或空字符串时抛出。
         /// </exception>
-        /// <exception cref="IndustrialAddressParseException">
+        /// <exception cref="InduLinkAddressParseException">
         /// 地址格式无法匹配正则表达式（如缺少索引号或包含非法字符）时抛出。
         /// </exception>
-        /// <exception cref="IndustrialAddressParseException">
+        /// <exception cref="InduLinkAddressParseException">
         /// 地址类型前缀不在支持的范围（D/R/M/B/S/X/Y）内时抛出。
         /// </exception>
-        /// <exception cref="IndustrialAddressParseException">
+        /// <exception cref="InduLinkAddressParseException">
         /// 索引号无法解析（如八进制解析失败）或超出该地址类型的最大范围时抛出。
         /// </exception>
         /// <remarks>
@@ -129,20 +129,20 @@ namespace InduLink.Protocols.Modbus
         {
             if (string.IsNullOrWhiteSpace(address))
             {
-                throw new IndustrialAddressParseException("Address is required.");
+                throw new InduLinkAddressParseException("Address is required.");
             }
 
             var match = Regex.Match(address.Trim().ToUpperInvariant(), @"^([A-Z])(\d+)$");
             if (!match.Success)
             {
-                throw new IndustrialAddressParseException(string.Format("Unsupported Inovance PLC variable: {0}", address));
+                throw new InduLinkAddressParseException(string.Format("Unsupported Inovance PLC variable: {0}", address));
             }
 
             var type = match.Groups[1].Value[0];
             Tuple<ushort, ModbusArea, int, bool> rule;
             if (!AddressMap.TryGetValue(type, out rule))
             {
-                throw new IndustrialAddressParseException(string.Format("Unsupported Inovance PLC variable type: {0}", type));
+                throw new InduLinkAddressParseException(string.Format("Unsupported Inovance PLC variable type: {0}", type));
             }
 
             int index;
@@ -152,12 +152,12 @@ namespace InduLink.Protocols.Modbus
             }
             catch (Exception ex)
             {
-                throw new IndustrialAddressParseException("Invalid Inovance PLC variable index.", ex);
+                throw new InduLinkAddressParseException("Invalid Inovance PLC variable index.", ex);
             }
 
             if (index < 0 || index >= rule.Item3)
             {
-                throw new IndustrialAddressParseException("Inovance PLC variable index out of range.");
+                throw new InduLinkAddressParseException("Inovance PLC variable index out of range.");
             }
 
             return new ModbusAddress(rule.Item2, (ushort)(rule.Item1 + index));

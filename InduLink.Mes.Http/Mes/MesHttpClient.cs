@@ -18,36 +18,36 @@ namespace InduLink.Mes
     {
         private static readonly HttpClient SharedHttpClient = CreateHttpClient(CreateDefaultHandler(), true);
         private readonly MesHttpClientOptions _options;
-        private readonly IIndustrialLogger _logger;
+        private readonly IInduLinkLogger _logger;
         private readonly HttpClient _httpClient;
         private readonly bool _disposeHttpClient;
         private int _disposed;
         private volatile bool _lastRequestSuccess;
 
-        public MesHttpClient(MesHttpClientOptions options, IIndustrialLogger logger = null)
+        public MesHttpClient(MesHttpClientOptions options, IInduLinkLogger logger = null)
             : this(options, SharedHttpClient, false, logger) { }
 
         public MesHttpClient(
             MesHttpClientOptions options,
             HttpMessageHandler handler,
             bool disposeHandler,
-            IIndustrialLogger logger = null)
+            IInduLinkLogger logger = null)
             : this(options, CreateHttpClient(handler, disposeHandler), true, logger) { }
 
-        public MesHttpClient(MesHttpClientOptions options, HttpClient httpClient, IIndustrialLogger logger)
+        public MesHttpClient(MesHttpClientOptions options, HttpClient httpClient, IInduLinkLogger logger)
             : this(options, httpClient, false, logger) { }
 
         private MesHttpClient(
             MesHttpClientOptions options,
             HttpClient httpClient,
             bool disposeHttpClient,
-            IIndustrialLogger logger)
+            IInduLinkLogger logger)
         {
             _options = options ?? throw new ArgumentNullException(nameof(options));
             ValidateOptions(options);
             _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
             _disposeHttpClient = disposeHttpClient;
-            _logger = logger ?? NullIndustrialLogger.Instance;
+            _logger = logger ?? NullInduLinkLogger.Instance;
         }
 
         public bool IsConnected => !IsDisposed() && _lastRequestSuccess;

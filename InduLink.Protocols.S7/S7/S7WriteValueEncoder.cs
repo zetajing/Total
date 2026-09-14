@@ -17,7 +17,7 @@ namespace InduLink.Protocols.S7
             S7StringCodec.ValidateReservedLength(reservedLength);
             var bytes = Encoding.ASCII.GetBytes((value ?? string.Empty).ToString());
             if (bytes.Length > reservedLength)
-                throw new IndustrialDataConversionException(string.Format(
+                throw new InduLinkDataConversionException(string.Format(
                     "S7 STRING payload length {0} exceeds configured maximum length {1}.",
                     bytes.Length,
                     reservedLength));
@@ -33,7 +33,7 @@ namespace InduLink.Protocols.S7
         {
             var bytes = value as byte[];
             if (bytes == null)
-                throw new IndustrialDataConversionException("S7 byte-array write value must be a byte array.");
+                throw new InduLinkDataConversionException("S7 byte-array write value must be a byte array.");
 
             return FitToConfiguredLength(bytes, length, "byte-array");
         }
@@ -41,9 +41,9 @@ namespace InduLink.Protocols.S7
         private static byte[] FitToConfiguredLength(byte[] value, ushort length, string valueType)
         {
             if (length == 0)
-                throw new IndustrialDataConversionException("S7 " + valueType + " write length must be greater than zero.");
+                throw new InduLinkDataConversionException("S7 " + valueType + " write length must be greater than zero.");
             if (value.Length > length)
-                throw new IndustrialDataConversionException(string.Format(
+                throw new InduLinkDataConversionException(string.Format(
                     "S7 {0} write payload length {1} exceeds configured length {2}.",
                     valueType,
                     value.Length,

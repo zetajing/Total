@@ -38,7 +38,7 @@ namespace InduLink.Tests
                 Assert.AreEqual(QualityStatus.Bad, result.Quality);
                 var snapshot = client.GetDiagnosticSnapshot();
                 Assert.AreEqual(1, snapshot.TimeoutCount);
-                Assert.AreEqual(IndustrialFailureCategory.Timeout, snapshot.LastFailureCategory);
+                Assert.AreEqual(InduLinkFailureCategory.Timeout, snapshot.LastFailureCategory);
             }
         }
 
@@ -71,7 +71,7 @@ namespace InduLink.Tests
         {
             using (var client = new DelayedClient(30, 200))
             {
-                Assert.ThrowsAsync<IndustrialWriteUncertainException>(async () =>
+                Assert.ThrowsAsync<InduLinkWriteUncertainException>(async () =>
                     await client.WriteAsync(new WriteRequest(client.DeviceId, "A", DataType.Int16, (short)1), CancellationToken.None));
                 Assert.AreEqual(1, client.GetDiagnosticSnapshot().TimeoutCount);
             }
@@ -91,11 +91,11 @@ namespace InduLink.Tests
             }
         }
 
-        private sealed class DelayedClient : IndustrialClientBase
+        private sealed class DelayedClient : InduLinkClientBase
         {
             private readonly int _delay;
             public DelayedClient(int operationTimeoutMilliseconds, int delay)
-                : base("test", ProtocolKind.TcpSocket, new PollingScheduler(), NullIndustrialLogger.Instance, operationTimeoutMilliseconds) { _delay = delay; }
+                : base("test", ProtocolKind.TcpSocket, new PollingScheduler(), NullInduLinkLogger.Instance, operationTimeoutMilliseconds) { _delay = delay; }
             public override bool IsConnected { get { return true; } }
             protected override Task ConnectCoreAsync(CancellationToken cancellationToken) { return Task.CompletedTask; }
             protected override Task DisconnectCoreAsync(CancellationToken cancellationToken) { return Task.CompletedTask; }

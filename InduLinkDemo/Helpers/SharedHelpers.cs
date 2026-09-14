@@ -205,7 +205,7 @@ namespace InduLinkDemo.Helpers
                     return string.Join(", ", items);
                 }
             }
-            return InduLink.Storage.IndustrialDataRecord.FormatValueStatic(value) ?? string.Empty;
+            return InduLink.Storage.InduLinkDataRecord.FormatValueStatic(value) ?? string.Empty;
         }
 
         public static string FormatQualityLabel(QualityStatus quality)

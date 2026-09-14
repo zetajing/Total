@@ -26,7 +26,7 @@ namespace InduLink.Tests
                 var second = new LifecycleClient("second") { BlockConnect = true };
                 var config = Config(Device("first"), Device("second"));
 
-                using (var host = new IndustrialDeviceHost(
+                using (var host = new InduLinkDeviceHost(
                     config,
                     directory,
                     device => device.Name == "first" ? first : second))
@@ -70,7 +70,7 @@ namespace InduLink.Tests
             try
             {
                 var client = new LifecycleClient("device") { UnsubscribeFailuresRemaining = 1 };
-                using (var host = new IndustrialDeviceHost(Config(Device("device")), directory, _ => client))
+                using (var host = new InduLinkDeviceHost(Config(Device("device")), directory, _ => client))
                 {
                     await host.StartAsync(CancellationToken.None);
                     Assert.ThrowsAsync<AggregateException>(() => host.StopAsync(CancellationToken.None));
@@ -95,7 +95,7 @@ namespace InduLink.Tests
             try
             {
                 var first = new LifecycleClient("first");
-                Assert.Throws<InvalidOperationException>(() => new IndustrialDeviceHost(
+                Assert.Throws<InvalidOperationException>(() => new InduLinkDeviceHost(
                     Config(Device("first"), Device("second")),
                     directory,
                     device => device.Name == "first"
@@ -113,7 +113,7 @@ namespace InduLink.Tests
         public async Task BufferedRecorder_SerializesStartAndStopAndRejectsRestart()
         {
             var store = new LifecycleStore { BlockInitialize = true };
-            using (var recorder = new BufferedIndustrialDataRecorder(store))
+            using (var recorder = new BufferedInduLinkDataRecorder(store))
             {
                 var start = recorder.StartAsync(CancellationToken.None);
                 Assert.AreSame(store.InitializeEntered.Task, await Task.WhenAny(store.InitializeEntered.Task, Task.Delay(2000)));
@@ -134,7 +134,7 @@ namespace InduLink.Tests
         {
             var failures = new List<Exception>();
             var failureSync = new object();
-            using (var recorder = new BufferedIndustrialDataRecorder(
+            using (var recorder = new BufferedInduLinkDataRecorder(
                 new LifecycleStore(),
                 new BufferedDataRecorderOptions { BatchSize = 10, QueueCapacity = 32, RetryCount = 0 }))
             {
@@ -165,7 +165,7 @@ namespace InduLink.Tests
         public async Task BufferedRecorder_DisposeDuringInitializeDoesNotStartWorkerAfterDispose()
         {
             var store = new LifecycleStore { BlockInitialize = true };
-            var recorder = new BufferedIndustrialDataRecorder(store);
+            var recorder = new BufferedInduLinkDataRecorder(store);
             var start = recorder.StartAsync(CancellationToken.None);
             Assert.AreSame(store.InitializeEntered.Task, await Task.WhenAny(store.InitializeEntered.Task, Task.Delay(2000)));
 
@@ -184,7 +184,7 @@ namespace InduLink.Tests
         public async Task BufferedRecorder_CancelledDuringInitializeDoesNotStartWorkerAndCanRetry()
         {
             var store = new LifecycleStore { BlockInitialize = true };
-            using (var recorder = new BufferedIndustrialDataRecorder(store))
+            using (var recorder = new BufferedInduLinkDataRecorder(store))
             using (var cancellation = new CancellationTokenSource())
             {
                 var start = recorder.StartAsync(cancellation.Token);
@@ -221,9 +221,9 @@ namespace InduLink.Tests
                 false));
         }
 
-        private static bool IsRecorderDisposed(BufferedIndustrialDataRecorder recorder)
+        private static bool IsRecorderDisposed(BufferedInduLinkDataRecorder recorder)
         {
-            var field = typeof(BufferedIndustrialDataRecorder).GetField(
+            var field = typeof(BufferedInduLinkDataRecorder).GetField(
                 "_disposed",
                 BindingFlags.Instance | BindingFlags.NonPublic);
             return field != null && (int)field.GetValue(recorder) != 0;
@@ -239,21 +239,21 @@ namespace InduLink.Tests
             return directory;
         }
 
-        private static IndustrialSdkConfig Config(params IndustrialDeviceConfig[] devices)
+        private static InduLinkSdkConfig Config(params InduLinkDeviceConfig[] devices)
         {
-            return new IndustrialSdkConfig { Devices = devices.ToList() };
+            return new InduLinkSdkConfig { Devices = devices.ToList() };
         }
 
-        private static IndustrialDeviceConfig Device(string name)
+        private static InduLinkDeviceConfig Device(string name)
         {
-            return new IndustrialDeviceConfig
+            return new InduLinkDeviceConfig
             {
                 Name = name,
                 DeviceId = name,
                 Protocol = "modbus-tcp",
                 Enabled = true,
                 PointsFile = "points.json",
-                Runtime = new IndustrialDeviceRuntimeOptions
+                Runtime = new InduLinkDeviceRuntimeOptions
                 {
                     PollingIntervalMilliseconds = 100,
                     ReconnectDelayMilliseconds = 100,
@@ -267,7 +267,7 @@ namespace InduLink.Tests
             return new DataValue("D0", DataType.Int16, 1, null, QualityStatus.Good, DateTimeOffset.UtcNow, null);
         }
 
-        private sealed class LifecycleClient : IIndustrialClient
+        private sealed class LifecycleClient : IInduLinkClient
         {
             public LifecycleClient(string deviceId) { DeviceId = deviceId; }
 
@@ -342,7 +342,7 @@ namespace InduLink.Tests
             }
         }
 
-        private sealed class LifecycleStore : IIndustrialDataStore
+        private sealed class LifecycleStore : IInduLinkDataStore
         {
             public bool BlockInitialize { get; set; }
             public bool Disposed { get; private set; }
@@ -357,14 +357,14 @@ namespace InduLink.Tests
                 if (BlockInitialize) await ReleaseInitialize.Task;
             }
 
-            public Task WriteAsync(IReadOnlyCollection<IndustrialDataRecord> records, CancellationToken cancellationToken)
+            public Task WriteAsync(IReadOnlyCollection<InduLinkDataRecord> records, CancellationToken cancellationToken)
             {
                 return Task.CompletedTask;
             }
 
-            public Task<IReadOnlyList<IndustrialDataRecord>> QueryAsync(HistoryQueryFilter filter, CancellationToken cancellationToken)
+            public Task<IReadOnlyList<InduLinkDataRecord>> QueryAsync(HistoryQueryFilter filter, CancellationToken cancellationToken)
             {
-                return Task.FromResult((IReadOnlyList<IndustrialDataRecord>)new IndustrialDataRecord[0]);
+                return Task.FromResult((IReadOnlyList<InduLinkDataRecord>)new InduLinkDataRecord[0]);
             }
 
             public Task<int> DeleteAsync(HistoryQueryFilter filter, CancellationToken cancellationToken)

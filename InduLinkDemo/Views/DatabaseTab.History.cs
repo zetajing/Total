@@ -12,7 +12,7 @@ namespace InduLinkDemo.Views
 {
     public partial class DatabaseTab
     {
-        private async Task RefreshHistoryAsync(IIndustrialHistoryStore store, CancellationToken ct)
+        private async Task RefreshHistoryAsync(IInduLinkHistoryStore store, CancellationToken ct)
         {
             var lastId = 0L;
             var initialLoad = true;
@@ -66,14 +66,14 @@ namespace InduLinkDemo.Views
             catch (OperationCanceledException) when (ct.IsCancellationRequested) { }
         }
 
-        private void ReplaceHistoryRows(System.Collections.Generic.IReadOnlyList<IndustrialDataRecord> records)
+        private void ReplaceHistoryRows(System.Collections.Generic.IReadOnlyList<InduLinkDataRecord> records)
         {
             _historyRows.Clear();
             foreach (var r in records) _historyRows.Add(DatabaseHistoryDisplayRow.FromRecord(r));
             UpdateHistoryStatus();
         }
 
-        private void PrependHistoryRows(System.Collections.Generic.IReadOnlyList<IndustrialDataRecord> records)
+        private void PrependHistoryRows(System.Collections.Generic.IReadOnlyList<InduLinkDataRecord> records)
         {
             foreach (var r in records) _historyRows.Insert(0, DatabaseHistoryDisplayRow.FromRecord(r));
             while (_historyRows.Count > MaxHistoryRowCount) _historyRows.RemoveAt(_historyRows.Count - 1);

@@ -13,10 +13,10 @@ using InduLink.Web.Internal;
 namespace InduLink.Web.WebSockets
 {
     /// <summary>基于 HTTP.sys 的独立 WebSocket 服务端。</summary>
-    public sealed class IndustrialWebSocketServer : IWebSocketServer
+    public sealed class InduLinkWebSocketServer : IWebSocketServer
     {
-        private readonly IndustrialWebSocketServerOptions _options;
-        private readonly IIndustrialLogger _logger;
+        private readonly InduLinkWebSocketServerOptions _options;
+        private readonly IInduLinkLogger _logger;
         private readonly ConcurrentDictionary<string, ServerSession> _sessions = new ConcurrentDictionary<string, ServerSession>();
         private readonly ConcurrentDictionary<int, Task> _requests = new ConcurrentDictionary<int, Task>();
         private readonly SemaphoreSlim _lifecycleGate = new SemaphoreSlim(1, 1);
@@ -28,11 +28,11 @@ namespace InduLink.Web.WebSockets
         private int _running;
         private int _disposed;
 
-        public IndustrialWebSocketServer(IndustrialWebSocketServerOptions options, IIndustrialLogger logger = null)
+        public InduLinkWebSocketServer(InduLinkWebSocketServerOptions options, IInduLinkLogger logger = null)
         {
             if (options == null) throw new ArgumentNullException(nameof(options));
             _options = options.Clone();
-            _logger = logger ?? NullIndustrialLogger.Instance;
+            _logger = logger ?? NullInduLinkLogger.Instance;
             ValidateOptions(_options);
         }
 
@@ -331,7 +331,7 @@ namespace InduLink.Web.WebSockets
         private void RaiseMessage(WebSocketMessageEventArgs args) { try { MessageReceived?.Invoke(this, args); } catch { } }
         private void RaiseSessionClosed(WebSocketClosedEventArgs args) { try { SessionClosed?.Invoke(this, args); } catch { } }
 
-        private static void ValidateOptions(IndustrialWebSocketServerOptions options)
+        private static void ValidateOptions(InduLinkWebSocketServerOptions options)
         {
             WebSecurity.ValidateListenerSecurity(options.ListenPrefix, options.RequireApiKey, options.ApiKey, options.AllowedOrigins.ToArray(), nameof(options));
             if (string.IsNullOrWhiteSpace(options.WebSocketPath) || !options.WebSocketPath.StartsWith("/", StringComparison.Ordinal))
@@ -344,7 +344,7 @@ namespace InduLink.Web.WebSockets
 
         private void ThrowIfDisposed()
         {
-            if (Volatile.Read(ref _disposed) != 0) throw new ObjectDisposedException(nameof(IndustrialWebSocketServer));
+            if (Volatile.Read(ref _disposed) != 0) throw new ObjectDisposedException(nameof(InduLinkWebSocketServer));
         }
 
         public void Dispose()

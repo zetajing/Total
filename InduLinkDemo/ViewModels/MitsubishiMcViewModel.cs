@@ -16,7 +16,7 @@ namespace InduLinkDemo.ViewModels
         protected override string ProtocolTag => "MC";
         protected override ProtocolKind ProtocolKind => ProtocolKind.MitsubishiMc;
 
-        protected override IIndustrialClient CreateClient()
+        protected override IInduLinkClient CreateClient()
         {
             return new MitsubishiMcClient(
                 new MitsubishiMcClientOptions

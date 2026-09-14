@@ -6,10 +6,10 @@ using System.Threading.Tasks;
 namespace InduLink.Abstractions
 {
     /// <summary>
-    /// 兼容性门面接口，保留历史上的连接、寄存器读写和订阅入口。
+    /// InduLink 客户端通用接口，统一提供连接、寄存器读写和订阅入口。
     /// 新代码应优先依赖 IRegisterClient、IEventSubscriptionClient 或 IKeyValueClient 等窄能力接口。
     /// </summary>
-    public interface IIndustrialClient : IIndustrialConnection
+    public interface IInduLinkClient : IInduLinkConnection
     {
         /// <summary>读取单个地址；通信失败时实现可返回质量为 Bad 的值。</summary>
         /// <param name="request">读取请求。</param>
@@ -85,7 +85,7 @@ namespace InduLink.Abstractions
         /// <param name="handler">数据回调。</param>
         /// <param name="cancellationToken">取消令牌。</param>
         /// <returns>订阅标识。</returns>
-        Task<string> SubscribeAsync(IIndustrialClient client, SubscriptionRequest request, EventHandler<SubscriptionEvent> handler, CancellationToken cancellationToken);
+        Task<string> SubscribeAsync(IInduLinkClient client, SubscriptionRequest request, EventHandler<SubscriptionEvent> handler, CancellationToken cancellationToken);
         /// <summary>停止并移除指定轮询订阅。</summary>
         /// <param name="subscriptionId">订阅标识。</param>
         /// <param name="cancellationToken">取消令牌。</param>

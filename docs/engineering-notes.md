@@ -6,7 +6,7 @@
 
 ### 已完成
 
-- `[0.x]` .NET 8 模块化 SDK，包含 Modbus TCP/RTU、S7、MC、ADS、OPC UA、MQTT、Redis 客户端和统一 `IIndustrialClient` 入口。
+- `[0.x]` .NET 8 模块化 SDK，包含 Modbus TCP/RTU、S7、MC、ADS、OPC UA、MQTT、Redis 客户端和统一 `IInduLinkClient` 入口。
 - `[0.x]` 协议能力模型、轮询拆批、配置模板与 JSON Schema 校验。
 - `[0.x]` S7/MC 连续区协议级批量读取：同一存储区一次读取连续字节/字或位设备，再按请求分别解码；批量写入仍保持逐项执行。
 - `[0.x]` 基础连接生命周期、超时、重连、健康状态、诊断快照和 Demo 验证页面。
@@ -32,7 +32,7 @@
 
 - SDK 已拆为 Abstractions、Runtime、Transport、协议、MES、Web、FTP、Storage 和 MySQL 提供程序等程序集。
 - 公开命名空间已收敛到程序集边界，不提供旧命名空间包装或类型转发。
-- `IndustrialSdk` 提供默认注册表、配置解析、离线校验和 `IndustrialDeviceHost` 创建；单协议仍可直接使用具体 Options + Client。
+- `InduLinkSdk` 提供默认注册表、配置解析、离线校验和 `InduLinkDeviceHost` 创建；单协议仍可直接使用具体 Options + Client。
 - `devices.json` 将公共字段、`runtime` 和强类型 `settings` 分开，canonical 协议键拒绝旧别名和重复注册。
 
 ### 协议和 Demo
@@ -48,7 +48,7 @@
 ### 能力模型和批量计划
 
 - `ProtocolCapabilities` 统一描述批量、位地址、类型、PDU、超时和推荐轮询能力。
-- `IIndustrialAddress` 及 Modbus/S7/MC 强类型地址解析已接入平台模型。
+- `IInduLinkAddress` 及 Modbus/S7/MC 强类型地址解析已接入平台模型。
 - `BatchReadOptions`、`BatchWriteOptions`、`BatchSplitPlan`、`IBatchOperationPlanner` 和 `BatchPlanDiagnostics` 已建立。
 - Modbus、S7、MC 已能生成读取拆批计划；`PollingScheduler` 会优先使用 planner，批次独立容错并按订阅顺序上报。
 - S7/MC 已在 `ReadManyCoreAsync` 中执行协议级连续区合并读取；S7 读取共享字节区，MC 读取连续字/位设备，再按原始请求分别解码。
@@ -57,10 +57,10 @@
 
 ### S7、ADS、Modbus TCP 第一轮收敛（2026-09-05）
 
-- S7：`ReadDbStringAsync`、各 `ReadDbClassAsync` 重载和 `WriteDbClassAsync` 使用 `OperationTimeoutMilliseconds`，超时预算覆盖该次操作及其内部重连；读取超时抛 `IndustrialTimeoutException`。写入仍遵循原有默认不重放及结果不确定语义。
+- S7：`ReadDbStringAsync`、各 `ReadDbClassAsync` 重载和 `WriteDbClassAsync` 使用 `OperationTimeoutMilliseconds`，超时预算覆盖该次操作及其内部重连；读取超时抛 `InduLinkTimeoutException`。写入仍遵循原有默认不重放及结果不确定语义。
 - ADS：保持 Beckhoff.TwinCAT.Ads 7.0.317。旧客户端连接事件、通知和释放不应改变新客户端状态；发生连接丢失后，仅有底层 Connected 事件不足以恢复 SDK 可用状态，需要重新执行 `ConnectAsync` 的连接及订阅安装流程。DeviceHost 可通过既有重连循环执行；直接客户端由调用方安排重连。订阅恢复的实机结果仍需单独验收。
 - Modbus TCP：NModbus 异步 I/O 不接收取消令牌，SDK 在在途事务取消时关闭该事务的 socket，使底层等待结束，允许后续断开/重连；清理时先关闭 socket，再释放主站对象。取消与响应完成同时发生时，先等待取消回调退出再返回，避免返回成功后仍由该次取消关闭健康连接。RTU 行为未改动。
-- 公共写入入口：进入底层写入后的取消保守报告 `IndustrialWriteUncertainException`，包括批量写入；在排队/开始前取消仍是 `OperationCanceledException`。结果不确定不能作为自动重放写入的依据。这是调用方需要注意的异常行为变更。
+- 公共写入入口：进入底层写入后的取消保守报告 `InduLinkWriteUncertainException`，包括批量写入；在排队/开始前取消仍是 `OperationCanceledException`。结果不确定不能作为自动重放写入的依据。这是调用方需要注意的异常行为变更。
 
 本轮新增 13 项回归：S7 默认超时及取消边界、ADS 旧事件/旧客户端释放隔离、Modbus TCP 单点/批量读写取消后重连读回，以及写入开始前取消。Release 全解决方案构建通过；测试汇总 297 项通过、0 项失败、1 项跳过，ADS 显式虚拟 PLC 测试未执行。
 
@@ -86,12 +86,12 @@
 
 - 同一设备/客户端使用一个 Worker 合并重复点位，轮询按固定计划推进，减少“读取耗时 + 间隔”造成的漂移。
 - 回调异常被隔离，不会杀死轮询循环；Worker 替换、停止和新订阅并发时会重新绑定，避免订阅挂在正在退出的 Worker 上。
-- `IndustrialDeviceHost` 启动失败会回滚已启动设备；停止失败保留可重试状态；构造中途失败会释放已经创建的客户端。
+- `InduLinkDeviceHost` 启动失败会回滚已启动设备；停止失败保留可重试状态；构造中途失败会释放已经创建的客户端。
 - SDK 主动周期读取不是 PLC 主动推送；需要推送时使用网络服务或设备原生能力。
 
 ### 存储和 MES Receiver
 
-- `BufferedIndustrialDataRecorder` 串行化 Start/Stop/Dispose，停止后不可重启；生产者与停止并发时只返回拒绝，不抛出队列竞态异常。
+- `BufferedInduLinkDataRecorder` 串行化 Start/Stop/Dispose，停止后不可重启；生产者与停止并发时只返回拒绝，不抛出队列竞态异常。
 - 缓冲队列有界，数据库故障不会阻塞 PLC 实时通信；接受的数据先排空，未接受的数据记录丢弃计数。
 - MES Receiver 在锁外有界等待在途请求；处理器内 Stop 不自等待；同步阻塞处理器可以返回 504；超时处理器继续受跟踪并占用容量；过载快速返回 429。
 
@@ -138,9 +138,9 @@
 
 - Modbus 完善本地 loopback 覆盖；S7 将现有 Snap7 仿真 Server 纳入自动化回归；MC 增加帧和响应黄金样本。
 - 增加可选真实数据库集成测试，覆盖建表、事务回滚、时区往返和取消。
-- 评估 `IndustrialClientMetrics`、`PollingMetrics`、`TransportMetrics`、`StorageMetrics`，记录成功率、超时、延迟、连续失败、轮询周期和批量节省数。
+- 评估 `InduLinkClientMetrics`、`PollingMetrics`、`TransportMetrics`、`StorageMetrics`，记录成功率、超时、延迟、连续失败、轮询周期和批量节省数。
 - 统一事件 ID，并提供脱敏诊断包；诊断包必须移除 Host、账号、连接字符串、密码和 API Key。
 
 ### P3：协议扩展
 
-先稳定现有 Modbus/S7/MC，再按现场需求选择 Omron FINS、Keyence KV、Allen-Bradley EtherNet/IP 或 MQTT/Sparkplug B。扩展协议应继续映射到 `IIndustrialClient`、`Tag`、`DataValue`、`QualityStatus` 和 `IndustrialDeviceHost`，不要一开始暴露过重的厂商对象模型。
+先稳定现有 Modbus/S7/MC，再按现场需求选择 Omron FINS、Keyence KV、Allen-Bradley EtherNet/IP 或 MQTT/Sparkplug B。扩展协议应继续映射到 `IInduLinkClient`、`Tag`、`DataValue`、`QualityStatus` 和 `InduLinkDeviceHost`，不要一开始暴露过重的厂商对象模型。

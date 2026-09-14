@@ -102,12 +102,12 @@ namespace InduLink.Protocols.Mc
         /// </summary>
         /// <param name="response">完整的响应帧字节数组。</param>
         /// <returns>去除头部和结束码后的有效数据载荷。</returns>
-        /// <exception cref="IndustrialProtocolException">响应长度不足或结束码不为 0x0000 时引发。</exception>
+        /// <exception cref="InduLinkProtocolException">响应长度不足或结束码不为 0x0000 时引发。</exception>
         public static byte[] ParseResponse(byte[] response)
         {
             if (response == null || response.Length < 11)
             {
-                throw new IndustrialProtocolException("Invalid MC response length.");
+                throw new InduLinkProtocolException("Invalid MC response length.");
             }
             ValidateResponseSubheader(response);
 
@@ -117,7 +117,7 @@ namespace InduLink.Protocols.Mc
             var expectedLength = 9 + responseLength;
             if (response.Length != expectedLength)
             {
-                throw new IndustrialProtocolException(string.Format(
+                throw new InduLinkProtocolException(string.Format(
                     "Invalid MC response length. Expected {0} bytes, received {1} bytes.",
                     expectedLength,
                     response.Length));
@@ -129,7 +129,7 @@ namespace InduLink.Protocols.Mc
 
             if (endCode != 0x0000)
             {
-                throw new IndustrialProtocolException(string.Format("MC end code: 0x{0:X4}", endCode));
+                throw new InduLinkProtocolException(string.Format("MC end code: 0x{0:X4}", endCode));
             }
 
             var payloadLength = responseLength - 2;
@@ -146,7 +146,7 @@ namespace InduLink.Protocols.Mc
         {
             if (responsePrefix == null || responsePrefix.Length < 11)
             {
-                throw new IndustrialProtocolException("Invalid MC response header length.");
+                throw new InduLinkProtocolException("Invalid MC response header length.");
             }
             ValidateResponseSubheader(responsePrefix);
 
@@ -159,7 +159,7 @@ namespace InduLink.Protocols.Mc
         {
             if (responseLength < 2)
             {
-                throw new IndustrialProtocolException(string.Format(
+                throw new InduLinkProtocolException(string.Format(
                     "Invalid MC response data length: {0}. The length must include the 2-byte end code.",
                     responseLength));
             }
@@ -170,7 +170,7 @@ namespace InduLink.Protocols.Mc
             var subheader = ReadU16LE(response, 0);
             if (subheader != SubheaderResponse)
             {
-                throw new IndustrialProtocolException(string.Format("Invalid MC response subheader: 0x{0:X4}.", subheader));
+                throw new InduLinkProtocolException(string.Format("Invalid MC response subheader: 0x{0:X4}.", subheader));
             }
         }
 
@@ -208,7 +208,7 @@ namespace InduLink.Protocols.Mc
         {
             if (payload == null || payload.Length % 2 != 0)
             {
-                throw new IndustrialProtocolException("Invalid MC word payload length.");
+                throw new InduLinkProtocolException("Invalid MC word payload length.");
             }
 
             var registers = new ushort[payload.Length / 2];
@@ -230,7 +230,7 @@ namespace InduLink.Protocols.Mc
             var expectedLength = (count + 1) / 2;
             if (payload == null || payload.Length < expectedLength)
             {
-                throw new IndustrialProtocolException("Invalid MC bit payload length.");
+                throw new InduLinkProtocolException("Invalid MC bit payload length.");
             }
 
             var values = new bool[count];
@@ -330,7 +330,7 @@ namespace InduLink.Protocols.Mc
         /// </summary>
         /// <param name="type">MC 设备类型。</param>
         /// <returns>表示该设备的单字节代码。</returns>
-        /// <exception cref="IndustrialProtocolException">遇到不受支持的设备类型时引发。</exception>
+        /// <exception cref="InduLinkProtocolException">遇到不受支持的设备类型时引发。</exception>
         private static byte GetDeviceCode(McDeviceType type)
         {
             return McDeviceCatalog.Get(type).Code;

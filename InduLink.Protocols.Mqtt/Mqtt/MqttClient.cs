@@ -86,7 +86,7 @@ namespace InduLink.Protocols.Mqtt
     }
 
     /// <summary>MQTT 客户端。地址映射为 Topic；写入发布消息，读取返回订阅到的最新消息。</summary>
-    public sealed class MqttClient : IndustrialClientBase, IKeyValueClient
+    public sealed class MqttClient : InduLinkClientBase, IKeyValueClient
     {
         private readonly MqttClientOptions _options;
         private readonly IMqttClient _client;
@@ -102,9 +102,9 @@ namespace InduLink.Protocols.Mqtt
         private int _manualDisconnect = 1;
         private int _disposeRequested;
 
-        public MqttClient(MqttClientOptions options, IIndustrialLogger logger = null, IPollingScheduler pollingScheduler = null)
+        public MqttClient(MqttClientOptions options, IInduLinkLogger logger = null, IPollingScheduler pollingScheduler = null)
             : base(GetDeviceId(options), ProtocolKind.Mqtt, pollingScheduler ?? new PollingScheduler(logger),
-                logger ?? NullIndustrialLogger.Instance, options.OperationTimeoutMilliseconds)
+                logger ?? NullInduLinkLogger.Instance, options.OperationTimeoutMilliseconds)
         {
             _options = CloneOptions(options);
             ValidateOptions(_options);
@@ -259,7 +259,7 @@ namespace InduLink.Protocols.Mqtt
                 }
                 catch (OperationCanceledException ex) when (!cancellationToken.IsCancellationRequested)
                 {
-                    throw new IndustrialConnectionException(
+                    throw new InduLinkConnectionException(
                         string.Format("MQTT connection timed out after {0} ms.", _options.ConnectTimeoutMilliseconds),
                         new TimeoutException("MQTT connection timed out.", ex));
                 }
@@ -269,7 +269,7 @@ namespace InduLink.Protocols.Mqtt
                 }
                 catch (Exception ex)
                 {
-                    throw new IndustrialConnectionException("Failed to connect MQTT broker.", ex);
+                    throw new InduLinkConnectionException("Failed to connect MQTT broker.", ex);
                 }
             }
         }
@@ -331,7 +331,7 @@ namespace InduLink.Protocols.Mqtt
                 .WithRetainFlag(_options.Retain).Build();
             var result = await _client.PublishAsync(message, cancellationToken).ConfigureAwait(false);
             if (result.ReasonCode >= MqttClientPublishReasonCode.UnspecifiedError)
-                throw new IndustrialProtocolException("MQTT publish failed: " + result.ReasonCode);
+                throw new InduLinkProtocolException("MQTT publish failed: " + result.ReasonCode);
         }
 
         private static void ValidateKey(string key)
@@ -386,7 +386,7 @@ namespace InduLink.Protocols.Mqtt
             var result = await _client.SubscribeAsync(options, cancellationToken).ConfigureAwait(false);
             var failure = result.Items.FirstOrDefault(item => item.ResultCode >= MqttClientSubscribeResultCode.UnspecifiedError);
             if (failure != null)
-                throw new IndustrialProtocolException(string.Format("MQTT subscription failed for '{0}': {1}", topicFilter, failure.ResultCode));
+                throw new InduLinkProtocolException(string.Format("MQTT subscription failed for '{0}': {1}", topicFilter, failure.ResultCode));
         }
 
         private async Task RestoreSubscriptionsAsync(CancellationToken cancellationToken)
@@ -561,7 +561,7 @@ namespace InduLink.Protocols.Mqtt
         }
 
         private MqttQualityOfServiceLevel ToQos() { return (MqttQualityOfServiceLevel)_options.QualityOfService; }
-        private void EnsureConnected() { if (!_client.IsConnected) throw new IndustrialConnectionException("MQTT client is not connected."); }
+        private void EnsureConnected() { if (!_client.IsConnected) throw new InduLinkConnectionException("MQTT client is not connected."); }
 
         protected override void DisposeCore()
         {

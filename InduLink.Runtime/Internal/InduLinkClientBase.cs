@@ -11,11 +11,11 @@ using InduLink.Exceptions;
 namespace InduLink.Runtime
 {
     /// <summary>工业客户端公共基类，统一处理操作串行化、超时、健康状态和轮询订阅。</summary>
-    public abstract partial class IndustrialClientBase : IIndustrialClient, IProtocolCapabilityProvider, IIndustrialDiagnosticsProvider
+    public abstract partial class InduLinkClientBase : IInduLinkClient, IProtocolCapabilityProvider, IInduLinkDiagnosticsProvider
     {
         private readonly SemaphoreSlim _operationLock = new SemaphoreSlim(1, 1);
         private readonly IPollingScheduler _pollingScheduler;
-        private readonly IIndustrialLogger _logger;
+        private readonly IInduLinkLogger _logger;
         private DateTimeOffset? _lastSuccessUtc;
         private int _consecutiveFailures;
         private string _lastError;
@@ -28,19 +28,19 @@ namespace InduLink.Runtime
         private long _failedOperations;
         private long _timeoutCount;
         private long _lastOperationElapsedMilliseconds;
-        private IndustrialFailureCategory _lastFailureCategory;
+        private InduLinkFailureCategory _lastFailureCategory;
         private DateTimeOffset? _lastOperationUtc;
         private long _serialPortOpenFailureCount;
         private long _responseTimeoutCount;
         private long _frameErrorCount;
 
-        protected IndustrialClientBase(string deviceId, ProtocolKind kind, IPollingScheduler pollingScheduler, IIndustrialLogger logger, int operationTimeoutMilliseconds = 5000)
+        protected InduLinkClientBase(string deviceId, ProtocolKind kind, IPollingScheduler pollingScheduler, IInduLinkLogger logger, int operationTimeoutMilliseconds = 5000)
         {
             if (string.IsNullOrWhiteSpace(deviceId)) throw new ArgumentException("Device ID cannot be null or empty.", nameof(deviceId));
             DeviceId = deviceId;
             Kind = kind;
             _pollingScheduler = pollingScheduler ?? throw new ArgumentNullException(nameof(pollingScheduler));
-            _logger = logger ?? NullIndustrialLogger.Instance;
+            _logger = logger ?? NullInduLinkLogger.Instance;
             _status = ConnectionStatus.Disconnected;
             if (operationTimeoutMilliseconds <= 0) throw new ArgumentOutOfRangeException(nameof(operationTimeoutMilliseconds));
             _defaultOperationTimeout = TimeSpan.FromMilliseconds(operationTimeoutMilliseconds);
@@ -59,7 +59,7 @@ namespace InduLink.Runtime
             get { return ProtocolCapabilities.ForProtocol(Kind); }
         }
 
-        protected IIndustrialLogger Logger { get { return _logger; } }
+        protected IInduLinkLogger Logger { get { return _logger; } }
 
         public async Task ConnectAsync(CancellationToken cancellationToken)
         {
@@ -123,7 +123,7 @@ namespace InduLink.Runtime
                     }
                     catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
                     {
-                        var ex = new IndustrialTimeoutException("Industrial read operation timed out.");
+                        var ex = new InduLinkTimeoutException("Industrial read operation timed out.");
                         HandleOperationTimeoutSafely();
                         if (RetainOperationLockUntilCoreCompletes(coreTask, "read"))
                             releaseOperationLock = false;
@@ -175,7 +175,7 @@ namespace InduLink.Runtime
                     }
                     catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
                     {
-                        var ex = new IndustrialTimeoutException("Industrial batch read operation timed out.");
+                        var ex = new InduLinkTimeoutException("Industrial batch read operation timed out.");
                         HandleOperationTimeoutSafely();
                         if (RetainOperationLockUntilCoreCompletes(coreTask, "batch read"))
                             releaseOperationLock = false;
@@ -224,8 +224,8 @@ namespace InduLink.Runtime
                     }
                     catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
                     {
-                        var timeoutException = new IndustrialTimeoutException("Industrial write operation timed out.");
-                        var ex = new IndustrialWriteUncertainException(
+                        var timeoutException = new InduLinkTimeoutException("Industrial write operation timed out.");
+                        var ex = new InduLinkWriteUncertainException(
                             "Industrial write outcome is unknown; the write was not replayed.", timeoutException);
                         HandleOperationTimeoutSafely();
                         if (RetainOperationLockUntilCoreCompletes(coreTask, "write"))
@@ -240,7 +240,7 @@ namespace InduLink.Runtime
                             RetainOperationLockUntilCoreCompletes(coreTask, "write"))
                             releaseOperationLock = false;
                         var reported = (cancelled != null && coreTask != null) || (cancelled == null && IsWriteOutcomeUncertain(ex))
-                            ? new IndustrialWriteUncertainException(
+                            ? new InduLinkWriteUncertainException(
                                 "Industrial write outcome is unknown; the write was not replayed.", ex)
                             : ex;
                         RecordFailure(reported, IsConnectionFailure(reported), stopwatch.ElapsedMilliseconds);
@@ -279,8 +279,8 @@ namespace InduLink.Runtime
                     }
                     catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
                     {
-                        var timeoutException = new IndustrialTimeoutException("Industrial batch write operation timed out.");
-                        var ex = new IndustrialWriteUncertainException(
+                        var timeoutException = new InduLinkTimeoutException("Industrial batch write operation timed out.");
+                        var ex = new InduLinkWriteUncertainException(
                             "Industrial batch write outcome is unknown; the writes were not replayed.", timeoutException);
                         HandleOperationTimeoutSafely();
                         if (RetainOperationLockUntilCoreCompletes(coreTask, "batch write"))
@@ -295,7 +295,7 @@ namespace InduLink.Runtime
                             RetainOperationLockUntilCoreCompletes(coreTask, "batch write"))
                             releaseOperationLock = false;
                         var reported = (cancelled != null && coreTask != null) || (cancelled == null && IsWriteOutcomeUncertain(ex))
-                            ? new IndustrialWriteUncertainException(
+                            ? new InduLinkWriteUncertainException(
                                 "Industrial batch write outcome is unknown; the writes were not replayed.", ex)
                             : ex;
                         RecordFailure(reported, IsConnectionFailure(reported), stopwatch.ElapsedMilliseconds);

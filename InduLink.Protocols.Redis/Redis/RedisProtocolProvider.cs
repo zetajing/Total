@@ -16,7 +16,7 @@ namespace InduLink.Protocols.Redis
         public int ConnectTimeoutMilliseconds { get; set; } = 5000;
     }
 
-    public sealed class RedisProtocolProvider : IndustrialProtocolProvider<RedisSettings>
+    public sealed class RedisProtocolProvider : InduLinkProtocolProvider<RedisSettings>
     {
         public override string Protocol { get { return "redis"; } }
 
@@ -29,7 +29,7 @@ namespace InduLink.Protocols.Redis
                 settings.ConnectTimeoutMilliseconds <= 0 ? "connectTimeoutMilliseconds must be positive." : null);
         }
 
-        protected override IIndustrialClient CreateClient(IndustrialDeviceConfig device, RedisSettings settings, IIndustrialLogger logger)
+        protected override IInduLinkClient CreateClient(InduLinkDeviceConfig device, RedisSettings settings, IInduLinkLogger logger)
         {
             return new RedisClient(new RedisClientOptions
             {

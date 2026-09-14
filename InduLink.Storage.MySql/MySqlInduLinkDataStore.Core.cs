@@ -9,13 +9,13 @@ using MySqlConnector;
 namespace InduLink.Storage.MySql
 {
     /// <summary>使用 MySqlConnector 将工业采集历史保存到 MySQL 8.0+。</summary>
-    public sealed partial class MySqlIndustrialDataStore : IIndustrialHistoryStore
+    public sealed partial class MySqlInduLinkDataStore : IInduLinkHistoryStore
     {
         private readonly MySqlDataStoreOptions _options;
         private readonly MySqlTableIdentifier _table;
 
         /// <summary>创建存储实例。构造函数只校验本地配置，不访问数据库。</summary>
-        public MySqlIndustrialDataStore(MySqlDataStoreOptions options)
+        public MySqlInduLinkDataStore(MySqlDataStoreOptions options)
         {
             _options = options ?? throw new ArgumentNullException(nameof(options));
             _table = options.ValidateAndGetTable();
@@ -58,7 +58,7 @@ namespace InduLink.Storage.MySql
         }
 
         /// <inheritdoc />
-        public async Task WriteAsync(IReadOnlyCollection<IndustrialDataRecord> records, CancellationToken cancellationToken)
+        public async Task WriteAsync(IReadOnlyCollection<InduLinkDataRecord> records, CancellationToken cancellationToken)
         {
             if (records == null) throw new ArgumentNullException(nameof(records));
             if (records.Count == 0) return;
@@ -107,7 +107,7 @@ VALUES
         }
 
         /// <summary>读取 Id 最大的若干条记录，结果按 Id 降序。</summary>
-        public Task<IReadOnlyList<IndustrialDataRecord>> ReadLatestAsync(int maxRows, CancellationToken cancellationToken)
+        public Task<IReadOnlyList<InduLinkDataRecord>> ReadLatestAsync(int maxRows, CancellationToken cancellationToken)
         {
             return ReadAsync(
                 string.Format(
@@ -121,7 +121,7 @@ VALUES
         }
 
         /// <summary>读取指定 Id 之后的记录，结果按 Id 升序。</summary>
-        public Task<IReadOnlyList<IndustrialDataRecord>> ReadAfterAsync(long afterId, int maxRows, CancellationToken cancellationToken)
+        public Task<IReadOnlyList<InduLinkDataRecord>> ReadAfterAsync(long afterId, int maxRows, CancellationToken cancellationToken)
         {
             if (afterId < 0) throw new ArgumentOutOfRangeException(nameof(afterId));
             return ReadAsync(

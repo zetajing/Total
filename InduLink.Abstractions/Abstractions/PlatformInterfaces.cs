@@ -4,7 +4,7 @@ namespace InduLink.Abstractions
 {
     /// <summary>
     /// Optional capability provider for protocol clients that need to override the SDK default capability matrix.
-    /// Keep this interface separate from IIndustrialClient so existing clients and tests do not break.
+    /// Keep this interface separate from IInduLinkClient so existing clients and tests do not break.
     /// </summary>
     public interface IProtocolCapabilityProvider
     {
@@ -16,7 +16,7 @@ namespace InduLink.Abstractions
     /// Protocol-neutral address shape used by tooling, validation, batching, and documentation.
     /// Protocol implementations may expose richer internal address types while still mapping to this contract.
     /// </summary>
-    public interface IIndustrialAddress
+    public interface IInduLinkAddress
     {
         /// <summary>Original address text supplied by the user or point table.</summary>
         string Original { get; }
@@ -42,7 +42,7 @@ namespace InduLink.Abstractions
     /// New protocols should prefer this generic parser internally to avoid repeated object casts.
     /// </summary>
     /// <typeparam name="TAddress">Protocol-specific address type.</typeparam>
-    public interface IAddressParser<TAddress> where TAddress : IIndustrialAddress
+    public interface IAddressParser<TAddress> where TAddress : IInduLinkAddress
     {
         /// <summary>Parses and normalizes a protocol address.</summary>
         TAddress Parse(string address);

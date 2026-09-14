@@ -35,7 +35,7 @@ namespace InduLink.Tests
         [TestCase("redis", ProtocolKind.Redis)]
         public void Configuration_SupportsNewProtocols(string protocol, ProtocolKind expected)
         {
-            var sdk = IndustrialSdk.CreateDefault();
+            var sdk = InduLinkSdk.CreateDefault();
             var json = string.Format("{{\"devices\":[{{\"name\":\"service\",\"protocol\":\"{0}\",\"pointsFile\":\"points.json\",\"runtime\":{{\"pollingIntervalMilliseconds\":1000,\"reconnectDelayMilliseconds\":3000,\"operationTimeoutMilliseconds\":5000}},\"settings\":{{\"host\":\"localhost\"}}}}]}}", protocol);
             var config = sdk.ParseConfiguration(json);
             using (var client = sdk.CreateClient(config.FindDevice("service"))) Assert.AreEqual(expected, client.Kind);
@@ -52,8 +52,8 @@ namespace InduLink.Tests
         [Test]
         public void InvalidMqttQos_IsRejected()
         {
-            var sdk = IndustrialSdk.CreateDefault();
-            var device = new IndustrialDeviceConfig
+            var sdk = InduLinkSdk.CreateDefault();
+            var device = new InduLinkDeviceConfig
             {
                 Name = "mqtt", Protocol = "mqtt", PointsFile = "points.json",
                 Settings = new MqttSettings { Host = "localhost", QualityOfService = 3 },

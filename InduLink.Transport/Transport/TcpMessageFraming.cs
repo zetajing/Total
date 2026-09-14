@@ -27,7 +27,7 @@ namespace InduLink.Transport
         public byte[] Encode(byte[] payload)
         {
             if (payload == null) throw new ArgumentNullException(nameof(payload));
-            if (payload.Length != _frameLength) throw new IndustrialProtocolException("Fixed-length payload size does not match the configured frame length.");
+            if (payload.Length != _frameLength) throw new InduLinkProtocolException("Fixed-length payload size does not match the configured frame length.");
             return (byte[])payload.Clone();
         }
         public bool TryExtractFrame(IList<byte> buffer, out byte[] payload)
@@ -71,7 +71,7 @@ namespace InduLink.Transport
         public byte[] Encode(byte[] payload)
         {
             if (payload == null) throw new ArgumentNullException(nameof(payload));
-            if (payload.Length > MaximumFrameLength) throw new IndustrialProtocolException("TCP frame exceeds the configured maximum length.");
+            if (payload.Length > MaximumFrameLength) throw new InduLinkProtocolException("TCP frame exceeds the configured maximum length.");
             var result = new byte[payload.Length + _delimiter.Length];
             Buffer.BlockCopy(payload, 0, result, 0, payload.Length);
             Buffer.BlockCopy(_delimiter, 0, result, payload.Length, _delimiter.Length);
@@ -85,12 +85,12 @@ namespace InduLink.Transport
                 var matches = true;
                 for (var offset = 0; offset < _delimiter.Length; offset++) if (buffer[start + offset] != _delimiter[offset]) { matches = false; break; }
                 if (!matches) continue;
-                if (start > MaximumFrameLength) throw new IndustrialProtocolException("TCP frame exceeds the configured maximum length.");
+                if (start > MaximumFrameLength) throw new InduLinkProtocolException("TCP frame exceeds the configured maximum length.");
                 payload = FixedLengthMessageFramer.RemovePrefix(buffer, start);
                 FixedLengthMessageFramer.RemovePrefix(buffer, _delimiter.Length);
                 return true;
             }
-            if (buffer.Count > MaximumFrameLength + _delimiter.Length - 1) throw new IndustrialProtocolException("TCP frame exceeds the configured maximum length.");
+            if (buffer.Count > MaximumFrameLength + _delimiter.Length - 1) throw new InduLinkProtocolException("TCP frame exceeds the configured maximum length.");
             payload = null;
             return false;
         }
@@ -111,7 +111,7 @@ namespace InduLink.Transport
         public byte[] Encode(byte[] payload)
         {
             if (payload == null) throw new ArgumentNullException(nameof(payload));
-            if (payload.Length > MaximumFrameLength) throw new IndustrialProtocolException("TCP frame exceeds the configured maximum length.");
+            if (payload.Length > MaximumFrameLength) throw new InduLinkProtocolException("TCP frame exceeds the configured maximum length.");
             var result = new byte[_prefixLength + payload.Length];
             var length = (uint)payload.Length;
             for (var index = 0; index < _prefixLength; index++) result[_prefixLength - 1 - index] = (byte)(length >> (index * 8));
@@ -124,7 +124,7 @@ namespace InduLink.Transport
             if (buffer.Count < _prefixLength) { payload = null; return false; }
             uint length = 0;
             for (var index = 0; index < _prefixLength; index++) length = (length << 8) | buffer[index];
-            if (length > MaximumFrameLength) throw new IndustrialProtocolException("TCP length prefix exceeds the configured maximum frame length.");
+            if (length > MaximumFrameLength) throw new InduLinkProtocolException("TCP length prefix exceeds the configured maximum frame length.");
             if (buffer.Count < _prefixLength + length) { payload = null; return false; }
             FixedLengthMessageFramer.RemovePrefix(buffer, _prefixLength);
             payload = FixedLengthMessageFramer.RemovePrefix(buffer, (int)length);

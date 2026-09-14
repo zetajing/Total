@@ -45,7 +45,7 @@ namespace InduLink.Tests
                 await peer.GetStream().ReadExactlyAsync(bytes).AsTask().WaitAsync(TimeSpan.FromSeconds(2));
                 cancellation.Cancel();
                 if (operation == "write" || operation == "batch-write")
-                    Assert.ThrowsAsync<IndustrialWriteUncertainException>(async () => await pending.WaitAsync(TimeSpan.FromSeconds(2)));
+                    Assert.ThrowsAsync<InduLinkWriteUncertainException>(async () => await pending.WaitAsync(TimeSpan.FromSeconds(2)));
                 else
                     Assert.CatchAsync<OperationCanceledException>(async () => await pending.WaitAsync(TimeSpan.FromSeconds(2)));
 

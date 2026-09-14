@@ -13,7 +13,7 @@ using InduLink.Diagnostics;
 
 namespace InduLink.Storage
 {
-    public sealed partial class SqlServerIndustrialDataStore : IIndustrialHistoryStore
+    public sealed partial class SqlServerInduLinkDataStore : IInduLinkHistoryStore
     {
         private readonly SqlServerDataStoreOptions _options;
         private readonly SqlTableIdentifier _table;
@@ -22,7 +22,7 @@ namespace InduLink.Storage
         /// 创建 SQL Server 存储，并立即校验连接字符串以外的本地配置。
         /// 构造函数不会访问数据库，真正连接发生在 <see cref="InitializeAsync"/>。
         /// </summary>
-        public SqlServerIndustrialDataStore(SqlServerDataStoreOptions options)
+        public SqlServerInduLinkDataStore(SqlServerDataStoreOptions options)
         {
             _options = options ?? throw new ArgumentNullException(nameof(options));
             _table = options.ValidateAndGetTable();
@@ -74,7 +74,7 @@ END;",
         }
 
         /// <inheritdoc />
-        public async Task WriteAsync(IReadOnlyCollection<IndustrialDataRecord> records, CancellationToken cancellationToken)
+        public async Task WriteAsync(IReadOnlyCollection<InduLinkDataRecord> records, CancellationToken cancellationToken)
         {
             if (records == null) throw new ArgumentNullException(nameof(records));
             if (records.Count == 0) return;
@@ -121,7 +121,7 @@ VALUES
         }
 
         /// <summary>读取历史表中最新的若干条记录，结果按 Id 从大到小排列。</summary>
-        public Task<IReadOnlyList<IndustrialDataRecord>> ReadLatestAsync(int maxRows, CancellationToken cancellationToken)
+        public Task<IReadOnlyList<InduLinkDataRecord>> ReadLatestAsync(int maxRows, CancellationToken cancellationToken)
         {
             return ReadAsync(
                 string.Format(
@@ -139,7 +139,7 @@ ORDER BY [Id] DESC;",
         /// <summary>
         /// 读取指定 Id 之后的新记录，结果按 Id 从小到大排列，便于调用方连续推进增量游标。
         /// </summary>
-        public Task<IReadOnlyList<IndustrialDataRecord>> ReadAfterAsync(long afterId, int maxRows, CancellationToken cancellationToken)
+        public Task<IReadOnlyList<InduLinkDataRecord>> ReadAfterAsync(long afterId, int maxRows, CancellationToken cancellationToken)
         {
             if (afterId < 0) throw new ArgumentOutOfRangeException(nameof(afterId));
 

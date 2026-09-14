@@ -26,7 +26,7 @@ namespace InduLink.Tests
             var port = ReserveTcpPort();
             var fake = new FakeTagGateway();
             var options = CreateOptions(port);
-            using (var gateway = new IndustrialWebGateway(fake, options))
+            using (var gateway = new InduLinkWebGateway(fake, options))
             using (var http = new HttpClient(new HttpClientHandler { UseProxy = false }))
             {
                 await gateway.StartAsync(CancellationToken.None);
@@ -81,8 +81,8 @@ namespace InduLink.Tests
             var fake = new FakeTagGateway();
             var options = CreateOptions(port);
             options.HeartbeatInterval = TimeSpan.FromSeconds(30);
-            using (var gateway = new IndustrialWebGateway(fake, options))
-            using (var client = new IndustrialWebSocketClient(new IndustrialWebSocketClientOptions
+            using (var gateway = new InduLinkWebGateway(fake, options))
+            using (var client = new InduLinkWebSocketClient(new InduLinkWebSocketClientOptions
             {
                 Uri = new Uri("ws://127.0.0.1:" + port + "/ws/v1/tags"),
                 ApiKey = options.ApiKey,
@@ -144,41 +144,41 @@ namespace InduLink.Tests
         [Test]
         public void Gateway_RejectsInsecureNonLoopbackListener()
         {
-            var options = new IndustrialWebGatewayOptions
+            var options = new InduLinkWebGatewayOptions
             {
                 ListenPrefix = "http://192.0.2.10:8088/",
                 ApiKey = "test-key",
             };
             options.AllowedOrigins.Add("https://example.test");
-            Assert.Throws<ArgumentException>(() => new IndustrialWebGateway(new FakeTagGateway(), options));
+            Assert.Throws<ArgumentException>(() => new InduLinkWebGateway(new FakeTagGateway(), options));
         }
 
         [Test]
         public void Gateway_RequiresApiKeyEvenOnLoopback()
         {
-            var options = new IndustrialWebGatewayOptions
+            var options = new InduLinkWebGatewayOptions
             {
                 ListenPrefix = "http://127.0.0.1:8088/",
                 RequireApiKey = false,
             };
             options.AllowedOrigins.Add("https://trusted.example");
 
-            Assert.Throws<ArgumentException>(() => new IndustrialWebGateway(new FakeTagGateway(), options));
+            Assert.Throws<ArgumentException>(() => new InduLinkWebGateway(new FakeTagGateway(), options));
         }
 
         [Test]
         public async Task StandaloneWebSocketServer_ReceivesAndBroadcastsMessages()
         {
             var port = ReserveTcpPort();
-            var serverOptions = new IndustrialWebSocketServerOptions
+            var serverOptions = new InduLinkWebSocketServerOptions
             {
                 ListenPrefix = "http://127.0.0.1:" + port + "/",
                 WebSocketPath = "/ws/",
                 ApiKey = "server-test-key",
                 ShutdownTimeout = TimeSpan.FromSeconds(2),
             };
-            using (var server = new IndustrialWebSocketServer(serverOptions))
-            using (var client = new IndustrialWebSocketClient(new IndustrialWebSocketClientOptions
+            using (var server = new InduLinkWebSocketServer(serverOptions))
+            using (var client = new InduLinkWebSocketClient(new InduLinkWebSocketClientOptions
             {
                 Uri = new Uri("ws://127.0.0.1:" + port + "/ws/"),
                 ApiKey = serverOptions.ApiKey,
@@ -216,7 +216,7 @@ namespace InduLink.Tests
         public async Task StandaloneWebSocketServer_OriginOnlyModeRejectsMissingOrigin()
         {
             var port = ReserveTcpPort();
-            var serverOptions = new IndustrialWebSocketServerOptions
+            var serverOptions = new InduLinkWebSocketServerOptions
             {
                 ListenPrefix = "http://127.0.0.1:" + port + "/",
                 WebSocketPath = "/ws/",
@@ -225,13 +225,13 @@ namespace InduLink.Tests
             };
             serverOptions.AllowedOrigins.Add("https://trusted.example");
 
-            using (var server = new IndustrialWebSocketServer(serverOptions))
-            using (var missingOriginClient = new IndustrialWebSocketClient(new IndustrialWebSocketClientOptions
+            using (var server = new InduLinkWebSocketServer(serverOptions))
+            using (var missingOriginClient = new InduLinkWebSocketClient(new InduLinkWebSocketClientOptions
             {
                 Uri = new Uri("ws://127.0.0.1:" + port + "/ws/"),
                 AutoReconnect = false,
             }))
-            using (var allowedOriginClient = new IndustrialWebSocketClient(new IndustrialWebSocketClientOptions
+            using (var allowedOriginClient = new InduLinkWebSocketClient(new InduLinkWebSocketClientOptions
             {
                 Uri = new Uri("ws://127.0.0.1:" + port + "/ws/"),
                 Origin = "https://trusted.example",
@@ -255,9 +255,9 @@ namespace InduLink.Tests
             }
         }
 
-        private static IndustrialWebGatewayOptions CreateOptions(int port)
+        private static InduLinkWebGatewayOptions CreateOptions(int port)
         {
-            return new IndustrialWebGatewayOptions
+            return new InduLinkWebGatewayOptions
             {
                 ListenPrefix = "http://127.0.0.1:" + port + "/",
                 ApiKey = "unit-test-api-key",
@@ -290,20 +290,20 @@ namespace InduLink.Tests
             }
         }
 
-        private sealed class FakeTagGateway : IIndustrialTagGateway
+        private sealed class FakeTagGateway : IInduLinkTagGateway
         {
             private double _value = 42.5d;
 
             internal FakeTagGateway()
             {
-                Options = new IndustrialTagGatewayOptions();
+                Options = new InduLinkTagGatewayOptions();
                 Devices = new[]
                 {
                     new TagGatewayDevice("plc-1", ConnectionStatus.Connected, DateTimeOffset.UtcNow, 0, null),
                 };
             }
 
-            public IndustrialTagGatewayOptions Options { get; private set; }
+            public InduLinkTagGatewayOptions Options { get; private set; }
             public IReadOnlyList<TagGatewayDevice> Devices { get; private set; }
             public event EventHandler<TagGatewayValuesChangedEventArgs> ValuesChanged;
             public event EventHandler<TagGatewayDeviceStateChangedEventArgs> DeviceStateChanged

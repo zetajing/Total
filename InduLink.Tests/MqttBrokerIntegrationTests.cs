@@ -100,7 +100,7 @@ namespace InduLink.Tests
                     await client.ConnectAsync(CancellationToken.None);
                     Assert.Fail("The broker accepted invalid MQTT credentials.");
                 }
-                catch (IndustrialConnectionException)
+                catch (InduLinkConnectionException)
                 {
                     Assert.IsFalse(client.IsConnected);
                 }
@@ -225,7 +225,7 @@ namespace InduLink.Tests
                 await broker.StartAsync(CancellationToken.None);
                 await client.ConnectAsync(CancellationToken.None);
 
-                Assert.ThrowsAsync<IndustrialProtocolException>(async () =>
+                Assert.ThrowsAsync<InduLinkProtocolException>(async () =>
                     await client.SubscribeTopicAsync("denied/#", CancellationToken.None));
                 // MQTT 3.1.1 PUBACK has no authorization reason code, so the client completes while the broker drops it.
                 await client.WriteAsync(new WriteRequest("mqtt-acl", "denied/value", DataType.String, "blocked"), CancellationToken.None);
@@ -300,7 +300,7 @@ namespace InduLink.Tests
                 };
                 await broker.StartAsync(CancellationToken.None);
                 await authenticated.ConnectAsync(CancellationToken.None);
-                Assert.ThrowsAsync<IndustrialConnectionException>(async () =>
+                Assert.ThrowsAsync<InduLinkConnectionException>(async () =>
                     await anonymous.ConnectAsync(CancellationToken.None));
                 await authenticated.WriteAsync(
                     new WriteRequest("mqtt-frozen-authenticated", "frozen/denied", DataType.String, "blocked"),

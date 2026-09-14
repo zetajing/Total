@@ -63,11 +63,11 @@ namespace InduLink.Protocols.Modbus
         /// 初始化 <see cref="ModbusTcpClient"/> 类的新实例。
         /// </summary>
         /// <param name="options">Modbus TCP 客户端配置选项，包含设备 ID、主机、端口等设置。</param>
-        /// <param name="logger">可选的工业日志记录器实例。如果为 null，则使用 <see cref="NullIndustrialLogger"/>。</param>
+        /// <param name="logger">可选的工业日志记录器实例。如果为 null，则使用 <see cref="NullInduLinkLogger"/>。</param>
         /// <param name="pollingScheduler">可选的轮询调度器实例。如果为 null，则创建默认的 <see cref="PollingScheduler"/>。</param>
         /// <param name="addressParser">可选的 Modbus 地址解析器。如果为 null，则使用配置文件的默认解析器。</param>
         /// <exception cref="ArgumentNullException">当 <paramref name="options"/> 为 null 时引发。</exception>
-        public ModbusTcpClient(ModbusTcpClientOptions options, IIndustrialLogger logger = null, IPollingScheduler pollingScheduler = null, ModbusAddressParser addressParser = null)
+        public ModbusTcpClient(ModbusTcpClientOptions options, IInduLinkLogger logger = null, IPollingScheduler pollingScheduler = null, ModbusAddressParser addressParser = null)
             : base(GetDeviceId(options), ProtocolKind.ModbusTcp, options.SlaveId, options.DeviceProfile, addressParser, pollingScheduler, logger, options.OperationTimeoutMilliseconds)
         {
             ValidateOptions(options);
@@ -130,7 +130,7 @@ namespace InduLink.Protocols.Modbus
                     client.Close();
                     try { await connectTask.ConfigureAwait(false); } catch { }
                     cancellationToken.ThrowIfCancellationRequested();
-                    throw new IndustrialTimeoutException("Modbus TCP connect timeout.");
+                    throw new InduLinkTimeoutException("Modbus TCP connect timeout.");
                 }
 
                 await connectTask.ConfigureAwait(false);
@@ -138,12 +138,12 @@ namespace InduLink.Protocols.Modbus
                 _tcpClient = client;
                 _master = master;
             }
-            catch (IndustrialTimeoutException) { client.Close(); throw; }
+            catch (InduLinkTimeoutException) { client.Close(); throw; }
             catch (OperationCanceledException) { client.Close(); throw; }
-            catch (Exception ex) when (!(ex is IndustrialConnectionException) && !(ex is IndustrialTimeoutException) && !(ex is OperationCanceledException))
+            catch (Exception ex) when (!(ex is InduLinkConnectionException) && !(ex is InduLinkTimeoutException) && !(ex is OperationCanceledException))
             {
                 client.Close();
-                throw new IndustrialConnectionException("Failed to connect Modbus TCP device.", ex);
+                throw new InduLinkConnectionException("Failed to connect Modbus TCP device.", ex);
             }
         }
 
@@ -195,7 +195,7 @@ namespace InduLink.Protocols.Modbus
                 cancellationToken.ThrowIfCancellationRequested();
                 return result;
             }
-            catch (IndustrialWriteUncertainException) { throw; }
+            catch (InduLinkWriteUncertainException) { throw; }
             catch (Exception) when (cancellationToken.IsCancellationRequested)
             {
                 throw new OperationCanceledException(cancellationToken);

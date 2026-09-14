@@ -8,15 +8,15 @@ using InduLink.Exceptions;
 namespace InduLink.Runtime
 {
     /// <summary>工业客户端的连接与强类型读取快捷扩展。</summary>
-    public static partial class IndustrialClientQuickExtensions
+    public static partial class InduLinkClientQuickExtensions
     {
         /// <summary>
         /// 使用默认取消令牌异步连接到远程工业设备。
         /// </summary>
-        /// <param name="client">要执行连接操作的 <see cref="IIndustrialClient"/> 实例。</param>
+        /// <param name="client">要执行连接操作的 <see cref="IInduLinkClient"/> 实例。</param>
         /// <returns>表示异步连接操作的任务。</returns>
         /// <exception cref="ArgumentNullException">当 <paramref name="client"/> 为 null 时抛出。</exception>
-        public static Task ConnectAsync(this IIndustrialClient client)
+        public static Task ConnectAsync(this IInduLinkClient client)
         {
             return client.ConnectAsync(CancellationToken.None);
         }
@@ -24,10 +24,10 @@ namespace InduLink.Runtime
         /// <summary>
         /// 使用默认取消令牌异步断开与远程工业设备的连接。
         /// </summary>
-        /// <param name="client">要执行断开连接操作的 <see cref="IIndustrialClient"/> 实例。</param>
+        /// <param name="client">要执行断开连接操作的 <see cref="IInduLinkClient"/> 实例。</param>
         /// <returns>表示异步断开连接操作的任务。</returns>
         /// <exception cref="ArgumentNullException">当 <paramref name="client"/> 为 null 时抛出。</exception>
-        public static Task DisconnectAsync(this IIndustrialClient client)
+        public static Task DisconnectAsync(this IInduLinkClient client)
         {
             return client.DisconnectAsync(CancellationToken.None);
         }
@@ -36,7 +36,7 @@ namespace InduLink.Runtime
             this TClient client,
             Func<TClient, Task> operation,
             CancellationToken cancellationToken = default)
-            where TClient : IIndustrialClient
+            where TClient : IInduLinkClient
         {
             if (client == null) throw new ArgumentNullException(nameof(client));
             if (operation == null) throw new ArgumentNullException(nameof(operation));
@@ -66,7 +66,7 @@ namespace InduLink.Runtime
             this TClient client,
             Func<TClient, Task<TResult>> operation,
             CancellationToken cancellationToken = default)
-            where TClient : IIndustrialClient
+            where TClient : IInduLinkClient
         {
             if (client == null) throw new ArgumentNullException(nameof(client));
             if (operation == null) throw new ArgumentNullException(nameof(operation));
@@ -100,63 +100,63 @@ namespace InduLink.Runtime
         /// <param name="cancellationToken">用于取消异步操作的取消令牌。</param>
         /// <returns>返回表示读取结果的任务，包含布尔类型的值。</returns>
         /// <exception cref="ArgumentNullException">当 <paramref name="client"/> 为 null 时抛出。</exception>
-        /// <exception cref="IndustrialProtocolException">读取操作失败或结果状态异常时抛出。</exception>
-        /// <exception cref="IndustrialDataConversionException">数据转换失败时抛出。</exception>
-        public static Task<bool> ReadBoolAsync(this IIndustrialClient client, string address, CancellationToken cancellationToken = default)
+        /// <exception cref="InduLinkProtocolException">读取操作失败或结果状态异常时抛出。</exception>
+        /// <exception cref="InduLinkDataConversionException">数据转换失败时抛出。</exception>
+        public static Task<bool> ReadBoolAsync(this IInduLinkClient client, string address, CancellationToken cancellationToken = default)
         {
             return ReadValueAsync<bool>(client, address, DataType.Bool, 1, cancellationToken);
         }
 
         /// <summary>读取 TwinCAT SINT。</summary>
-        public static Task<sbyte> ReadSByteAsync(this IIndustrialClient client, string address, CancellationToken cancellationToken = default)
+        public static Task<sbyte> ReadSByteAsync(this IInduLinkClient client, string address, CancellationToken cancellationToken = default)
         {
             return ReadValueAsync<sbyte>(client, address, DataType.SByte, 1, cancellationToken);
         }
 
         /// <summary>读取 TwinCAT LINT。</summary>
-        public static Task<long> ReadInt64Async(this IIndustrialClient client, string address, CancellationToken cancellationToken = default)
+        public static Task<long> ReadInt64Async(this IInduLinkClient client, string address, CancellationToken cancellationToken = default)
         {
             return ReadValueAsync<long>(client, address, DataType.Int64, 1, cancellationToken);
         }
 
         /// <summary>读取 TwinCAT ULINT。</summary>
-        public static Task<ulong> ReadUInt64Async(this IIndustrialClient client, string address, CancellationToken cancellationToken = default)
+        public static Task<ulong> ReadUInt64Async(this IInduLinkClient client, string address, CancellationToken cancellationToken = default)
         {
             return ReadValueAsync<ulong>(client, address, DataType.UInt64, 1, cancellationToken);
         }
 
         /// <summary>读取 TwinCAT TIME。</summary>
-        public static Task<TimeSpan> ReadTimeAsync(this IIndustrialClient client, string address, CancellationToken cancellationToken = default)
+        public static Task<TimeSpan> ReadTimeAsync(this IInduLinkClient client, string address, CancellationToken cancellationToken = default)
         {
             return ReadValueAsync<TimeSpan>(client, address, DataType.Time, 1, cancellationToken);
         }
 
         /// <summary>读取 TwinCAT DATE。</summary>
-        public static Task<DateTimeOffset> ReadDateAsync(this IIndustrialClient client, string address, CancellationToken cancellationToken = default)
+        public static Task<DateTimeOffset> ReadDateAsync(this IInduLinkClient client, string address, CancellationToken cancellationToken = default)
         {
             return ReadValueAsync<DateTimeOffset>(client, address, DataType.Date, 1, cancellationToken);
         }
 
         /// <summary>读取 TwinCAT DT/DATE_AND_TIME。</summary>
-        public static Task<DateTimeOffset> ReadDateTimeAsync(this IIndustrialClient client, string address, CancellationToken cancellationToken = default)
+        public static Task<DateTimeOffset> ReadDateTimeAsync(this IInduLinkClient client, string address, CancellationToken cancellationToken = default)
         {
             return ReadValueAsync<DateTimeOffset>(client, address, DataType.DateTime, 1, cancellationToken);
         }
 
         /// <summary>读取 TwinCAT TOD/TIME_OF_DAY。</summary>
-        public static Task<TimeSpan> ReadTimeOfDayAsync(this IIndustrialClient client, string address, CancellationToken cancellationToken = default)
+        public static Task<TimeSpan> ReadTimeOfDayAsync(this IInduLinkClient client, string address, CancellationToken cancellationToken = default)
         {
             return ReadValueAsync<TimeSpan>(client, address, DataType.TimeOfDay, 1, cancellationToken);
         }
 
         /// <summary>读取 TwinCAT LTIME。</summary>
-        public static Task<TimeSpan> ReadLTimeAsync(this IIndustrialClient client, string address, CancellationToken cancellationToken = default)
+        public static Task<TimeSpan> ReadLTimeAsync(this IInduLinkClient client, string address, CancellationToken cancellationToken = default)
         {
             return ReadValueAsync<TimeSpan>(client, address, DataType.LTime, 1, cancellationToken);
         }
 
         /// <summary>按字符数读取 TwinCAT WSTRING。</summary>
-        public static Task<string> ReadWStringAsync(this IIndustrialClient client, string address, ushort length, CancellationToken cancellationToken = default)
+        public static Task<string> ReadWStringAsync(this IInduLinkClient client, string address, ushort length, CancellationToken cancellationToken = default)
         {
             return ReadValueAsync<string>(client, address, DataType.WString, length, cancellationToken);
         }
@@ -169,9 +169,9 @@ namespace InduLink.Runtime
         /// <param name="cancellationToken">用于取消异步操作的取消令牌。</param>
         /// <returns>返回表示读取结果的任务，包含 <see cref="short"/> 类型的值。</returns>
         /// <exception cref="ArgumentNullException">当 <paramref name="client"/> 为 null 时抛出。</exception>
-        /// <exception cref="IndustrialProtocolException">读取操作失败或结果状态异常时抛出。</exception>
-        /// <exception cref="IndustrialDataConversionException">数据转换失败时抛出。</exception>
-        public static Task<short> ReadInt16Async(this IIndustrialClient client, string address, CancellationToken cancellationToken = default)
+        /// <exception cref="InduLinkProtocolException">读取操作失败或结果状态异常时抛出。</exception>
+        /// <exception cref="InduLinkDataConversionException">数据转换失败时抛出。</exception>
+        public static Task<short> ReadInt16Async(this IInduLinkClient client, string address, CancellationToken cancellationToken = default)
         {
             return ReadValueAsync<short>(client, address, DataType.Int16, 1, cancellationToken);
         }
@@ -184,9 +184,9 @@ namespace InduLink.Runtime
         /// <param name="cancellationToken">用于取消异步操作的取消令牌。</param>
         /// <returns>返回表示读取结果的任务，包含 <see cref="ushort"/> 类型的值。</returns>
         /// <exception cref="ArgumentNullException">当 <paramref name="client"/> 为 null 时抛出。</exception>
-        /// <exception cref="IndustrialProtocolException">读取操作失败或结果状态异常时抛出。</exception>
-        /// <exception cref="IndustrialDataConversionException">数据转换失败时抛出。</exception>
-        public static Task<ushort> ReadUInt16Async(this IIndustrialClient client, string address, CancellationToken cancellationToken = default)
+        /// <exception cref="InduLinkProtocolException">读取操作失败或结果状态异常时抛出。</exception>
+        /// <exception cref="InduLinkDataConversionException">数据转换失败时抛出。</exception>
+        public static Task<ushort> ReadUInt16Async(this IInduLinkClient client, string address, CancellationToken cancellationToken = default)
         {
             return ReadValueAsync<ushort>(client, address, DataType.UInt16, 1, cancellationToken);
         }
@@ -199,9 +199,9 @@ namespace InduLink.Runtime
         /// <param name="cancellationToken">用于取消异步操作的取消令牌。</param>
         /// <returns>返回表示读取结果的任务，包含 <see cref="int"/> 类型的值。</returns>
         /// <exception cref="ArgumentNullException">当 <paramref name="client"/> 为 null 时抛出。</exception>
-        /// <exception cref="IndustrialProtocolException">读取操作失败或结果状态异常时抛出。</exception>
-        /// <exception cref="IndustrialDataConversionException">数据转换失败时抛出。</exception>
-        public static Task<int> ReadInt32Async(this IIndustrialClient client, string address, CancellationToken cancellationToken = default)
+        /// <exception cref="InduLinkProtocolException">读取操作失败或结果状态异常时抛出。</exception>
+        /// <exception cref="InduLinkDataConversionException">数据转换失败时抛出。</exception>
+        public static Task<int> ReadInt32Async(this IInduLinkClient client, string address, CancellationToken cancellationToken = default)
         {
             return ReadValueAsync<int>(client, address, DataType.Int32, 1, cancellationToken);
         }
@@ -214,9 +214,9 @@ namespace InduLink.Runtime
         /// <param name="cancellationToken">用于取消异步操作的取消令牌。</param>
         /// <returns>返回表示读取结果的任务，包含 <see cref="uint"/> 类型的值。</returns>
         /// <exception cref="ArgumentNullException">当 <paramref name="client"/> 为 null 时抛出。</exception>
-        /// <exception cref="IndustrialProtocolException">读取操作失败或结果状态异常时抛出。</exception>
-        /// <exception cref="IndustrialDataConversionException">数据转换失败时抛出。</exception>
-        public static Task<uint> ReadUInt32Async(this IIndustrialClient client, string address, CancellationToken cancellationToken = default)
+        /// <exception cref="InduLinkProtocolException">读取操作失败或结果状态异常时抛出。</exception>
+        /// <exception cref="InduLinkDataConversionException">数据转换失败时抛出。</exception>
+        public static Task<uint> ReadUInt32Async(this IInduLinkClient client, string address, CancellationToken cancellationToken = default)
         {
             return ReadValueAsync<uint>(client, address, DataType.UInt32, 1, cancellationToken);
         }
@@ -229,9 +229,9 @@ namespace InduLink.Runtime
         /// <param name="cancellationToken">用于取消异步操作的取消令牌。</param>
         /// <returns>返回表示读取结果的任务，包含 <see cref="float"/> 类型的值。</returns>
         /// <exception cref="ArgumentNullException">当 <paramref name="client"/> 为 null 时抛出。</exception>
-        /// <exception cref="IndustrialProtocolException">读取操作失败或结果状态异常时抛出。</exception>
-        /// <exception cref="IndustrialDataConversionException">数据转换失败时抛出。</exception>
-        public static Task<float> ReadFloatAsync(this IIndustrialClient client, string address, CancellationToken cancellationToken = default)
+        /// <exception cref="InduLinkProtocolException">读取操作失败或结果状态异常时抛出。</exception>
+        /// <exception cref="InduLinkDataConversionException">数据转换失败时抛出。</exception>
+        public static Task<float> ReadFloatAsync(this IInduLinkClient client, string address, CancellationToken cancellationToken = default)
         {
             return ReadValueAsync<float>(client, address, DataType.Float, 1, cancellationToken);
         }
@@ -244,9 +244,9 @@ namespace InduLink.Runtime
         /// <param name="cancellationToken">用于取消异步操作的取消令牌。</param>
         /// <returns>返回表示读取结果的任务，包含 <see cref="double"/> 类型的值。</returns>
         /// <exception cref="ArgumentNullException">当 <paramref name="client"/> 为 null 时抛出。</exception>
-        /// <exception cref="IndustrialProtocolException">读取操作失败或结果状态异常时抛出。</exception>
-        /// <exception cref="IndustrialDataConversionException">数据转换失败时抛出。</exception>
-        public static Task<double> ReadDoubleAsync(this IIndustrialClient client, string address, CancellationToken cancellationToken = default)
+        /// <exception cref="InduLinkProtocolException">读取操作失败或结果状态异常时抛出。</exception>
+        /// <exception cref="InduLinkDataConversionException">数据转换失败时抛出。</exception>
+        public static Task<double> ReadDoubleAsync(this IInduLinkClient client, string address, CancellationToken cancellationToken = default)
         {
             return ReadValueAsync<double>(client, address, DataType.Double, 1, cancellationToken);
         }
@@ -260,9 +260,9 @@ namespace InduLink.Runtime
         /// <param name="cancellationToken">用于取消异步操作的取消令牌。</param>
         /// <returns>返回表示读取结果的任务，包含 <see cref="string"/> 类型的值。</returns>
         /// <exception cref="ArgumentNullException">当 <paramref name="client"/> 为 null 时抛出。</exception>
-        /// <exception cref="IndustrialProtocolException">读取操作失败或结果状态异常时抛出。</exception>
-        /// <exception cref="IndustrialDataConversionException">数据转换失败时抛出。</exception>
-        public static Task<string> ReadStringAsync(this IIndustrialClient client, string address, ushort length, CancellationToken cancellationToken = default)
+        /// <exception cref="InduLinkProtocolException">读取操作失败或结果状态异常时抛出。</exception>
+        /// <exception cref="InduLinkDataConversionException">数据转换失败时抛出。</exception>
+        public static Task<string> ReadStringAsync(this IInduLinkClient client, string address, ushort length, CancellationToken cancellationToken = default)
         {
             return ReadValueAsync<string>(client, address, DataType.String, length, cancellationToken);
         }
@@ -276,9 +276,9 @@ namespace InduLink.Runtime
         /// <param name="cancellationToken">用于取消异步操作的取消令牌。</param>
         /// <returns>返回表示读取结果的任务，包含字节数组。</returns>
         /// <exception cref="ArgumentNullException">当 <paramref name="client"/> 为 null 时抛出。</exception>
-        /// <exception cref="IndustrialProtocolException">读取操作失败或结果状态异常时抛出。</exception>
-        /// <exception cref="IndustrialDataConversionException">数据转换失败时抛出。</exception>
-        public static Task<byte[]> ReadByteArrayAsync(this IIndustrialClient client, string address, ushort length, CancellationToken cancellationToken = default)
+        /// <exception cref="InduLinkProtocolException">读取操作失败或结果状态异常时抛出。</exception>
+        /// <exception cref="InduLinkDataConversionException">数据转换失败时抛出。</exception>
+        public static Task<byte[]> ReadByteArrayAsync(this IInduLinkClient client, string address, ushort length, CancellationToken cancellationToken = default)
         {
             return ReadValueAsync<byte[]>(client, address, DataType.ByteArray, length, cancellationToken);
         }
@@ -291,7 +291,7 @@ namespace InduLink.Runtime
         /// <param name="address">要读取的地址字符串。</param>
         /// <param name="cancellationToken">用于取消异步操作的取消令牌。</param>
         /// <returns>返回表示读取结果的任务，包含类型 <typeparamref name="T"/> 的值。</returns>
-        public static Task<T> ReadAsync<T>(this IIndustrialClient client, string address, CancellationToken cancellationToken = default)
+        public static Task<T> ReadAsync<T>(this IInduLinkClient client, string address, CancellationToken cancellationToken = default)
         {
             return ReadValueAsync<T>(client, address, InferDataType(typeof(T)), 1, cancellationToken);
         }
@@ -305,37 +305,37 @@ namespace InduLink.Runtime
         /// <param name="length">读取长度。</param>
         /// <param name="cancellationToken">用于取消异步操作的取消令牌。</param>
         /// <returns>返回表示读取结果的任务，包含类型 <typeparamref name="T"/> 的值。</returns>
-        public static Task<T> ReadAsync<T>(this IIndustrialClient client, string address, ushort length, CancellationToken cancellationToken = default)
+        public static Task<T> ReadAsync<T>(this IInduLinkClient client, string address, ushort length, CancellationToken cancellationToken = default)
         {
             return ReadValueAsync<T>(client, address, InferDataType(typeof(T)), length, cancellationToken);
         }
 
-        public static Task<T> ReadAsync<T>(this IIndustrialClient client, IndustrialTag<T> tag, CancellationToken cancellationToken = default)
+        public static Task<T> ReadAsync<T>(this IInduLinkClient client, InduLinkTag<T> tag, CancellationToken cancellationToken = default)
         {
             if (tag == null) throw new ArgumentNullException(nameof(tag));
 
             return ReadValueAsync<T>(client, tag.Address, tag.DataType, tag.Length, cancellationToken);
         }
 
-        public static async Task<IndustrialResult<T>> TryReadAsync<T>(this IIndustrialClient client, string address, CancellationToken cancellationToken = default)
+        public static async Task<InduLinkResult<T>> TryReadAsync<T>(this IInduLinkClient client, string address, CancellationToken cancellationToken = default)
         {
             return await TryReadValueAsync<T>(client, address, InferDataType(typeof(T)), 1, cancellationToken).ConfigureAwait(false);
         }
 
-        public static async Task<IndustrialResult<T>> TryReadAsync<T>(this IIndustrialClient client, string address, ushort length, CancellationToken cancellationToken = default)
+        public static async Task<InduLinkResult<T>> TryReadAsync<T>(this IInduLinkClient client, string address, ushort length, CancellationToken cancellationToken = default)
         {
             return await TryReadValueAsync<T>(client, address, InferDataType(typeof(T)), length, cancellationToken).ConfigureAwait(false);
         }
 
-        public static async Task<IndustrialResult<T>> TryReadAsync<T>(this IIndustrialClient client, IndustrialTag<T> tag, CancellationToken cancellationToken = default)
+        public static async Task<InduLinkResult<T>> TryReadAsync<T>(this IInduLinkClient client, InduLinkTag<T> tag, CancellationToken cancellationToken = default)
         {
             if (tag == null) throw new ArgumentNullException(nameof(tag));
 
             return await TryReadValueAsync<T>(client, tag.Address, tag.DataType, tag.Length, cancellationToken).ConfigureAwait(false);
         }
 
-        public static async Task<IndustrialResult<T>> TryReadValueAsync<T>(
-            this IIndustrialClient client,
+        public static async Task<InduLinkResult<T>> TryReadValueAsync<T>(
+            this IInduLinkClient client,
             string address,
             DataType dataType,
             ushort length = 1,
@@ -351,7 +351,7 @@ namespace InduLink.Runtime
                     cancellationToken).ConfigureAwait(false);
 
                 EnsureReadable(result);
-                return IndustrialResult<T>.Success(ConvertValue<T>(result.Value, address, dataType), result);
+                return InduLinkResult<T>.Success(ConvertValue<T>(result.Value, address, dataType), result);
             }
             catch (OperationCanceledException)
             {
@@ -359,22 +359,22 @@ namespace InduLink.Runtime
             }
             catch (Exception ex)
             {
-                return IndustrialResult<T>.Failure(ex.Message, result, ex);
+                return InduLinkResult<T>.Failure(ex.Message, result, ex);
             }
         }
 
-        public static Task<IndustrialTagReadResult> ReadManyAsync(this IIndustrialClient client, params IndustrialTag[] tags)
+        public static Task<InduLinkTagReadResult> ReadManyAsync(this IInduLinkClient client, params InduLinkTag[] tags)
         {
-            return ReadManyAsync(client, (IReadOnlyCollection<IndustrialTag>)tags, CancellationToken.None);
+            return ReadManyAsync(client, (IReadOnlyCollection<InduLinkTag>)tags, CancellationToken.None);
         }
 
-        public static Task<IReadOnlyDictionary<string, T>> ReadManyAsync<T>(this IIndustrialClient client, params string[] addresses)
+        public static Task<IReadOnlyDictionary<string, T>> ReadManyAsync<T>(this IInduLinkClient client, params string[] addresses)
         {
             return ReadManyAsync<T>(client, (IReadOnlyCollection<string>)addresses, CancellationToken.None);
         }
 
         public static Task<IReadOnlyDictionary<string, T>> ReadManyAsync<T>(
-            this IIndustrialClient client,
+            this IInduLinkClient client,
             IReadOnlyCollection<string> addresses,
             CancellationToken cancellationToken = default)
         {
@@ -382,7 +382,7 @@ namespace InduLink.Runtime
         }
 
         public static async Task<IReadOnlyDictionary<string, T>> ReadManyAsync<T>(
-            this IIndustrialClient client,
+            this IInduLinkClient client,
             IReadOnlyCollection<string> addresses,
             ushort length,
             CancellationToken cancellationToken = default)
@@ -416,15 +416,15 @@ namespace InduLink.Runtime
             return values;
         }
 
-        public static async Task<IndustrialTagReadResult> ReadManyAsync(
-            this IIndustrialClient client,
-            IReadOnlyCollection<IndustrialTag> tags,
+        public static async Task<InduLinkTagReadResult> ReadManyAsync(
+            this IInduLinkClient client,
+            IReadOnlyCollection<InduLinkTag> tags,
             CancellationToken cancellationToken = default)
         {
             if (client == null) throw new ArgumentNullException(nameof(client));
             if (tags == null) throw new ArgumentNullException(nameof(tags));
 
-            var tagList = new List<IndustrialTag>(tags.Count);
+            var tagList = new List<InduLinkTag>(tags.Count);
             var requests = new List<ReadRequest>(tags.Count);
             foreach (var tag in tags)
             {
@@ -434,7 +434,7 @@ namespace InduLink.Runtime
             }
 
             var result = await client.ReadManyAsync(requests, cancellationToken).ConfigureAwait(false);
-            return new IndustrialTagReadResult(tagList, result.Values);
+            return new InduLinkTagReadResult(tagList, result.Values);
         }
 
         /// <summary>
@@ -448,10 +448,10 @@ namespace InduLink.Runtime
         /// <param name="cancellationToken">用于取消异步操作的取消令牌。</param>
         /// <returns>返回表示读取结果的任务，包含类型 <typeparamref name="T"/> 的值。</returns>
         /// <exception cref="ArgumentNullException">当 <paramref name="client"/> 为 null 时抛出。</exception>
-        /// <exception cref="IndustrialProtocolException">读取操作失败或结果状态异常时抛出。</exception>
-        /// <exception cref="IndustrialDataConversionException">数据转换失败时抛出。</exception>
+        /// <exception cref="InduLinkProtocolException">读取操作失败或结果状态异常时抛出。</exception>
+        /// <exception cref="InduLinkDataConversionException">数据转换失败时抛出。</exception>
         public static async Task<T> ReadValueAsync<T>(
-            this IIndustrialClient client,
+            this IInduLinkClient client,
             string address,
             DataType dataType,
             ushort length = 1,
@@ -476,8 +476,8 @@ namespace InduLink.Runtime
         /// <param name="cancellationToken">用于取消异步操作的取消令牌。</param>
         /// <returns>表示异步写入操作的任务。</returns>
         /// <exception cref="ArgumentNullException">当 <paramref name="client"/> 为 null 时抛出。</exception>
-        /// <exception cref="IndustrialProtocolException">写入操作失败时抛出。</exception>
-        public static Task WriteAsync(this IIndustrialClient client, string address, bool value, CancellationToken cancellationToken = default)
+        /// <exception cref="InduLinkProtocolException">写入操作失败时抛出。</exception>
+        public static Task WriteAsync(this IInduLinkClient client, string address, bool value, CancellationToken cancellationToken = default)
         {
             return WriteValueAsync(client, address, DataType.Bool, value, 1, cancellationToken);
         }

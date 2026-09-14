@@ -20,7 +20,7 @@ namespace InduLink.FileTransfer.Ftp
         private readonly FtpClientOptions _options;
         private readonly FtpRemotePath _remotePath;
         private readonly AsyncFtpClient _client;
-        private readonly IIndustrialLogger _logger;
+        private readonly IInduLinkLogger _logger;
         private readonly SemaphoreSlim _operationGate = new SemaphoreSlim(1, 1);
         private readonly object _healthSync = new object();
         private FtpServerCapabilities _capabilities = FtpServerCapabilities.Unavailable();
@@ -30,11 +30,11 @@ namespace InduLink.FileTransfer.Ftp
         private int _state = (int)FtpConnectionState.Disconnected;
         private int _disposed;
 
-        public FtpFileClient(FtpClientOptions options, IIndustrialLogger logger = null)
+        public FtpFileClient(FtpClientOptions options, IInduLinkLogger logger = null)
         {
             _options = ValidateAndCopyOptions(options);
             _remotePath = new FtpRemotePath(_options.RootPath);
-            _logger = logger ?? NullIndustrialLogger.Instance;
+            _logger = logger ?? NullInduLinkLogger.Instance;
 
             var config = new FtpConfig
             {

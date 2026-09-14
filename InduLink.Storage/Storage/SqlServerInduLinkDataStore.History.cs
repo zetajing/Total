@@ -13,8 +13,8 @@ using InduLink.Diagnostics;
 
 namespace InduLink.Storage
 {
-    public sealed partial class SqlServerIndustrialDataStore
-    {        public async Task<IReadOnlyList<IndustrialDataRecord>> QueryAsync(HistoryQueryFilter filter, CancellationToken cancellationToken)
+    public sealed partial class SqlServerInduLinkDataStore
+    {        public async Task<IReadOnlyList<InduLinkDataRecord>> QueryAsync(HistoryQueryFilter filter, CancellationToken cancellationToken)
         {
             if (filter == null) throw new ArgumentNullException(nameof(filter));
             ValidateFilter(filter);
@@ -45,7 +45,7 @@ ORDER BY [Timestamp] DESC;",
                 _table.QuotedName,
                 whereClause);
 
-            var records = new List<IndustrialDataRecord>(filter.MaxRows);
+            var records = new List<InduLinkDataRecord>(filter.MaxRows);
             using (var connection = new SqlConnection(_options.ConnectionString))
             using (var command = new SqlCommand(sql, connection))
             {
@@ -156,7 +156,7 @@ ORDER BY p.[RowNumber];", _table.QuotedName, where);
                     checked((long)(request.PageNumber - 1) * request.PageSize);
                 command.Parameters.Add("@PageSize", SqlDbType.Int).Value = request.PageSize;
                 await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
-                var records = new List<IndustrialDataRecord>(request.PageSize);
+                var records = new List<InduLinkDataRecord>(request.PageSize);
                 long total = 0;
                 using (var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false))
                 {
@@ -213,7 +213,7 @@ MIN([Timestamp]), MAX([Timestamp]) FROM {0} {1};", _table.QuotedName, BuildWhere
             return new HistoryFilterOptions { DeviceIds = devices, Addresses = addresses };
         }
 
-        public async Task<IReadOnlyList<IndustrialDataRecord>> GetLatestValuesAsync(HistoryQueryFilter filter, int maxRows, CancellationToken cancellationToken)
+        public async Task<IReadOnlyList<InduLinkDataRecord>> GetLatestValuesAsync(HistoryQueryFilter filter, int maxRows, CancellationToken cancellationToken)
         {
             filter = filter ?? new HistoryQueryFilter(); ValidateFilter(filter);
             if (maxRows <= 0 || maxRows > 1000) throw new ArgumentOutOfRangeException(nameof(maxRows));
@@ -230,7 +230,7 @@ FROM [Ranked] AS r
 INNER JOIN {0} AS h ON h.[Id] = r.[Id]
 WHERE r.[rn] = 1
 ORDER BY h.[Timestamp] DESC, h.[Id] DESC;", _table.QuotedName, BuildWhereClause(filter));
-            var records = new List<IndustrialDataRecord>();
+            var records = new List<InduLinkDataRecord>();
             using (var connection = new SqlConnection(_options.ConnectionString)) using (var command = new SqlCommand(sql, connection))
             { command.CommandTimeout = _options.CommandTimeoutSeconds; command.Parameters.Add("@MaxRows", SqlDbType.Int).Value = maxRows; AddFilterParameters(command, filter); await connection.OpenAsync(cancellationToken).ConfigureAwait(false); using (var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false)) while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false)) records.Add(ReadRecord(reader)); }
             return records;

@@ -10,16 +10,16 @@ namespace InduLink.Runtime.Configuration
     {
     }
 
-    public interface IIndustrialProtocolProvider
+    public interface IInduLinkProtocolProvider
     {
         string Protocol { get; }
         Type SettingsType { get; }
         IProtocolSettings CreateDefaultSettings();
         IReadOnlyList<string> Validate(IProtocolSettings settings);
-        IIndustrialClient CreateClient(IndustrialDeviceConfig device, IIndustrialLogger logger);
+        IInduLinkClient CreateClient(InduLinkDeviceConfig device, IInduLinkLogger logger);
     }
 
-    public abstract class IndustrialProtocolProvider<TSettings> : IIndustrialProtocolProvider
+    public abstract class InduLinkProtocolProvider<TSettings> : IInduLinkProtocolProvider
         where TSettings : class, IProtocolSettings, new()
     {
         public abstract string Protocol { get; }
@@ -33,7 +33,7 @@ namespace InduLink.Runtime.Configuration
             return Validate(typed);
         }
 
-        public IIndustrialClient CreateClient(IndustrialDeviceConfig device, IIndustrialLogger logger)
+        public IInduLinkClient CreateClient(InduLinkDeviceConfig device, IInduLinkLogger logger)
         {
             if (device == null) throw new ArgumentNullException(nameof(device));
             if (device.Runtime == null || device.Runtime.OperationTimeoutMilliseconds <= 0)
@@ -42,11 +42,11 @@ namespace InduLink.Runtime.Configuration
             if (typed == null) throw new ArgumentException("Settings type does not match protocol '" + Protocol + "'.", nameof(device));
             var errors = Validate(typed);
             if (errors.Count > 0) throw new ArgumentException(string.Join(" ", errors), nameof(device));
-            return CreateClient(device, typed, logger ?? NullIndustrialLogger.Instance);
+            return CreateClient(device, typed, logger ?? NullInduLinkLogger.Instance);
         }
 
         protected abstract IReadOnlyList<string> Validate(TSettings settings);
-        protected abstract IIndustrialClient CreateClient(IndustrialDeviceConfig device, TSettings settings, IIndustrialLogger logger);
+        protected abstract IInduLinkClient CreateClient(InduLinkDeviceConfig device, TSettings settings, IInduLinkLogger logger);
 
         protected static IReadOnlyList<string> Errors(params string[] errors)
         {
@@ -54,17 +54,17 @@ namespace InduLink.Runtime.Configuration
         }
     }
 
-    public sealed class IndustrialProtocolRegistry
+    public sealed class InduLinkProtocolRegistry
     {
-        private readonly Dictionary<string, IIndustrialProtocolProvider> _providers =
-            new Dictionary<string, IIndustrialProtocolProvider>(StringComparer.Ordinal);
+        private readonly Dictionary<string, IInduLinkProtocolProvider> _providers =
+            new Dictionary<string, IInduLinkProtocolProvider>(StringComparer.Ordinal);
 
-        public IReadOnlyList<IIndustrialProtocolProvider> Providers
+        public IReadOnlyList<IInduLinkProtocolProvider> Providers
         {
             get { return _providers.Values.OrderBy(provider => provider.Protocol, StringComparer.Ordinal).ToList().AsReadOnly(); }
         }
 
-        public IndustrialProtocolRegistry Register(IIndustrialProtocolProvider provider)
+        public InduLinkProtocolRegistry Register(IInduLinkProtocolProvider provider)
         {
             if (provider == null) throw new ArgumentNullException(nameof(provider));
             ValidateProtocolKey(provider.Protocol);
@@ -76,15 +76,15 @@ namespace InduLink.Runtime.Configuration
             return this;
         }
 
-        public bool TryGet(string protocol, out IIndustrialProtocolProvider provider)
+        public bool TryGet(string protocol, out IInduLinkProtocolProvider provider)
         {
             provider = null;
             return !string.IsNullOrWhiteSpace(protocol) && _providers.TryGetValue(protocol, out provider);
         }
 
-        public IIndustrialProtocolProvider Get(string protocol)
+        public IInduLinkProtocolProvider Get(string protocol)
         {
-            IIndustrialProtocolProvider provider;
+            IInduLinkProtocolProvider provider;
             if (!TryGet(protocol, out provider))
                 throw new KeyNotFoundException("Unsupported protocol: " + protocol);
             return provider;

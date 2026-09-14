@@ -28,9 +28,9 @@ namespace InduLinkDemo.Views
         private DemoAppContext _ctx;
         private HttpApiClient _httpClient;
         private MqttClient _mqttClient;
-        private IndustrialWebSocketClient _webSocketClient;
+        private InduLinkWebSocketClient _webSocketClient;
         private IMqttBrokerService _observedBroker;
-        private IIndustrialWebGateway _observedWebGateway;
+        private IInduLinkWebGateway _observedWebGateway;
         private CancellationTokenSource _ftpTransferCancellation;
         private JsonConfigurationValidationService _jsonValidation;
         private bool _reset;
@@ -589,7 +589,7 @@ namespace InduLinkDemo.Views
             if (gateway != null) gateway.RequestCompleted -= WebGateway_RequestCompleted;
         }
 
-        private void WebGateway_RequestCompleted(object sender, IndustrialWebRequestEventArgs e)
+        private void WebGateway_RequestCompleted(object sender, InduLinkWebRequestEventArgs e)
         {
             _ctx.RunOnUi(() => AppendLog(HttpLogTextBox, string.Format(
                 "{0:HH:mm:ss} IN {1} {2} -> {3} | {4}", e.TimestampUtc.LocalDateTime,
@@ -610,7 +610,7 @@ namespace InduLinkDemo.Views
                     _ctx.NetworkServices.TryGetSecret(secretName, out apiKey);
                 }
                 if (string.IsNullOrEmpty(apiKey)) throw new InvalidOperationException("请输入或先保存 Web API Key。");
-                var client = new IndustrialWebSocketClient(new IndustrialWebSocketClientOptions
+                var client = new InduLinkWebSocketClient(new InduLinkWebSocketClientOptions
                 {
                     Uri = new Uri(RequireText(WebSocketUrlTextBox.Text, "WebSocket URL"), UriKind.Absolute),
                     ApiKey = apiKey,

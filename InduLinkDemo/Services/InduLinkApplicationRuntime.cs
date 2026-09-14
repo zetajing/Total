@@ -22,31 +22,31 @@ namespace InduLinkDemo.Services
 {
     /// <summary>
     /// 产品层设备运行服务。应用层只负责启动、停止和展示，连接、轮询、重连、
-    /// 点位解析等能力全部委托给 InduLink 的 IndustrialDeviceHost。
+    /// 点位解析等能力全部委托给 InduLink 的 InduLinkDeviceHost。
     /// </summary>
-    public sealed class IndustrialApplicationRuntime : IDisposable
+    public sealed class InduLinkApplicationRuntime : IDisposable
     {
-        private readonly IIndustrialLogger _logger;
+        private readonly IInduLinkLogger _logger;
         private readonly SemaphoreSlim _lifecycleGate = new SemaphoreSlim(1, 1);
-        private IndustrialDeviceHost _host;
-        private IndustrialTagGateway _tagGateway;
+        private InduLinkDeviceHost _host;
+        private InduLinkTagGateway _tagGateway;
         private int _disposed;
 
-        public IndustrialApplicationRuntime(string configFilePath, IIndustrialLogger logger)
+        public InduLinkApplicationRuntime(string configFilePath, IInduLinkLogger logger)
         {
             if (string.IsNullOrWhiteSpace(configFilePath))
                 throw new ArgumentException("Config file path cannot be null or empty.", nameof(configFilePath));
 
             ConfigFilePath = Path.GetFullPath(configFilePath);
-            _logger = logger ?? NullIndustrialLogger.Instance;
-            Sdk = IndustrialSdk.CreateDefault(_logger);
+            _logger = logger ?? NullInduLinkLogger.Instance;
+            Sdk = InduLinkSdk.CreateDefault(_logger);
         }
 
         public string ConfigFilePath { get; }
-        public IndustrialSdk Sdk { get; }
+        public InduLinkSdk Sdk { get; }
         public bool IsLoaded { get { return _host != null; } }
         public bool IsRunning { get; private set; }
-        public IIndustrialTagGateway TagGateway { get { return _tagGateway; } }
+        public IInduLinkTagGateway TagGateway { get { return _tagGateway; } }
 
         public event EventHandler<RuntimeDevicesChangedEventArgs> DevicesChanged;
         public event EventHandler<RuntimeDeviceStateEventArgs> DeviceStateChanged;
@@ -138,7 +138,7 @@ namespace InduLinkDemo.Services
             host.Dispose();
         }
 
-        private void Host_DeviceStateChanged(object sender, IndustrialDeviceStateChangedEventArgs e)
+        private void Host_DeviceStateChanged(object sender, InduLinkDeviceStateChangedEventArgs e)
         {
             RaiseSafely(DeviceStateChanged, new RuntimeDeviceStateEventArgs(
                 e.DeviceName,
@@ -146,7 +146,7 @@ namespace InduLinkDemo.Services
                 e.ErrorMessage ?? string.Empty), "设备状态处理失败");
         }
 
-        private void Host_ValuesReceived(object sender, IndustrialDeviceValuesEventArgs e)
+        private void Host_ValuesReceived(object sender, InduLinkDeviceValuesEventArgs e)
         {
             var values = new List<RuntimeValueInfo>();
             var count = Math.Min(e.Tags.Count, e.Values.Count);
@@ -168,7 +168,7 @@ namespace InduLinkDemo.Services
                 });
             }
 
-            var sourceHost = sender as IndustrialDeviceHost;
+            var sourceHost = sender as InduLinkDeviceHost;
             var client = sourceHost == null ? null : sourceHost.Get(e.DeviceName).Device.Client;
             RaiseSafely(ValuesReceived, new RuntimeValuesEventArgs(e.DeviceName, values, client, e.Values), "实时数据处理失败");
         }
@@ -184,7 +184,7 @@ namespace InduLinkDemo.Services
             host.DeviceStateChanged += Host_DeviceStateChanged;
             host.ValuesReceived += Host_ValuesReceived;
             _host = host;
-            _tagGateway = new IndustrialTagGateway(host);
+            _tagGateway = new InduLinkTagGateway(host);
             RaiseSafely(TagGatewayChanged, EventArgs.Empty, "点位网关状态处理失败");
 
             RaiseDevicesChanged(host.Devices.Values.Select(device => new RuntimeDeviceInfo
@@ -214,7 +214,7 @@ namespace InduLinkDemo.Services
             }
         }
 
-        private static string FormatEndpoint(IndustrialDeviceConfig config)
+        private static string FormatEndpoint(InduLinkDeviceConfig config)
         {
             if (config.Settings is ModbusTcpSettings modbusTcp) return modbusTcp.Host + ":" + modbusTcp.Port;
             if (config.Settings is ModbusRtuSettings modbusRtu) return modbusRtu.PortName;
@@ -245,7 +245,7 @@ namespace InduLinkDemo.Services
         private void ThrowIfDisposed()
         {
             if (Volatile.Read(ref _disposed) != 0)
-                throw new ObjectDisposedException(nameof(IndustrialApplicationRuntime));
+                throw new ObjectDisposedException(nameof(InduLinkApplicationRuntime));
         }
     }
 
@@ -293,7 +293,7 @@ namespace InduLinkDemo.Services
         public RuntimeValuesEventArgs(
             string deviceName,
             IReadOnlyList<RuntimeValueInfo> values,
-            IIndustrialClient client,
+            IInduLinkClient client,
             IReadOnlyList<DataValue> rawValues)
         {
             DeviceName = deviceName;
@@ -303,7 +303,7 @@ namespace InduLinkDemo.Services
         }
         public string DeviceName { get; }
         public IReadOnlyList<RuntimeValueInfo> Values { get; }
-        public IIndustrialClient Client { get; }
+        public IInduLinkClient Client { get; }
         public IReadOnlyList<DataValue> RawValues { get; }
     }
 }

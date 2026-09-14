@@ -250,7 +250,7 @@ namespace InduLink.Tests
             return (int)count.GetValue(workers, null);
         }
 
-        private sealed class PollingClient : IIndustrialClient, IProtocolCapabilityProvider
+        private sealed class PollingClient : IInduLinkClient, IProtocolCapabilityProvider
         {
             public PollingClient(string deviceId)
             {
@@ -302,13 +302,13 @@ namespace InduLink.Tests
             public void Dispose() { ReleaseRead.TrySetResult(true); }
         }
 
-        private sealed class NonCooperativeClient : IndustrialClientBase
+        private sealed class NonCooperativeClient : InduLinkClientBase
         {
             private int _readCalls;
             private int _activeCoreCalls;
             private int _maximumConcurrentCoreCalls;
 
-            public NonCooperativeClient(IIndustrialLogger logger, int timeoutMilliseconds)
+            public NonCooperativeClient(IInduLinkLogger logger, int timeoutMilliseconds)
                 : base("timeout-device", ProtocolKind.ModbusTcp, new PollingScheduler(), logger, timeoutMilliseconds)
             {
             }
@@ -362,7 +362,7 @@ namespace InduLink.Tests
             }
         }
 
-        private sealed class RecordingLogger : IIndustrialLogger
+        private sealed class RecordingLogger : IInduLinkLogger
         {
             public TaskCompletionSource<bool> LateFailureLogged { get; } = NewSignal();
             public string LastErrorMessage { get; private set; }

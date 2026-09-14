@@ -212,7 +212,7 @@ namespace InduLinkDemo.Views
         {
             var capabilities = _client == null
                 ? ProtocolCapabilities.ForProtocol(ProtocolKind.OpcUa)
-                : IndustrialClientPlatformExtensions.GetCapabilities(_client);
+                : InduLinkClientPlatformExtensions.GetCapabilities(_client);
             CapabilityTextBlock.Text = CapabilityDisplayHelper.Format(capabilities);
         }
 

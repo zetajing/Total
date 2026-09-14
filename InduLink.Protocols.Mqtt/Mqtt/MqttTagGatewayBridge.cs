@@ -39,9 +39,9 @@ namespace InduLink.Protocols.Mqtt
     public sealed class MqttTagGatewayBridge : IMqttTagGatewayBridge
     {
         private readonly IMqttBrokerService _broker;
-        private readonly IIndustrialTagGateway _gateway;
+        private readonly IInduLinkTagGateway _gateway;
         private readonly MqttTagGatewayOptions _options;
-        private readonly IIndustrialLogger _logger;
+        private readonly IInduLinkLogger _logger;
         private readonly SemaphoreSlim _lifecycleGate = new SemaphoreSlim(1, 1);
         private readonly ConcurrentDictionary<string, string> _valueSignatures =
             new ConcurrentDictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -55,14 +55,14 @@ namespace InduLink.Protocols.Mqtt
 
         public MqttTagGatewayBridge(
             IMqttBrokerService broker,
-            IIndustrialTagGateway gateway,
+            IInduLinkTagGateway gateway,
             MqttTagGatewayOptions options = null,
-            IIndustrialLogger logger = null)
+            IInduLinkLogger logger = null)
         {
             _broker = broker ?? throw new ArgumentNullException(nameof(broker));
             _gateway = gateway ?? throw new ArgumentNullException(nameof(gateway));
             _options = CloneOptions(options ?? new MqttTagGatewayOptions());
-            _logger = logger ?? NullIndustrialLogger.Instance;
+            _logger = logger ?? NullInduLinkLogger.Instance;
             ValidateOptions(_options);
             _jsonSettings = new JsonSerializerSettings
             {
@@ -545,7 +545,7 @@ namespace InduLink.Protocols.Mqtt
 
             public CancellationToken Token { get { return _stopSource.Token; } }
 
-            public bool TryQueue(Func<CancellationToken, Task> action, int maxPendingWorkItems, IIndustrialLogger logger)
+            public bool TryQueue(Func<CancellationToken, Task> action, int maxPendingWorkItems, IInduLinkLogger logger)
             {
                 if (action == null) throw new ArgumentNullException(nameof(action));
                 lock (_sync)

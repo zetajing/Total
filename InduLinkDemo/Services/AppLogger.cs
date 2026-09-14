@@ -9,10 +9,10 @@ using InduLink.Storage;
 namespace InduLinkDemo.Services
 {
     /// <summary>
-    /// 应用程序日志记录器，实现 <see cref="IIndustrialLogger"/> 接口和 <see cref="IDisposable"/> 模式。
+    /// 应用程序日志记录器，实现 <see cref="IInduLinkLogger"/> 接口和 <see cref="IDisposable"/> 模式。
     /// 提供 Trace、Info、Warn、Error 四个级别的日志记录功能，并支持将日志消息批量刷新到 UI 线程。
     /// </summary>
-    public sealed class AppLogger : IIndustrialLogger, IDisposable
+    public sealed class AppLogger : IInduLinkLogger, IDisposable
     {
         /// <summary>
         /// UI 刷新延迟时间（毫秒）。在接收到日志消息后，等待此时间再将批量消息派发给 UI 线程。

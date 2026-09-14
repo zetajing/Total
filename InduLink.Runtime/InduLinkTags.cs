@@ -6,10 +6,10 @@ using InduLink.Exceptions;
 namespace InduLink.Runtime
 {
     /// <summary>描述一个包含地址、数据类型和长度的工业点位。</summary>
-    public class IndustrialTag
+    public class InduLinkTag
     {
         /// <summary>创建一个非泛型点位定义。</summary>
-        public IndustrialTag(string address, DataType dataType, ushort length = 1, string name = null, bool writable = false)
+        public InduLinkTag(string address, DataType dataType, ushort length = 1, string name = null, bool writable = false)
         {
             if (string.IsNullOrWhiteSpace(address)) throw new ArgumentException("Address cannot be null or empty.", nameof(address));
             if (length == 0) throw new ArgumentOutOfRangeException(nameof(length), "Length must be greater than zero.");
@@ -44,33 +44,33 @@ namespace InduLink.Runtime
     }
 
     /// <summary>描述带有 CLR 返回类型的工业点位。</summary>
-    public sealed class IndustrialTag<T> : IndustrialTag
+    public sealed class InduLinkTag<T> : InduLinkTag
     {
         /// <summary>创建一个强类型点位定义。</summary>
-        public IndustrialTag(string address, DataType dataType, ushort length = 1, string name = null, bool writable = false)
+        public InduLinkTag(string address, DataType dataType, ushort length = 1, string name = null, bool writable = false)
             : base(address, dataType, length, name, writable)
         {
         }
 
         /// <summary>将点位和值组合成可用于批量写入的请求。</summary>
-        public IndustrialWrite WithValue(T value)
+        public InduLinkWrite WithValue(T value)
         {
-            return new IndustrialWrite(this, value);
+            return new InduLinkWrite(this, value);
         }
     }
 
     /// <summary>表示一个点位及其待写入值。</summary>
-    public sealed class IndustrialWrite
+    public sealed class InduLinkWrite
     {
         /// <summary>创建单个写入项。</summary>
-        public IndustrialWrite(IndustrialTag tag, object value)
+        public InduLinkWrite(InduLinkTag tag, object value)
         {
             Tag = tag ?? throw new ArgumentNullException(nameof(tag));
             Value = value ?? throw new ArgumentNullException(nameof(value));
         }
 
         /// <summary>获取目标点位。</summary>
-        public IndustrialTag Tag { get; private set; }
+        public InduLinkTag Tag { get; private set; }
         /// <summary>获取待写入值。</summary>
         public object Value { get; private set; }
 
@@ -81,9 +81,9 @@ namespace InduLink.Runtime
     }
 
     /// <summary>表示简化 API 的强类型成功或失败结果。</summary>
-    public sealed class IndustrialResult<T>
+    public sealed class InduLinkResult<T>
     {
-        private IndustrialResult(bool isSuccess, T value, DataValue dataValue, string errorMessage, Exception exception)
+        private InduLinkResult(bool isSuccess, T value, DataValue dataValue, string errorMessage, Exception exception)
         {
             IsSuccess = isSuccess;
             Value = value;
@@ -104,26 +104,26 @@ namespace InduLink.Runtime
         public Exception Exception { get; private set; }
 
         /// <summary>创建成功结果。</summary>
-        public static IndustrialResult<T> Success(T value, DataValue dataValue)
+        public static InduLinkResult<T> Success(T value, DataValue dataValue)
         {
-            return new IndustrialResult<T>(true, value, dataValue, null, null);
+            return new InduLinkResult<T>(true, value, dataValue, null, null);
         }
 
         /// <summary>创建失败结果。</summary>
-        public static IndustrialResult<T> Failure(string errorMessage, DataValue dataValue = null, Exception exception = null)
+        public static InduLinkResult<T> Failure(string errorMessage, DataValue dataValue = null, Exception exception = null)
         {
-            return new IndustrialResult<T>(false, default(T), dataValue, errorMessage, exception);
+            return new InduLinkResult<T>(false, default(T), dataValue, errorMessage, exception);
         }
     }
 
     /// <summary>保存一次批量读取的点位定义和对应结果。</summary>
-    public sealed class IndustrialTagReadResult
+    public sealed class InduLinkTagReadResult
     {
-        private readonly Dictionary<IndustrialTag, int> _tagIndexes;
+        private readonly Dictionary<InduLinkTag, int> _tagIndexes;
         private readonly Dictionary<string, int> _addressIndexes;
 
         /// <summary>创建批量读取结果；点位与值必须按索引一一对应。</summary>
-        public IndustrialTagReadResult(IReadOnlyList<IndustrialTag> tags, IReadOnlyList<DataValue> values)
+        public InduLinkTagReadResult(IReadOnlyList<InduLinkTag> tags, IReadOnlyList<DataValue> values)
         {
             Tags = tags ?? throw new ArgumentNullException(nameof(tags));
             Values = values ?? throw new ArgumentNullException(nameof(values));
@@ -133,7 +133,7 @@ namespace InduLink.Runtime
                 throw new ArgumentException("Tag count must match value count.", nameof(values));
             }
 
-            _tagIndexes = new Dictionary<IndustrialTag, int>();
+            _tagIndexes = new Dictionary<InduLinkTag, int>();
             _addressIndexes = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
 
             for (var i = 0; i < tags.Count; i++)
@@ -147,12 +147,12 @@ namespace InduLink.Runtime
         }
 
         /// <summary>获取本次读取的点位。</summary>
-        public IReadOnlyList<IndustrialTag> Tags { get; private set; }
+        public IReadOnlyList<InduLinkTag> Tags { get; private set; }
         /// <summary>获取与 Tags 索引对应的数据值。</summary>
         public IReadOnlyList<DataValue> Values { get; private set; }
 
         /// <summary>按强类型点位取得并转换值。</summary>
-        public T Get<T>(IndustrialTag<T> tag)
+        public T Get<T>(InduLinkTag<T> tag)
         {
             if (tag == null) throw new ArgumentNullException(nameof(tag));
 
@@ -186,12 +186,12 @@ namespace InduLink.Runtime
         {
             if (dataValue == null)
             {
-                throw new IndustrialProtocolException(string.Format("Read result is null for address {0}.", address));
+                throw new InduLinkProtocolException(string.Format("Read result is null for address {0}.", address));
             }
 
             if (dataValue.Quality != QualityStatus.Good)
             {
-                throw new IndustrialProtocolException(
+                throw new InduLinkProtocolException(
                     string.IsNullOrWhiteSpace(dataValue.ErrorMessage)
                         ? string.Format("Read failed for address {0}.", address)
                         : dataValue.ErrorMessage);
@@ -199,7 +199,7 @@ namespace InduLink.Runtime
 
             if (dataValue.Value == null)
             {
-                throw new IndustrialDataConversionException(string.Format("Read value is null for address {0}.", address));
+                throw new InduLinkDataConversionException(string.Format("Read value is null for address {0}.", address));
             }
 
             if (dataValue.Value is T typed)
@@ -223,7 +223,7 @@ namespace InduLink.Runtime
             }
             catch (Exception ex)
             {
-                throw new IndustrialDataConversionException(
+                throw new InduLinkDataConversionException(
                     string.Format("Cannot convert address {0} value from {1} to {2} for data type {3}.",
                         address,
                         dataValue.Value.GetType().Name,
@@ -238,129 +238,129 @@ namespace InduLink.Runtime
     public static class Tag
     {
         /// <summary>创建布尔点位。</summary>
-        public static IndustrialTag<bool> Bool(string address, string name = null)
+        public static InduLinkTag<bool> Bool(string address, string name = null)
         {
-            return new IndustrialTag<bool>(address, DataType.Bool, 1, name);
+            return new InduLinkTag<bool>(address, DataType.Bool, 1, name);
         }
 
         /// <summary>创建 8 位有符号整数点位。</summary>
-        public static IndustrialTag<sbyte> SByte(string address, string name = null)
+        public static InduLinkTag<sbyte> SByte(string address, string name = null)
         {
-            return new IndustrialTag<sbyte>(address, DataType.SByte, 1, name);
+            return new InduLinkTag<sbyte>(address, DataType.SByte, 1, name);
         }
 
         /// <summary>创建 16 位有符号整数点位。</summary>
-        public static IndustrialTag<short> Int16(string address, string name = null)
+        public static InduLinkTag<short> Int16(string address, string name = null)
         {
-            return new IndustrialTag<short>(address, DataType.Int16, 1, name);
+            return new InduLinkTag<short>(address, DataType.Int16, 1, name);
         }
 
         /// <summary>创建 16 位无符号整数点位。</summary>
-        public static IndustrialTag<ushort> UInt16(string address, string name = null)
+        public static InduLinkTag<ushort> UInt16(string address, string name = null)
         {
-            return new IndustrialTag<ushort>(address, DataType.UInt16, 1, name);
+            return new InduLinkTag<ushort>(address, DataType.UInt16, 1, name);
         }
 
         /// <summary>创建 32 位有符号整数点位。</summary>
-        public static IndustrialTag<int> Int32(string address, string name = null)
+        public static InduLinkTag<int> Int32(string address, string name = null)
         {
-            return new IndustrialTag<int>(address, DataType.Int32, 1, name);
+            return new InduLinkTag<int>(address, DataType.Int32, 1, name);
         }
 
         /// <summary>创建 32 位无符号整数点位。</summary>
-        public static IndustrialTag<uint> UInt32(string address, string name = null)
+        public static InduLinkTag<uint> UInt32(string address, string name = null)
         {
-            return new IndustrialTag<uint>(address, DataType.UInt32, 1, name);
+            return new InduLinkTag<uint>(address, DataType.UInt32, 1, name);
         }
 
         /// <summary>创建 64 位有符号整数点位。</summary>
-        public static IndustrialTag<long> Int64(string address, string name = null)
+        public static InduLinkTag<long> Int64(string address, string name = null)
         {
-            return new IndustrialTag<long>(address, DataType.Int64, 1, name);
+            return new InduLinkTag<long>(address, DataType.Int64, 1, name);
         }
 
         /// <summary>创建 64 位无符号整数点位。</summary>
-        public static IndustrialTag<ulong> UInt64(string address, string name = null)
+        public static InduLinkTag<ulong> UInt64(string address, string name = null)
         {
-            return new IndustrialTag<ulong>(address, DataType.UInt64, 1, name);
+            return new InduLinkTag<ulong>(address, DataType.UInt64, 1, name);
         }
 
         /// <summary>创建单精度浮点点位。</summary>
-        public static IndustrialTag<float> Float(string address, string name = null)
+        public static InduLinkTag<float> Float(string address, string name = null)
         {
-            return new IndustrialTag<float>(address, DataType.Float, 1, name);
+            return new InduLinkTag<float>(address, DataType.Float, 1, name);
         }
 
         /// <summary>创建双精度浮点点位。</summary>
-        public static IndustrialTag<double> Double(string address, string name = null)
+        public static InduLinkTag<double> Double(string address, string name = null)
         {
-            return new IndustrialTag<double>(address, DataType.Double, 1, name);
+            return new InduLinkTag<double>(address, DataType.Double, 1, name);
         }
 
         /// <summary>创建字节点位。</summary>
-        public static IndustrialTag<byte> Byte(string address, string name = null)
+        public static InduLinkTag<byte> Byte(string address, string name = null)
         {
-            return new IndustrialTag<byte>(address, DataType.Byte, 1, name);
+            return new InduLinkTag<byte>(address, DataType.Byte, 1, name);
         }
 
         /// <summary>创建字符点位。</summary>
-        public static IndustrialTag<char> Char(string address, string name = null)
+        public static InduLinkTag<char> Char(string address, string name = null)
         {
-            return new IndustrialTag<char>(address, DataType.Char, 1, name);
+            return new InduLinkTag<char>(address, DataType.Char, 1, name);
         }
 
         /// <summary>创建指定长度的字符串点位。</summary>
-        public static IndustrialTag<string> String(string address, ushort length, string name = null)
+        public static InduLinkTag<string> String(string address, ushort length, string name = null)
         {
-            return new IndustrialTag<string>(address, DataType.String, length, name);
+            return new InduLinkTag<string>(address, DataType.String, length, name);
         }
 
         /// <summary>创建指定长度的 TwinCAT WSTRING 点位。</summary>
-        public static IndustrialTag<string> WString(string address, ushort length, string name = null)
+        public static InduLinkTag<string> WString(string address, ushort length, string name = null)
         {
-            return new IndustrialTag<string>(address, DataType.WString, length, name);
+            return new InduLinkTag<string>(address, DataType.WString, length, name);
         }
 
         /// <summary>创建 TwinCAT TIME 点位。</summary>
-        public static IndustrialTag<TimeSpan> Time(string address, string name = null)
+        public static InduLinkTag<TimeSpan> Time(string address, string name = null)
         {
-            return new IndustrialTag<TimeSpan>(address, DataType.Time, 1, name);
+            return new InduLinkTag<TimeSpan>(address, DataType.Time, 1, name);
         }
 
         /// <summary>创建 TwinCAT DATE 点位。</summary>
-        public static IndustrialTag<DateTimeOffset> Date(string address, string name = null)
+        public static InduLinkTag<DateTimeOffset> Date(string address, string name = null)
         {
-            return new IndustrialTag<DateTimeOffset>(address, DataType.Date, 1, name);
+            return new InduLinkTag<DateTimeOffset>(address, DataType.Date, 1, name);
         }
 
         /// <summary>创建 TwinCAT DT/DATE_AND_TIME 点位。</summary>
-        public static IndustrialTag<DateTimeOffset> DateTime(string address, string name = null)
+        public static InduLinkTag<DateTimeOffset> DateTime(string address, string name = null)
         {
-            return new IndustrialTag<DateTimeOffset>(address, DataType.DateTime, 1, name);
+            return new InduLinkTag<DateTimeOffset>(address, DataType.DateTime, 1, name);
         }
 
         /// <summary>创建 TwinCAT TOD/TIME_OF_DAY 点位。</summary>
-        public static IndustrialTag<TimeSpan> TimeOfDay(string address, string name = null)
+        public static InduLinkTag<TimeSpan> TimeOfDay(string address, string name = null)
         {
-            return new IndustrialTag<TimeSpan>(address, DataType.TimeOfDay, 1, name);
+            return new InduLinkTag<TimeSpan>(address, DataType.TimeOfDay, 1, name);
         }
 
         /// <summary>创建 TwinCAT LTIME 点位。</summary>
-        public static IndustrialTag<TimeSpan> LTime(string address, string name = null)
+        public static InduLinkTag<TimeSpan> LTime(string address, string name = null)
         {
-            return new IndustrialTag<TimeSpan>(address, DataType.LTime, 1, name);
+            return new InduLinkTag<TimeSpan>(address, DataType.LTime, 1, name);
         }
 
         /// <summary>创建指定最大长度的西门子 S7 原生 STRING[n] 点位。</summary>
-        public static IndustrialTag<string> S7String(string address, ushort reservedLength, string name = null)
+        public static InduLinkTag<string> S7String(string address, ushort reservedLength, string name = null)
         {
-            return new IndustrialTag<string>(address, DataType.S7String, reservedLength, name);
+            return new InduLinkTag<string>(address, DataType.S7String, reservedLength, name);
         }
 
         /// <summary>创建指定长度的字节数组点位。</summary>
-        public static IndustrialTag<byte[]> Bytes(string address, ushort length, string name = null)
+        public static InduLinkTag<byte[]> Bytes(string address, ushort length, string name = null)
         {
-            return new IndustrialTag<byte[]>(address, DataType.ByteArray, length, name);
+            return new InduLinkTag<byte[]>(address, DataType.ByteArray, length, name);
         }
     }
 }

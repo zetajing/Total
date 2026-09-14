@@ -15,7 +15,7 @@ namespace InduLink.Protocols.S7
         public int ConnectTimeoutMilliseconds { get; set; } = 5000;
     }
 
-    public sealed class SiemensS7ProtocolProvider : IndustrialProtocolProvider<SiemensS7Settings>
+    public sealed class SiemensS7ProtocolProvider : InduLinkProtocolProvider<SiemensS7Settings>
     {
         public override string Protocol { get { return "siemens-s7"; } }
 
@@ -28,7 +28,7 @@ namespace InduLink.Protocols.S7
                 settings.ConnectTimeoutMilliseconds <= 0 ? "connectTimeoutMilliseconds must be positive." : null);
         }
 
-        protected override IIndustrialClient CreateClient(IndustrialDeviceConfig device, SiemensS7Settings settings, IIndustrialLogger logger)
+        protected override IInduLinkClient CreateClient(InduLinkDeviceConfig device, SiemensS7Settings settings, IInduLinkLogger logger)
         {
             return new SiemensS7Client(new SiemensS7ClientOptions
             {

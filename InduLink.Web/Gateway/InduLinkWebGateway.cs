@@ -21,11 +21,11 @@ using Newtonsoft.Json.Serialization;
 namespace InduLink.Web.Gateway
 {
     /// <summary>基于 HTTP.sys 的工业 Tag WebAPI 与实时 WebSocket 网关。</summary>
-    public sealed class IndustrialWebGateway : IIndustrialWebGateway
+    public sealed class InduLinkWebGateway : IInduLinkWebGateway
     {
-        private readonly IIndustrialTagGateway _tagGateway;
-        private readonly IndustrialWebGatewayOptions _options;
-        private readonly IIndustrialLogger _logger;
+        private readonly IInduLinkTagGateway _tagGateway;
+        private readonly InduLinkWebGatewayOptions _options;
+        private readonly IInduLinkLogger _logger;
         private readonly ConcurrentDictionary<string, GatewaySession> _sessions = new ConcurrentDictionary<string, GatewaySession>();
         private readonly ConcurrentDictionary<int, Task> _requests = new ConcurrentDictionary<int, Task>();
         private readonly SemaphoreSlim _lifecycleGate = new SemaphoreSlim(1, 1);
@@ -40,15 +40,15 @@ namespace InduLink.Web.Gateway
         private int _running;
         private int _disposed;
 
-        public IndustrialWebGateway(
-            IIndustrialTagGateway tagGateway,
-            IndustrialWebGatewayOptions options,
-            IIndustrialLogger logger = null)
+        public InduLinkWebGateway(
+            IInduLinkTagGateway tagGateway,
+            InduLinkWebGatewayOptions options,
+            IInduLinkLogger logger = null)
         {
             _tagGateway = tagGateway ?? throw new ArgumentNullException(nameof(tagGateway));
             if (options == null) throw new ArgumentNullException(nameof(options));
             _options = options.Clone();
-            _logger = logger ?? NullIndustrialLogger.Instance;
+            _logger = logger ?? NullInduLinkLogger.Instance;
             ValidateOptions(_options);
             _requestSlots = new SemaphoreSlim(_options.MaxConcurrentRequests, _options.MaxConcurrentRequests);
             _jsonSettings = new JsonSerializerSettings
@@ -60,10 +60,10 @@ namespace InduLink.Web.Gateway
             _jsonSettings.Converters.Add(new StringEnumConverter(new CamelCaseNamingStrategy()));
         }
 
-        public IndustrialWebGatewayOptions Options { get { return _options.Clone(); } }
+        public InduLinkWebGatewayOptions Options { get { return _options.Clone(); } }
         public bool IsRunning { get { return Volatile.Read(ref _running) != 0; } }
         public IReadOnlyCollection<WebSocketSessionInfo> WebSocketSessions { get { return _sessions.Values.Select(value => value.Info).ToArray(); } }
-        public event EventHandler<IndustrialWebRequestEventArgs> RequestCompleted;
+        public event EventHandler<InduLinkWebRequestEventArgs> RequestCompleted;
 
         public async Task StartAsync(CancellationToken cancellationToken)
         {
@@ -738,7 +738,7 @@ namespace InduLink.Web.Gateway
         {
             try
             {
-                RequestCompleted?.Invoke(this, new IndustrialWebRequestEventArgs(
+                RequestCompleted?.Invoke(this, new InduLinkWebRequestEventArgs(
                     request.HttpMethod,
                     path,
                     statusCode,
@@ -761,7 +761,7 @@ namespace InduLink.Web.Gateway
                 await IgnoreCancellationAsync(task).ConfigureAwait(false);
         }
 
-        private static void ValidateOptions(IndustrialWebGatewayOptions options)
+        private static void ValidateOptions(InduLinkWebGatewayOptions options)
         {
             WebSecurity.ValidateListenerSecurity(options.ListenPrefix, options.RequireApiKey, options.ApiKey, options.AllowedOrigins.ToArray(), nameof(options));
             if (!options.RequireApiKey)
@@ -780,7 +780,7 @@ namespace InduLink.Web.Gateway
 
         private void ThrowIfDisposed()
         {
-            if (Volatile.Read(ref _disposed) != 0) throw new ObjectDisposedException(nameof(IndustrialWebGateway));
+            if (Volatile.Read(ref _disposed) != 0) throw new ObjectDisposedException(nameof(InduLinkWebGateway));
         }
 
         public void Dispose()

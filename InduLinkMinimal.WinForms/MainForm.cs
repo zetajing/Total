@@ -22,12 +22,12 @@ namespace InduLinkMinimal.WinForms
     /// </summary>
     public partial class MainForm : Form
     {
-        // PLC 类协议统一实现 IIndustrialClient，因此可以复用连接、读取、写入和断开逻辑。
+        // PLC 类协议统一实现 IInduLinkClient，因此可以复用连接、读取、写入和断开逻辑。
         // 每个页签独立保存客户端，切换页签不会意外复用另一种协议的连接。
-        private IIndustrialClient _modbusTcpClient;
-        private IIndustrialClient _modbusRtuClient;
-        private IIndustrialClient _s7Client;
-        private IIndustrialClient _mcClient;
+        private IInduLinkClient _modbusTcpClient;
+        private IInduLinkClient _modbusRtuClient;
+        private IInduLinkClient _s7Client;
+        private IInduLinkClient _mcClient;
 
         // 原始 TCP 有专用 API，不属于统一 PLC 读写抽象，单独持有实例。
         private TcpTransportClient _rawTcpClient;
@@ -43,7 +43,7 @@ namespace InduLinkMinimal.WinForms
         /// <summary>读取页面参数，创建并连接通用地址映射的 Modbus TCP 客户端。</summary>
         private async void ModbusTcpConnectButton_Click(object sender, EventArgs e)
         {
-            await ConnectIndustrialAsync(ModbusTcpOutputTextBox, () => new ModbusTcpClient(new ModbusTcpClientOptions
+            await ConnectInduLinkAsync(ModbusTcpOutputTextBox, () => new ModbusTcpClient(new ModbusTcpClientOptions
             {
                 DeviceId = "winforms-modbus-tcp",
                 Host = ModbusTcpHostTextBox.Text.Trim(),
@@ -88,7 +88,7 @@ namespace InduLinkMinimal.WinForms
         /// <summary>按串口、波特率和站号创建 Modbus RTU 客户端；示例默认使用偶校验。</summary>
         private async void ModbusRtuConnectButton_Click(object sender, EventArgs e)
         {
-            await ConnectIndustrialAsync(ModbusRtuOutputTextBox, () => new ModbusRtuClient(new ModbusRtuClientOptions
+            await ConnectInduLinkAsync(ModbusRtuOutputTextBox, () => new ModbusRtuClient(new ModbusRtuClientOptions
             {
                 DeviceId = "winforms-modbus-rtu",
                 PortName = ModbusRtuPortTextBox.Text.Trim(),
@@ -101,7 +101,7 @@ namespace InduLinkMinimal.WinForms
         /// <summary>按主机、机架和插槽创建 Siemens S7 客户端并建立连接。</summary>
         private async void S7ConnectButton_Click(object sender, EventArgs e)
         {
-            await ConnectIndustrialAsync(S7OutputTextBox, () => new SiemensS7Client(new SiemensS7ClientOptions
+            await ConnectInduLinkAsync(S7OutputTextBox, () => new SiemensS7Client(new SiemensS7ClientOptions
             {
                 DeviceId = "winforms-s7",
                 Host = S7HostTextBox.Text.Trim(),
@@ -114,7 +114,7 @@ namespace InduLinkMinimal.WinForms
         /// <summary>按主机、端口和接收超时创建 Mitsubishi MC 3E 客户端。</summary>
         private async void McConnectButton_Click(object sender, EventArgs e)
         {
-            await ConnectIndustrialAsync(McOutputTextBox, () => new MitsubishiMcClient(new MitsubishiMcClientOptions
+            await ConnectInduLinkAsync(McOutputTextBox, () => new MitsubishiMcClient(new MitsubishiMcClientOptions
             {
                 DeviceId = "winforms-mc",
                 Host = McHostTextBox.Text.Trim(),
@@ -132,7 +132,7 @@ namespace InduLinkMinimal.WinForms
         /// <param name="factory">根据页面参数创建协议客户端的工厂函数。</param>
         /// <param name="assign">将新客户端写回对应窗体字段的回调。</param>
         /// <param name="oldClient">当前页签此前创建的客户端；存在时先释放。</param>
-        private async Task ConnectIndustrialAsync(TextBox output, Func<IIndustrialClient> factory, Action<IIndustrialClient> assign, IIndustrialClient oldClient)
+        private async Task ConnectInduLinkAsync(TextBox output, Func<IInduLinkClient> factory, Action<IInduLinkClient> assign, IInduLinkClient oldClient)
         {
             await RunAsync(output, async () =>
             {
@@ -146,7 +146,7 @@ namespace InduLinkMinimal.WinForms
         }
 
         /// <summary>四个 PLC 读取按钮的统一入口，根据事件来源路由到对应客户端和控件。</summary>
-        private async void IndustrialReadButton_Click(object sender, EventArgs e)
+        private async void InduLinkReadButton_Click(object sender, EventArgs e)
         {
             if (sender == ModbusTcpReadButton) await ReadAsync(_modbusTcpClient, ModbusTcpAddressTextBox, ModbusTcpTypeComboBox, ModbusTcpOutputTextBox);
             else if (sender == ModbusRtuReadButton) await ReadAsync(_modbusRtuClient, ModbusRtuAddressTextBox, ModbusRtuTypeComboBox, ModbusRtuOutputTextBox);
@@ -157,7 +157,7 @@ namespace InduLinkMinimal.WinForms
         /// <summary>
         /// 使用页面选择的地址和数据类型执行一次读取，并输出值、质量状态和错误信息。
         /// </summary>
-        private async Task ReadAsync(IIndustrialClient client, TextBox address, ComboBox type, TextBox output)
+        private async Task ReadAsync(IInduLinkClient client, TextBox address, ComboBox type, TextBox output)
         {
             await RunAsync(output, async () =>
             {
@@ -170,7 +170,7 @@ namespace InduLinkMinimal.WinForms
         }
 
         /// <summary>四个 PLC 写入按钮的统一入口，根据事件来源选择对应页面参数。</summary>
-        private async void IndustrialWriteButton_Click(object sender, EventArgs e)
+        private async void InduLinkWriteButton_Click(object sender, EventArgs e)
         {
             if (sender == ModbusTcpWriteButton) await WriteAsync(_modbusTcpClient, ModbusTcpAddressTextBox, ModbusTcpTypeComboBox, ModbusTcpValueTextBox, ModbusTcpOutputTextBox);
             else if (sender == ModbusRtuWriteButton) await WriteAsync(_modbusRtuClient, ModbusRtuAddressTextBox, ModbusRtuTypeComboBox, ModbusRtuValueTextBox, ModbusRtuOutputTextBox);
@@ -179,7 +179,7 @@ namespace InduLinkMinimal.WinForms
         }
 
         /// <summary>把页面文本转换为 SDK 数据类型，构造写入请求并执行单点写入。</summary>
-        private async Task WriteAsync(IIndustrialClient client, TextBox address, ComboBox type, TextBox value, TextBox output)
+        private async Task WriteAsync(IInduLinkClient client, TextBox address, ComboBox type, TextBox value, TextBox output)
         {
             await RunAsync(output, async () =>
             {
@@ -192,7 +192,7 @@ namespace InduLinkMinimal.WinForms
         }
 
         /// <summary>四个 PLC 断开按钮的统一入口，断开后同步清空对应窗体字段。</summary>
-        private async void IndustrialDisconnectButton_Click(object sender, EventArgs e)
+        private async void InduLinkDisconnectButton_Click(object sender, EventArgs e)
         {
             if (sender == ModbusTcpDisconnectButton) await DisconnectAsync(_modbusTcpClient, c => _modbusTcpClient = c, ModbusTcpOutputTextBox);
             else if (sender == ModbusRtuDisconnectButton) await DisconnectAsync(_modbusRtuClient, c => _modbusRtuClient = c, ModbusRtuOutputTextBox);
@@ -201,7 +201,7 @@ namespace InduLinkMinimal.WinForms
         }
 
         /// <summary>安全断开并释放一个统一协议客户端；空实例视为已经断开。</summary>
-        private async Task DisconnectAsync(IIndustrialClient client, Action<IIndustrialClient> assign, TextBox output)
+        private async Task DisconnectAsync(IInduLinkClient client, Action<IInduLinkClient> assign, TextBox output)
         {
             await RunAsync(output, async () => { if (client == null) return; await client.DisconnectAsync(CancellationToken.None); client.Dispose(); assign(null); Append(output, "已断开"); });
         }
@@ -292,7 +292,7 @@ namespace InduLinkMinimal.WinForms
         private static void Append(TextBox output, string text) { if (output.IsDisposed) return; if (output.InvokeRequired) { output.BeginInvoke(new Action<TextBox, string>(Append), output, text); return; } output.AppendText(string.Format("[{0:HH:mm:ss}] {1}{2}", DateTime.Now, text, Environment.NewLine)); }
 
         /// <summary>在读写前确认客户端存在且底层连接仍然可用。</summary>
-        private static void EnsureConnected(IIndustrialClient client) { if (client == null || !client.IsConnected) throw new InvalidOperationException("请先连接。"); }
+        private static void EnsureConnected(IInduLinkClient client) { if (client == null || !client.IsConnected) throw new InvalidOperationException("请先连接。"); }
 
         /// <summary>把设计器下拉框中的类型名称转换为 SDK 数据类型枚举。</summary>
         private static DataType ParseDataType(string value) { return (DataType)Enum.Parse(typeof(DataType), value); }
@@ -317,7 +317,7 @@ namespace InduLinkMinimal.WinForms
             return Encoding.UTF8.GetBytes(value);
         }
 
-        private static void AppendDiagnostics(TextBox output, IIndustrialClient client)
+        private static void AppendDiagnostics(TextBox output, IInduLinkClient client)
         {
             var snapshot = client.GetDiagnosticSnapshot();
             Append(output, string.Format(CultureInfo.InvariantCulture,

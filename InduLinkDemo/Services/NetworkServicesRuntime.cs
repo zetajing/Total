@@ -22,10 +22,10 @@ namespace InduLinkDemo.Services
     {
         private const string MqttRootTopic = "industrial/v1";
 
-        private readonly IndustrialApplicationRuntime _applicationRuntime;
+        private readonly InduLinkApplicationRuntime _applicationRuntime;
         private readonly NetworkServicesConfigurationStore _configurationStore;
         private readonly DpapiSecretStore _secretStore;
-        private readonly IIndustrialLogger _logger;
+        private readonly IInduLinkLogger _logger;
         private readonly SemaphoreSlim _lifecycleGate = new SemaphoreSlim(1, 1);
         private readonly CancellationTokenSource _disposeSource = new CancellationTokenSource();
         private readonly object _configurationSync = new object();
@@ -34,7 +34,7 @@ namespace InduLinkDemo.Services
         private IMqttBrokerService _mqttBroker;
         private IMqttTagGatewayBridge _mqttBridge;
         private X509Certificate2 _mqttCertificate;
-        private IIndustrialWebGateway _webGateway;
+        private IInduLinkWebGateway _webGateway;
         private IFtpFileClient _ftpClient;
         private bool _mqttDesired;
         private bool _webDesired;
@@ -43,19 +43,19 @@ namespace InduLinkDemo.Services
         private int _disposed;
 
         public NetworkServicesRuntime(
-            IndustrialApplicationRuntime applicationRuntime,
-            IIndustrialLogger logger = null)
+            InduLinkApplicationRuntime applicationRuntime,
+            IInduLinkLogger logger = null)
             : this(applicationRuntime, null, logger)
         {
         }
 
         public NetworkServicesRuntime(
-            IndustrialApplicationRuntime applicationRuntime,
+            InduLinkApplicationRuntime applicationRuntime,
             string configurationFilePath,
-            IIndustrialLogger logger = null)
+            IInduLinkLogger logger = null)
         {
             _applicationRuntime = applicationRuntime ?? throw new ArgumentNullException(nameof(applicationRuntime));
-            _logger = logger ?? NullIndustrialLogger.Instance;
+            _logger = logger ?? NullInduLinkLogger.Instance;
             _configurationStore = new NetworkServicesConfigurationStore(configurationFilePath);
             _secretStore = new DpapiSecretStore(_configurationStore.SecretsDirectory);
             _configuration = CloneConfiguration(_configurationStore.Load());
@@ -76,7 +76,7 @@ namespace InduLinkDemo.Services
 
         public IMqttBrokerService MqttBroker { get { return _mqttBroker; } }
         public IMqttTagGatewayBridge MqttBridge { get { return _mqttBridge; } }
-        public IIndustrialWebGateway WebGateway { get { return _webGateway; } }
+        public IInduLinkWebGateway WebGateway { get { return _webGateway; } }
         public IFtpFileClient FtpClient { get { return _ftpClient; } }
         public bool IsMqttRunning { get { return _mqttBroker != null && _mqttBroker.IsRunning; } }
         public bool IsWebGatewayRunning { get { return _webGateway != null && _webGateway.IsRunning; } }
@@ -398,7 +398,7 @@ namespace InduLinkDemo.Services
 
             var web = configuration.WebGateway;
             var apiKey = GetRequiredSecret(web.ApiKeySecretName, "Web API key");
-            var options = new IndustrialWebGatewayOptions
+            var options = new InduLinkWebGatewayOptions
             {
                 ListenPrefix = web.ListenPrefix,
                 RequireApiKey = true,
@@ -408,7 +408,7 @@ namespace InduLinkDemo.Services
                 options.AllowedOrigins.Add(origin);
 
             RaiseState(NetworkServiceKind.WebGateway, NetworkServiceState.Starting, "正在启动 WebAPI/WebSocket 网关。");
-            var service = new IndustrialWebGateway(gateway, options, _logger);
+            var service = new InduLinkWebGateway(gateway, options, _logger);
             try
             {
                 await service.StartAsync(cancellationToken).ConfigureAwait(false);
@@ -588,7 +588,7 @@ namespace InduLinkDemo.Services
         }
 
         private static void ApplyGatewayOptions(
-            IIndustrialTagGateway gateway,
+            IInduLinkTagGateway gateway,
             WebGatewayConfiguration configuration)
         {
             if (gateway == null || configuration == null) return;

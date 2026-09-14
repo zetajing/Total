@@ -67,12 +67,12 @@ namespace InduLink.Protocols.S7
             if (address == null) throw new ArgumentNullException(nameof(address));
             if (request.DataType == DataType.S7String && address.Area != S7Area.Db)
             {
-                throw new IndustrialAddressParseException(
+                throw new InduLinkAddressParseException(
                     "S7 STRING[n] reads must point to a data block: " + request.Address);
             }
             if (request.DataType != DataType.Bool && address.IsBitAddress && address.BitOffset != 0)
             {
-                throw new IndustrialAddressParseException(
+                throw new InduLinkAddressParseException(
                     "S7 non-Boolean reads using X address syntax require bit index 0: " +
                     request.Address);
             }
@@ -89,7 +89,7 @@ namespace InduLink.Protocols.S7
                 var bitIndex = firstBit + i;
                 var byteIndex = bitIndex / 8;
                 if (byteIndex < 0 || byteIndex >= payload.Length)
-                    throw new IndustrialDataConversionException("S7 batch read payload does not contain the requested bit.");
+                    throw new InduLinkDataConversionException("S7 batch read payload does not contain the requested bit.");
 
                 values[i] = (payload[byteIndex] & (1 << (bitIndex % 8))) != 0;
             }
@@ -138,7 +138,7 @@ namespace InduLink.Protocols.S7
                         ? (object)global::S7.Net.Types.LReal.ToArray(bytes)
                         : global::S7.Net.Types.LReal.FromByteArray(bytes);
                 default:
-                    throw new IndustrialDataConversionException("S7 does not support data type " + request.DataType + ".");
+                    throw new InduLinkDataConversionException("S7 does not support data type " + request.DataType + ".");
             }
         }
 
@@ -168,14 +168,14 @@ namespace InduLink.Protocols.S7
                 case DataType.Bool:
                     return 1;
                 default:
-                    throw new IndustrialDataConversionException("S7 does not support data type " + request.DataType + ".");
+                    throw new InduLinkDataConversionException("S7 does not support data type " + request.DataType + ".");
             }
         }
 
         private static byte[] Slice(byte[] source, int offset, int length)
         {
             if (offset < 0 || length < 0 || offset > source.Length - length)
-                throw new IndustrialDataConversionException("S7 batch read payload does not contain the requested value.");
+                throw new InduLinkDataConversionException("S7 batch read payload does not contain the requested value.");
 
             var result = new byte[length];
             if (length > 0) Buffer.BlockCopy(source, offset, result, 0, length);

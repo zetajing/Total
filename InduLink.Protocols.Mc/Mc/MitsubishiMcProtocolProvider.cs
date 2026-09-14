@@ -13,7 +13,7 @@ namespace InduLink.Protocols.Mc
         public int ReceiveTimeoutMilliseconds { get; set; } = 5000;
     }
 
-    public sealed class MitsubishiMcProtocolProvider : IndustrialProtocolProvider<MitsubishiMcSettings>
+    public sealed class MitsubishiMcProtocolProvider : InduLinkProtocolProvider<MitsubishiMcSettings>
     {
         public override string Protocol { get { return "mitsubishi-mc"; } }
 
@@ -26,7 +26,7 @@ namespace InduLink.Protocols.Mc
                 settings.ReceiveTimeoutMilliseconds <= 0 ? "receiveTimeoutMilliseconds must be positive." : null);
         }
 
-        protected override IIndustrialClient CreateClient(IndustrialDeviceConfig device, MitsubishiMcSettings settings, IIndustrialLogger logger)
+        protected override IInduLinkClient CreateClient(InduLinkDeviceConfig device, MitsubishiMcSettings settings, IInduLinkLogger logger)
         {
             return new MitsubishiMcClient(new MitsubishiMcClientOptions
             {

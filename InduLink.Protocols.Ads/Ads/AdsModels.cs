@@ -49,7 +49,7 @@ namespace InduLink.Protocols.Ads
     }
 
     /// <summary>ADS 变量地址。ADS 地址就是 PLC 符号名，例如 MAIN.bool1。</summary>
-    public sealed class AdsAddress : Abstractions.IIndustrialAddress
+    public sealed class AdsAddress : Abstractions.IInduLinkAddress
     {
         internal AdsAddress(string address)
         {
@@ -78,7 +78,7 @@ namespace InduLink.Protocols.Ads
         public AdsAddress ParseTyped(string address)
         {
             if (string.IsNullOrWhiteSpace(address))
-                throw new Exceptions.IndustrialAddressParseException("ADS variable name cannot be empty.");
+                throw new Exceptions.InduLinkAddressParseException("ADS variable name cannot be empty.");
             return new AdsAddress(address);
         }
     }
@@ -136,7 +136,7 @@ namespace InduLink.Protocols.Ads
     }
 
     /// <summary>ADS SumCommand 批量写入失败异常，包含设备返回的逐项错误。</summary>
-    public sealed class AdsBatchWriteException : Exceptions.InduLinkunicationException
+    public sealed class AdsBatchWriteException : Exceptions.InduLinkCommunicationException
     {
         public AdsBatchWriteException(IReadOnlyList<AdsBatchWriteError> errors)
             : base(CreateMessage(errors))

@@ -4,9 +4,9 @@ using System.Net.WebSockets;
 
 namespace InduLink.Web.WebSockets
 {
-    public sealed class IndustrialWebSocketClientOptions
+    public sealed class InduLinkWebSocketClientOptions
     {
-        public IndustrialWebSocketClientOptions()
+        public InduLinkWebSocketClientOptions()
         {
             Uri = new Uri("ws://127.0.0.1:8088/ws/v1/tags");
             MaxMessageBytes = 1024 * 1024;
@@ -37,9 +37,9 @@ namespace InduLink.Web.WebSockets
         public IDictionary<string, string> Headers { get; private set; }
         public IList<string> SubProtocols { get; private set; }
 
-        internal IndustrialWebSocketClientOptions Clone()
+        internal InduLinkWebSocketClientOptions Clone()
         {
-            var clone = new IndustrialWebSocketClientOptions
+            var clone = new InduLinkWebSocketClientOptions
             {
                 Uri = Uri,
                 ApiKey = ApiKey,
@@ -60,9 +60,9 @@ namespace InduLink.Web.WebSockets
         }
     }
 
-    public sealed class IndustrialWebSocketServerOptions
+    public sealed class InduLinkWebSocketServerOptions
     {
-        public IndustrialWebSocketServerOptions()
+        public InduLinkWebSocketServerOptions()
         {
             ListenPrefix = "http://127.0.0.1:8090/";
             WebSocketPath = "/ws/";
@@ -91,9 +91,9 @@ namespace InduLink.Web.WebSockets
         public string SubProtocol { get; set; }
         public IList<string> SubProtocols { get; private set; }
 
-        internal IndustrialWebSocketServerOptions Clone()
+        internal InduLinkWebSocketServerOptions Clone()
         {
-            var clone = new IndustrialWebSocketServerOptions
+            var clone = new InduLinkWebSocketServerOptions
             {
                 ListenPrefix = ListenPrefix,
                 WebSocketPath = WebSocketPath,

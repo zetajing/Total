@@ -11,14 +11,14 @@ using Newtonsoft.Json.Serialization;
 
 namespace InduLink.Runtime.Configuration
 {
-    public sealed class IndustrialConfigValidationResult
+    public sealed class InduLinkConfigValidationResult
     {
-        internal IndustrialConfigValidationResult(IReadOnlyList<string> errors) { Errors = errors; }
+        internal InduLinkConfigValidationResult(IReadOnlyList<string> errors) { Errors = errors; }
         public bool IsValid { get { return Errors.Count == 0; } }
         public IReadOnlyList<string> Errors { get; private set; }
     }
 
-    public sealed class IndustrialDeviceRuntimeOptions
+    public sealed class InduLinkDeviceRuntimeOptions
     {
         public int PollingIntervalMilliseconds { get; set; } = 1000;
         public int ReconnectDelayMilliseconds { get; set; } = 3000;
@@ -26,14 +26,14 @@ namespace InduLink.Runtime.Configuration
         public bool ReportOnChangeOnly { get; set; }
     }
 
-    public sealed class IndustrialDeviceConfig
+    public sealed class InduLinkDeviceConfig
     {
         public string Name { get; set; }
         public string Protocol { get; set; }
         public string DeviceId { get; set; }
         public string PointsFile { get; set; }
         public bool Enabled { get; set; } = true;
-        public IndustrialDeviceRuntimeOptions Runtime { get; set; } = new IndustrialDeviceRuntimeOptions();
+        public InduLinkDeviceRuntimeOptions Runtime { get; set; } = new InduLinkDeviceRuntimeOptions();
         public IProtocolSettings Settings { get; set; }
 
         public string EffectiveDeviceId
@@ -49,11 +49,11 @@ namespace InduLink.Runtime.Configuration
         }
     }
 
-    public sealed class IndustrialSdkConfig
+    public sealed class InduLinkSdkConfig
     {
-        public List<IndustrialDeviceConfig> Devices { get; set; } = new List<IndustrialDeviceConfig>();
+        public List<InduLinkDeviceConfig> Devices { get; set; } = new List<InduLinkDeviceConfig>();
 
-        public IndustrialDeviceConfig FindDevice(string name)
+        public InduLinkDeviceConfig FindDevice(string name)
         {
             if (string.IsNullOrWhiteSpace(name)) throw new ArgumentException("Device name cannot be empty.", nameof(name));
             var device = Devices.FirstOrDefault(item => item != null && string.Equals(item.Name, name, StringComparison.OrdinalIgnoreCase));
@@ -61,10 +61,10 @@ namespace InduLink.Runtime.Configuration
             return device;
         }
 
-        public IndustrialConfigValidationResult Validate(
+        public InduLinkConfigValidationResult Validate(
             string configDirectory,
-            IndustrialProtocolRegistry registry,
-            IIndustrialLogger logger = null)
+            InduLinkProtocolRegistry registry,
+            IInduLinkLogger logger = null)
         {
             if (registry == null) throw new ArgumentNullException(nameof(registry));
             var errors = new List<string>();
@@ -87,7 +87,7 @@ namespace InduLink.Runtime.Configuration
                     if (device.Runtime.OperationTimeoutMilliseconds <= 0) errors.Add(label + ".runtime.operationTimeoutMilliseconds 必须大于 0。");
                 }
 
-                IIndustrialProtocolProvider provider;
+                IInduLinkProtocolProvider provider;
                 if (!registry.TryGet(device.Protocol, out provider))
                 {
                     errors.Add(label + ".protocol 不受支持：" + device.Protocol);
@@ -113,16 +113,16 @@ namespace InduLink.Runtime.Configuration
                 }
                 catch (Exception ex) { errors.Add("设备 '" + device.Name + "' 点位表错误：" + ex.Message); }
             }
-            return new IndustrialConfigValidationResult(errors.AsReadOnly());
+            return new InduLinkConfigValidationResult(errors.AsReadOnly());
         }
     }
 
-    public sealed class IndustrialConfigurationSerializer
+    public sealed class InduLinkConfigurationSerializer
     {
-        private readonly IndustrialProtocolRegistry _registry;
+        private readonly InduLinkProtocolRegistry _registry;
         private readonly JsonSerializer _serializer;
 
-        public IndustrialConfigurationSerializer(IndustrialProtocolRegistry registry)
+        public InduLinkConfigurationSerializer(InduLinkProtocolRegistry registry)
         {
             _registry = registry ?? throw new ArgumentNullException(nameof(registry));
             _serializer = JsonSerializer.Create(new JsonSerializerSettings
@@ -133,33 +133,33 @@ namespace InduLink.Runtime.Configuration
             });
         }
 
-        public IndustrialSdkConfig Load(string filePath)
+        public InduLinkSdkConfig Load(string filePath)
         {
             if (string.IsNullOrWhiteSpace(filePath)) throw new ArgumentException("Config path cannot be empty.", nameof(filePath));
             return Parse(File.ReadAllText(filePath, Encoding.UTF8));
         }
 
-        public IndustrialSdkConfig Parse(string json)
+        public InduLinkSdkConfig Parse(string json)
         {
             if (string.IsNullOrWhiteSpace(json)) throw new ArgumentException("Config JSON cannot be empty.", nameof(json));
             var root = JObject.Parse(json);
             var devicesToken = root["devices"] as JArray;
             if (devicesToken == null) throw new JsonSerializationException("Root property 'devices' must be an array.");
-            var result = new IndustrialSdkConfig();
+            var result = new InduLinkSdkConfig();
             foreach (var token in devicesToken.OfType<JObject>()) result.Devices.Add(ParseDevice(token));
             if (result.Devices.Count != devicesToken.Count) throw new JsonSerializationException("devices cannot contain null or non-object values.");
             return result;
         }
 
-        public string Serialize(IndustrialSdkConfig config)
+        public string Serialize(InduLinkSdkConfig config)
         {
             if (config == null) throw new ArgumentNullException(nameof(config));
             var devices = new JArray();
-            foreach (var device in config.Devices ?? new List<IndustrialDeviceConfig>()) devices.Add(SerializeDevice(device));
+            foreach (var device in config.Devices ?? new List<InduLinkDeviceConfig>()) devices.Add(SerializeDevice(device));
             return new JObject { ["devices"] = devices }.ToString(Formatting.Indented, Array.Empty<JsonConverter>());
         }
 
-        public void Save(IndustrialSdkConfig config, string filePath)
+        public void Save(InduLinkSdkConfig config, string filePath)
         {
             if (string.IsNullOrWhiteSpace(filePath)) throw new ArgumentException("Config path cannot be empty.", nameof(filePath));
             var fullPath = Path.GetFullPath(filePath);
@@ -182,7 +182,7 @@ namespace InduLink.Runtime.Configuration
             return DeserializeSettings(provider, token);
         }
 
-        private IndustrialDeviceConfig ParseDevice(JObject token)
+        private InduLinkDeviceConfig ParseDevice(JObject token)
         {
             var protocol = RequiredText(token, "protocol");
             var provider = _registry.Get(protocol);
@@ -190,19 +190,19 @@ namespace InduLink.Runtime.Configuration
             var settingsToken = token["settings"] as JObject;
             if (runtimeToken == null) throw new JsonSerializationException("Device runtime must be an object.");
             if (settingsToken == null) throw new JsonSerializationException("Device settings must be an object.");
-            return new IndustrialDeviceConfig
+            return new InduLinkDeviceConfig
             {
                 Name = RequiredText(token, "name"),
                 Protocol = protocol,
                 DeviceId = OptionalText(token, "deviceId"),
                 PointsFile = RequiredText(token, "pointsFile"),
                 Enabled = token.Value<bool?>("enabled") ?? true,
-                Runtime = runtimeToken.ToObject<IndustrialDeviceRuntimeOptions>(_serializer) ?? new IndustrialDeviceRuntimeOptions(),
+                Runtime = runtimeToken.ToObject<InduLinkDeviceRuntimeOptions>(_serializer) ?? new InduLinkDeviceRuntimeOptions(),
                 Settings = DeserializeSettings(provider, settingsToken),
             };
         }
 
-        private JObject SerializeDevice(IndustrialDeviceConfig device)
+        private JObject SerializeDevice(InduLinkDeviceConfig device)
         {
             if (device == null) throw new JsonSerializationException("devices cannot contain null values.");
             var provider = _registry.Get(device.Protocol);
@@ -215,19 +215,19 @@ namespace InduLink.Runtime.Configuration
             if (!string.IsNullOrWhiteSpace(device.DeviceId)) result["deviceId"] = device.DeviceId;
             result["pointsFile"] = device.PointsFile;
             result["enabled"] = device.Enabled;
-            result["runtime"] = JObject.FromObject(device.Runtime ?? new IndustrialDeviceRuntimeOptions(), _serializer);
+            result["runtime"] = JObject.FromObject(device.Runtime ?? new InduLinkDeviceRuntimeOptions(), _serializer);
             result["settings"] = JObject.FromObject(device.Settings, _serializer);
             return result;
         }
 
-        private IProtocolSettings DeserializeSettings(IIndustrialProtocolProvider provider, JObject token)
+        private IProtocolSettings DeserializeSettings(IInduLinkProtocolProvider provider, JObject token)
         {
             var settings = token.ToObject(provider.SettingsType, _serializer) as IProtocolSettings;
             EnsureSettingsType(provider, settings);
             return settings;
         }
 
-        private static void EnsureSettingsType(IIndustrialProtocolProvider provider, IProtocolSettings settings)
+        private static void EnsureSettingsType(IInduLinkProtocolProvider provider, IProtocolSettings settings)
         {
             if (settings == null || settings.GetType() != provider.SettingsType)
                 throw new JsonSerializationException("Settings type does not match protocol '" + provider.Protocol + "'.");

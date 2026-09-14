@@ -23,7 +23,7 @@ namespace InduLink.Storage
     /// 方便以后排查字节序、数据类型转换等问题。
     /// </para>
     /// </summary>
-    public sealed class IndustrialDataRecord
+    public sealed class InduLinkDataRecord
     {
         /// <summary>数据库自增主键。新记录写入前为 0，从历史表查询时由数据库赋值。</summary>
         public long Id { get; set; }
@@ -53,12 +53,12 @@ namespace InduLink.Storage
         /// 把 SDK 的读取结果转换为不依赖具体 PLC 类型的数据库记录。
         /// 这个转换在数据进入后台队列之前完成，后台写库线程只需要处理统一模型。
         /// </summary>
-        public static IndustrialDataRecord FromDataValue(ProtocolKind protocol, string deviceId, DataValue value)
+        public static InduLinkDataRecord FromDataValue(ProtocolKind protocol, string deviceId, DataValue value)
         {
             if (string.IsNullOrWhiteSpace(deviceId)) throw new ArgumentException("Device ID cannot be null or empty.", nameof(deviceId));
             if (value == null) throw new ArgumentNullException(nameof(value));
 
-            return new IndustrialDataRecord
+            return new InduLinkDataRecord
             {
                 Protocol = protocol,
                 DeviceId = deviceId,
@@ -134,7 +134,7 @@ namespace InduLink.Storage
 
     public sealed class HistoryPageResult
     {
-        public IReadOnlyList<IndustrialDataRecord> Records { get; set; }
+        public IReadOnlyList<InduLinkDataRecord> Records { get; set; }
         public long TotalCount { get; set; }
         public int PageNumber { get; set; }
         public int PageSize { get; set; }
@@ -157,12 +157,12 @@ namespace InduLink.Storage
         public IReadOnlyList<string> Addresses { get; set; }
     }
 
-    public interface IIndustrialHistoryManagementStore
+    public interface IInduLinkHistoryManagementStore
     {
         Task<HistoryPageResult> QueryPageAsync(HistoryPageRequest request, CancellationToken cancellationToken);
         Task<HistorySummary> GetSummaryAsync(HistoryQueryFilter filter, CancellationToken cancellationToken);
         Task<HistoryFilterOptions> GetFilterOptionsAsync(string deviceId, int maxItems, CancellationToken cancellationToken);
-        Task<IReadOnlyList<IndustrialDataRecord>> GetLatestValuesAsync(HistoryQueryFilter filter, int maxRows, CancellationToken cancellationToken);
+        Task<IReadOnlyList<InduLinkDataRecord>> GetLatestValuesAsync(HistoryQueryFilter filter, int maxRows, CancellationToken cancellationToken);
     }
 
     /// <summary>
@@ -173,7 +173,7 @@ namespace InduLink.Storage
     /// 阻止设备通信、急停或联锁逻辑继续运行。
     /// </para>
     /// </summary>
-    public interface IIndustrialDataStore : IDisposable
+    public interface IInduLinkDataStore : IDisposable
     {
         /// <summary>
         /// 检查数据库连接并创建存储所需的数据表。
@@ -185,12 +185,12 @@ namespace InduLink.Storage
         /// 在一个数据库事务中批量写入历史记录。
         /// 批量写入可以减少频繁打开事务带来的开销。
         /// </summary>
-        Task WriteAsync(IReadOnlyCollection<IndustrialDataRecord> records, CancellationToken cancellationToken);
+        Task WriteAsync(IReadOnlyCollection<InduLinkDataRecord> records, CancellationToken cancellationToken);
 
         /// <summary>
         /// 按条件查询历史记录，结果按时间降序排列。
         /// </summary>
-        Task<IReadOnlyList<IndustrialDataRecord>> QueryAsync(HistoryQueryFilter filter, CancellationToken cancellationToken);
+        Task<IReadOnlyList<InduLinkDataRecord>> QueryAsync(HistoryQueryFilter filter, CancellationToken cancellationToken);
 
         /// <summary>
         /// 按条件删除历史记录，返回实际删除的行数。
@@ -202,13 +202,13 @@ namespace InduLink.Storage
     /// Demo 和历史管理页所需的完整存储能力。
     /// SQL Server 与 MySQL 提供程序实现同一契约，调用方无需分支查询逻辑。
     /// </summary>
-    public interface IIndustrialHistoryStore : IIndustrialDataStore, IIndustrialHistoryManagementStore
+    public interface IInduLinkHistoryStore : IInduLinkDataStore, IInduLinkHistoryManagementStore
     {
         /// <summary>读取最新的若干条历史记录，按 Id 降序。</summary>
-        Task<IReadOnlyList<IndustrialDataRecord>> ReadLatestAsync(int maxRows, CancellationToken cancellationToken);
+        Task<IReadOnlyList<InduLinkDataRecord>> ReadLatestAsync(int maxRows, CancellationToken cancellationToken);
 
         /// <summary>读取指定 Id 之后的记录，按 Id 升序，用于增量刷新。</summary>
-        Task<IReadOnlyList<IndustrialDataRecord>> ReadAfterAsync(long afterId, int maxRows, CancellationToken cancellationToken);
+        Task<IReadOnlyList<InduLinkDataRecord>> ReadAfterAsync(long afterId, int maxRows, CancellationToken cancellationToken);
     }
 
     /// <summary>
@@ -224,15 +224,15 @@ namespace InduLink.Storage
         public string ConnectionString { get; set; }
 
         /// <summary>
-        /// 历史表名，格式为 schema.table，例如 dbo.IndustrialDataHistory。
+        /// 历史表名，格式为 schema.table，例如 dbo.InduLinkDataHistory。
         /// 表名会经过严格校验后才拼接到建表 SQL 中。
         /// </summary>
-        public string TableName { get; set; } = "dbo.IndustrialDataHistory";
+        public string TableName { get; set; } = "dbo.InduLinkDataHistory";
 
         /// <summary>SQL 命令超时秒数。设置超时可以避免数据库异常时无限等待。</summary>
         public int CommandTimeoutSeconds { get; set; } = 15;
 
-        internal SqlServerIndustrialDataStore.SqlTableIdentifier ValidateAndGetTable()
+        internal SqlServerInduLinkDataStore.SqlTableIdentifier ValidateAndGetTable()
         {
             // 尽早验证配置，让错误在启动数据库记录功能时暴露，而不是等到第一次采集后才出现。
             if (string.IsNullOrWhiteSpace(ConnectionString))
@@ -245,7 +245,7 @@ namespace InduLink.Storage
                 throw new InvalidOperationException("SQL 命令超时必须大于 0 秒。");
             }
 
-            return SqlServerIndustrialDataStore.SqlTableIdentifier.Parse(TableName);
+            return SqlServerInduLinkDataStore.SqlTableIdentifier.Parse(TableName);
         }
     }
 

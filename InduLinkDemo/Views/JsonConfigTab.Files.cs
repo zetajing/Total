@@ -35,7 +35,7 @@ namespace InduLinkDemo.Views
             return config.FindDevice(GetSelectedDeviceName()).ResolvePointsFile(Path.GetDirectoryName(_deviceConfigPath));
         }
 
-        private void RefreshDeviceList(IndustrialSdkConfig config)
+        private void RefreshDeviceList(InduLinkSdkConfig config)
         {
             if (config == null) throw new ArgumentNullException(nameof(config));
             var currentName = DeviceNameComboBox.SelectedItem as string;
@@ -163,7 +163,7 @@ namespace InduLinkDemo.Views
         {
             PointEditorGrid.CommitEdit(DataGridEditingUnit.Cell, true);
             PointEditorGrid.CommitEdit(DataGridEditingUnit.Row, true);
-            var tags = new List<IndustrialTag>();
+            var tags = new List<InduLinkTag>();
             var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var row in _pointRows.Where(item => item != null && (!string.IsNullOrWhiteSpace(item.Name) || !string.IsNullOrWhiteSpace(item.Address))))
             {
@@ -175,7 +175,7 @@ namespace InduLinkDemo.Views
                 else if (!Enum.TryParse(row.Type, true, out dataType))
                     throw new InvalidOperationException("不支持的点位类型：" + row.Type);
                 if (row.Length == 0) throw new InvalidOperationException("点位长度必须大于 0：" + name);
-                tags.Add(new IndustrialTag(
+                tags.Add(new InduLinkTag(
                     RequireText(row.Address, "点位地址不能为空。"),
                     dataType,
                     row.Length,

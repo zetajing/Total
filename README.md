@@ -62,7 +62,7 @@ using (var client = new ModbusTcpClient(new ModbusTcpClientOptions
 配置驱动的多设备程序使用聚合入口：
 
 ```csharp
-var sdk = IndustrialSdk.CreateDefault(logger);
+var sdk = InduLinkSdk.CreateDefault(logger);
 var config = sdk.LoadConfiguration("Config/devices.json");
 var validation = config.Validate(
     Path.GetDirectoryName(Path.GetFullPath("Config/devices.json")),

@@ -18,7 +18,7 @@ namespace InduLinkDemo
             Dispatcher dispatcher,
             AppLogger demoLogger,
             AppLogger sdkLogger,
-            IndustrialApplicationRuntime runtime,
+            InduLinkApplicationRuntime runtime,
             NetworkServicesRuntime networkServices,
             UiStateStore uiStateStore,
             DemoUiState uiState,
@@ -39,7 +39,7 @@ namespace InduLinkDemo
         public Dispatcher Dispatcher { get; }
         public AppLogger DemoLogger { get; }
         public AppLogger SdkLogger { get; }
-        public IndustrialApplicationRuntime Runtime { get; }
+        public InduLinkApplicationRuntime Runtime { get; }
         public NetworkServicesRuntime NetworkServices { get; }
         public UiStateStore UiStateStore { get; }
         public DemoUiState UiState { get; }
@@ -49,7 +49,7 @@ namespace InduLinkDemo
         /// Shared database recorder. Set by the Database tab when user enables recording.
         /// Protocol tabs call <see cref="QueueDatabaseValues"/> to push readings into the background queue.
         /// </summary>
-        public BufferedIndustrialDataRecorder DatabaseRecorder { get; set; }
+        public BufferedInduLinkDataRecorder DatabaseRecorder { get; set; }
 
         /// <summary>
         /// Shared thread-safe flag indicating whether database recording is enabled.
@@ -101,7 +101,7 @@ namespace InduLinkDemo
         /// Does nothing if database recording is not enabled.
         /// </summary>
         public void QueueDatabaseValues(
-            InduLink.Abstractions.IIndustrialClient client,
+            InduLink.Abstractions.IInduLinkClient client,
             System.Collections.Generic.IReadOnlyCollection<InduLink.Abstractions.DataValue> values)
         {
             var recorder = DatabaseRecorder;

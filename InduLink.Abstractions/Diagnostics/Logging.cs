@@ -6,7 +6,7 @@ namespace InduLink.Diagnostics
     ///     工业通信库的日志记录接口。
     ///     定义了一组标准日志级别的方法，用于在整个工业通信 SDK 中记录诊断信息。
     /// </summary>
-    public interface IIndustrialLogger
+    public interface IInduLinkLogger
     {
         /// <summary>
         ///     记录一条详细的跟踪日志。
@@ -42,18 +42,18 @@ namespace InduLink.Diagnostics
     ///     空日志记录器的实现。
     ///     所有日志方法均为空操作，不产生任何输出；适用于禁用日志记录或单元测试场景。
     /// </summary>
-    public sealed class NullIndustrialLogger : IIndustrialLogger
+    public sealed class NullInduLinkLogger : IInduLinkLogger
     {
         /// <summary>
-        ///     获取 <see cref="NullIndustrialLogger"/> 的全局单例实例。
+        ///     获取 <see cref="NullInduLinkLogger"/> 的全局单例实例。
         /// </summary>
-        public static readonly NullIndustrialLogger Instance = new NullIndustrialLogger();
+        public static readonly NullInduLinkLogger Instance = new NullInduLinkLogger();
 
         /// <summary>
         ///     私有构造函数，防止外部直接实例化。
         ///     应通过 <see cref="Instance"/> 属性获取单例。
         /// </summary>
-        private NullIndustrialLogger()
+        private NullInduLinkLogger()
         {
         }
 
@@ -96,7 +96,7 @@ namespace InduLink.Diagnostics
     ///     将日志消息委托给 .NET 的 <see cref="System.Diagnostics.Trace"/> 类输出，
     ///     适用于已配置 Trace 侦听器的桌面、服务或 Web 应用程序。
     /// </summary>
-    public sealed class TraceIndustrialLogger : IIndustrialLogger
+    public sealed class TraceInduLinkLogger : IInduLinkLogger
     {
         /// <summary>
         ///     记录跟踪日志。

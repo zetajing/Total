@@ -95,22 +95,22 @@ namespace InduLinkDemo.Services
             ContractResolver = new CamelCasePropertyNamesContractResolver(),
         };
 
-        private readonly IndustrialSdk _sdk;
-        private readonly IIndustrialLogger _logger;
+        private readonly InduLinkSdk _sdk;
+        private readonly IInduLinkLogger _logger;
         private readonly Dictionary<JsonConfigurationDocument, JsonSchema> _schemas =
             new Dictionary<JsonConfigurationDocument, JsonSchema>();
 
         public JsonConfigurationValidationService(
-            IndustrialSdk sdk,
+            InduLinkSdk sdk,
             string configDirectory,
-            IIndustrialLogger logger = null)
+            IInduLinkLogger logger = null)
         {
             _sdk = sdk ?? throw new ArgumentNullException(nameof(sdk));
             ConfigDirectory = Path.GetFullPath(
                 string.IsNullOrWhiteSpace(configDirectory)
                     ? throw new ArgumentException("Config directory cannot be empty.", nameof(configDirectory))
                     : configDirectory);
-            _logger = logger ?? NullIndustrialLogger.Instance;
+            _logger = logger ?? NullInduLinkLogger.Instance;
         }
 
         public string ConfigDirectory { get; private set; }
@@ -237,7 +237,7 @@ namespace InduLinkDemo.Services
                 ConfigDirectory,
                 true);
 
-            IndustrialSdkConfig config = null;
+            InduLinkSdkConfig config = null;
             try { config = _sdk.ParseConfiguration(devicesJson); }
             catch { }
 
@@ -319,7 +319,7 @@ namespace InduLinkDemo.Services
         }
 
         private void ValidateDeviceSemantics(
-            IndustrialSdkConfig config,
+            InduLinkSdkConfig config,
             JsonConfigurationValidationResult result)
         {
             if (config.Devices == null || config.Devices.Count == 0)

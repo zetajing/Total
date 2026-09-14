@@ -293,10 +293,10 @@ namespace InduLink.Tests
             public bool Retain { get; }
         }
 
-        private sealed class FakeTagGateway : IIndustrialTagGateway
+        private sealed class FakeTagGateway : IInduLinkTagGateway
         {
             private int _readCallCount;
-            public IndustrialTagGatewayOptions Options { get; } = new IndustrialTagGatewayOptions();
+            public InduLinkTagGatewayOptions Options { get; } = new InduLinkTagGatewayOptions();
             public IReadOnlyList<TagGatewayDevice> Devices { get; } = new[]
             {
                 new TagGatewayDevice("plc", ConnectionStatus.Connected, DateTimeOffset.UtcNow, 0, null),
@@ -338,13 +338,13 @@ namespace InduLink.Tests
 #pragma warning restore CS0067
         }
 
-        private sealed class BlockingTagGateway : IIndustrialTagGateway
+        private sealed class BlockingTagGateway : IInduLinkTagGateway
         {
             private readonly TaskCompletionSource<IReadOnlyList<TagGatewayValue>> _readCompletion =
                 new TaskCompletionSource<IReadOnlyList<TagGatewayValue>>(TaskCreationOptions.RunContinuationsAsynchronously);
             private int _readCallCount;
 
-            public IndustrialTagGatewayOptions Options { get; } = new IndustrialTagGatewayOptions();
+            public InduLinkTagGatewayOptions Options { get; } = new InduLinkTagGatewayOptions();
             public IReadOnlyList<TagGatewayDevice> Devices { get; } = new TagGatewayDevice[0];
             public int ReadCallCount { get { return Volatile.Read(ref _readCallCount); } }
             public event EventHandler<TagGatewayValuesChangedEventArgs> ValuesChanged;

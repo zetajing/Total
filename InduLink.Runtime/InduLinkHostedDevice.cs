@@ -9,12 +9,12 @@ using InduLink.Runtime.Configuration;
 namespace InduLink.Runtime
 {
     /// <summary>表示 DeviceHost 管理的一台设备，并代理按点位名称的读写操作。</summary>
-    public sealed class IndustrialHostedDevice : IDisposable
+    public sealed class InduLinkHostedDevice : IDisposable
     {
-        private readonly IndustrialDeviceConfig _config;
-        private readonly Action<IndustrialDeviceStateChangedEventArgs> _stateChanged;
-        private readonly Action<IndustrialDeviceValuesEventArgs> _valuesReceived;
-        private readonly IIndustrialLogger _logger;
+        private readonly InduLinkDeviceConfig _config;
+        private readonly Action<InduLinkDeviceStateChangedEventArgs> _stateChanged;
+        private readonly Action<InduLinkDeviceValuesEventArgs> _valuesReceived;
+        private readonly IInduLinkLogger _logger;
         private readonly SemaphoreSlim _lifecycleGate = new SemaphoreSlim(1, 1);
         private CancellationTokenSource _runCancellation;
         private Task _reconnectTask;
@@ -23,25 +23,25 @@ namespace InduLink.Runtime
         private int _started;
         private int _disposed;
 
-        internal IndustrialHostedDevice(
-            IndustrialDeviceConfig config,
-            IndustrialConfiguredClient device,
-            Action<IndustrialDeviceStateChangedEventArgs> stateChanged,
-            Action<IndustrialDeviceValuesEventArgs> valuesReceived,
-            IIndustrialLogger logger)
+        internal InduLinkHostedDevice(
+            InduLinkDeviceConfig config,
+            InduLinkConfiguredClient device,
+            Action<InduLinkDeviceStateChangedEventArgs> stateChanged,
+            Action<InduLinkDeviceValuesEventArgs> valuesReceived,
+            IInduLinkLogger logger)
         {
             _config = config ?? throw new ArgumentNullException(nameof(config));
             Device = device ?? throw new ArgumentNullException(nameof(device));
             _stateChanged = stateChanged ?? throw new ArgumentNullException(nameof(stateChanged));
             _valuesReceived = valuesReceived ?? throw new ArgumentNullException(nameof(valuesReceived));
-            _logger = logger ?? NullIndustrialLogger.Instance;
+            _logger = logger ?? NullInduLinkLogger.Instance;
         }
 
         /// <summary>获取 devices.json 中的设备配置。</summary>
-        public IndustrialDeviceConfig Config { get { return _config; } }
+        public InduLinkDeviceConfig Config { get { return _config; } }
 
         /// <summary>获取已加载点位表和协议客户端的设备运行时。</summary>
-        public IndustrialConfiguredClient Device { get; private set; }
+        public InduLinkConfiguredClient Device { get; private set; }
 
         /// <summary>获取最近一次连接或轮询错误。</summary>
         public string LastError { get { return _lastError; } }
@@ -65,7 +65,7 @@ namespace InduLink.Runtime
         }
 
         /// <summary>读取该设备点位表中的全部点位。</summary>
-        public Task<IndustrialTagReadResult> ReadManyAsync(CancellationToken cancellationToken = default)
+        public Task<InduLinkTagReadResult> ReadManyAsync(CancellationToken cancellationToken = default)
         {
             return Device.ReadManyAsync(cancellationToken);
         }
@@ -84,7 +84,7 @@ namespace InduLink.Runtime
 
         internal async Task StartAsync(CancellationToken cancellationToken)
         {
-            if (Volatile.Read(ref _disposed) != 0) throw new ObjectDisposedException(nameof(IndustrialHostedDevice));
+            if (Volatile.Read(ref _disposed) != 0) throw new ObjectDisposedException(nameof(InduLinkHostedDevice));
             if (Interlocked.CompareExchange(ref _started, 1, 0) != 0)
             {
                 return;
@@ -321,7 +321,7 @@ namespace InduLink.Runtime
         {
             try
             {
-                _valuesReceived(new IndustrialDeviceValuesEventArgs(Device.DeviceName, Device.Tags.Tags, args.Values, args.Timestamp));
+                _valuesReceived(new InduLinkDeviceValuesEventArgs(Device.DeviceName, Device.Tags.Tags, args.Values, args.Timestamp));
             }
             catch (Exception ex)
             {
@@ -331,15 +331,15 @@ namespace InduLink.Runtime
 
         private void RaiseStateChanged()
         {
-            _stateChanged(new IndustrialDeviceStateChangedEventArgs(Device.DeviceName, Health, _lastError));
+            _stateChanged(new InduLinkDeviceStateChangedEventArgs(Device.DeviceName, Health, _lastError));
         }
     }
 
     /// <summary>提供托管设备状态变化时的健康快照和错误信息。</summary>
-    public sealed class IndustrialDeviceStateChangedEventArgs : EventArgs
+    public sealed class InduLinkDeviceStateChangedEventArgs : EventArgs
     {
         /// <summary>创建设备状态变化事件。</summary>
-        public IndustrialDeviceStateChangedEventArgs(string deviceName, HealthSnapshot health, string errorMessage)
+        public InduLinkDeviceStateChangedEventArgs(string deviceName, HealthSnapshot health, string errorMessage)
         {
             DeviceName = deviceName;
             Health = health;
@@ -357,10 +357,10 @@ namespace InduLink.Runtime
     }
 
     /// <summary>提供托管设备一轮批量读取的点位和数据值。</summary>
-    public sealed class IndustrialDeviceValuesEventArgs : EventArgs
+    public sealed class InduLinkDeviceValuesEventArgs : EventArgs
     {
         /// <summary>创建设备批量读取事件。</summary>
-        public IndustrialDeviceValuesEventArgs(string deviceName, IReadOnlyList<IndustrialTag> tags, IReadOnlyList<DataValue> values, DateTimeOffset timestamp)
+        public InduLinkDeviceValuesEventArgs(string deviceName, IReadOnlyList<InduLinkTag> tags, IReadOnlyList<DataValue> values, DateTimeOffset timestamp)
         {
             DeviceName = deviceName;
             Tags = tags ?? throw new ArgumentNullException(nameof(tags));
@@ -372,7 +372,7 @@ namespace InduLink.Runtime
         public string DeviceName { get; private set; }
 
         /// <summary>获取与 Values 索引对应的点位定义。</summary>
-        public IReadOnlyList<IndustrialTag> Tags { get; private set; }
+        public IReadOnlyList<InduLinkTag> Tags { get; private set; }
 
         /// <summary>获取本轮批量读取的数据值。</summary>
         public IReadOnlyList<DataValue> Values { get; private set; }

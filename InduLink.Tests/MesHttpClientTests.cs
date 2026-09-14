@@ -323,7 +323,7 @@ namespace InduLink.Tests
             }
         }
 
-        private sealed class RecordingLogger : IIndustrialLogger
+        private sealed class RecordingLogger : IInduLinkLogger
         {
             public IList<string> Messages { get; } = new List<string>();
             public void Trace(string message) { Messages.Add(message); }

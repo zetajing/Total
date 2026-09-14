@@ -5,10 +5,10 @@
 ## 使用路线
 
 - 只连接一种 PLC：引用对应协议程序集，直接创建 `Options + Client`。
-- 配置驱动、多设备运行：引用 `InduLink`，使用 `IndustrialSdk`、`IndustrialDeviceHost`。
+- 配置驱动、多设备运行：引用 `InduLink`，使用 `InduLinkSdk`、`InduLinkDeviceHost`。
 - 只做 MES JSON：引用 `InduLink.Mes.Http`。
 - 只做 TCP/Socket：引用 `InduLink.Transport`。
-- 需要历史数据：业务层依赖 `IIndustrialHistoryStore`，数据库选择只放在创建入口。
+- 需要历史数据：业务层依赖 `IInduLinkHistoryStore`，数据库选择只放在创建入口。
 
 SDK 类库当前目标框架为 `net8.0`，WPF/WinForms 应用目标框架为 `net8.0-windows`，Snap7Server 为 x86 的 `net8.0` 控制台项目。快捷扩展、Tag 和轮询位于 `InduLink.Runtime`；配置位于 `InduLink.Runtime.Configuration`；存储公共类型位于 `InduLink.Storage`。
 
@@ -28,12 +28,12 @@ SDK 类库当前目标框架为 `net8.0`，WPF/WinForms 应用目标框架为 `n
 | `InduLink.Storage.MySql` | MySQL 8.0+ 历史存储提供程序 |
 | `InduLink` | 引用全部内置模块并提供默认注册表 |
 
-这是一次有意的破坏性模块化升级。旧 `SimpleClient`、`IndustrialClientFactory`、`IndustrialDeployment` 和旧配置兼容层已删除，不提供类型转发或旧 JSON 自动迁移。
+这是一次有意的破坏性模块化升级。旧 `SimpleClient`、`InduLinkClientFactory`、`InduLinkDeployment` 和旧配置兼容层已删除，不提供类型转发或旧 JSON 自动迁移。
 
 ## 配置驱动运行
 
 ```csharp
-var sdk = IndustrialSdk.CreateDefault();
+var sdk = InduLinkSdk.CreateDefault();
 var config = sdk.LoadConfiguration("Config/devices.json");
 var validation = config.Validate("Config", sdk.Protocols);
 
@@ -122,24 +122,24 @@ using (var host = sdk.CreateDeviceHost(config, "Config"))
 var capabilities = client.GetCapabilities();
 ```
 
-`ProtocolCapabilities` 描述批量读写、优化批量、位地址、字符串、ByteArray、原始传输、连接诊断、最大批量数量、最大地址跨度、PDU 限制、推荐轮询周期和默认超时。`IndustrialClientBase` 提供默认能力，第三方客户端可实现 `IProtocolCapabilityProvider` 覆盖它。
+`ProtocolCapabilities` 描述批量读写、优化批量、位地址、字符串、ByteArray、原始传输、连接诊断、最大批量数量、最大地址跨度、PDU 限制、推荐轮询周期和默认超时。`InduLinkClientBase` 提供默认能力，第三方客户端可实现 `IProtocolCapabilityProvider` 覆盖它。
 
 ### 地址和批量模型
 
-平台类型包括 `IIndustrialAddress`、`ModbusAddress`、`S7Address`、`McAddress`、`BatchReadOptions`、`BatchWriteOptions`、`BatchSplitPlan`、`IBatchOperationPlanner` 和 `BatchPlanDiagnostics`。对外仍可使用字符串地址，协议内部优先使用强类型解析。
+平台类型包括 `IInduLinkAddress`、`ModbusAddress`、`S7Address`、`McAddress`、`BatchReadOptions`、`BatchWriteOptions`、`BatchSplitPlan`、`IBatchOperationPlanner` 和 `BatchPlanDiagnostics`。对外仍可使用字符串地址，协议内部优先使用强类型解析。
 
 Modbus、S7、MC 已建立读取拆批计划。S7/MC 的 `ReadManyCoreAsync` 已将同一存储区内的连续点位合并为协议级读取：S7 一次读取共享字节区，MC 一次读取连续字/位设备，再按原始请求分别解码。planner 负责物理边界，客户端负责实际报文和结果映射。
 
 ### 自定义协议
 
 ```csharp
-var registry = new IndustrialProtocolRegistry()
+var registry = new InduLinkProtocolRegistry()
     .Register(new MyProtocolProvider());
 
-var sdk = new IndustrialSdk(registry, logger);
+var sdk = new InduLinkSdk(registry, logger);
 ```
 
-自定义 `Settings` 实现 `IProtocolSettings`，Provider 继承 `IndustrialProtocolProvider<TSettings>`。注册表要求 canonical 小写键，拒绝重复键，并在创建客户端前检查 Settings 类型。
+自定义 `Settings` 实现 `IProtocolSettings`，Provider 继承 `InduLinkProtocolProvider<TSettings>`。注册表要求 canonical 小写键，拒绝重复键，并在创建客户端前检查 Settings 类型。
 
 ## 当前限制和验证边界
 

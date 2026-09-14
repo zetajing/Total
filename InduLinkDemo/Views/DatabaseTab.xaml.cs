@@ -21,15 +21,15 @@ namespace InduLinkDemo.Views
         private const string SqlServerProvider = "sqlserver";
         private const string MySqlProvider = "mysql";
         private const string DefaultSqlServerConnectionString = "Server=localhost;Database=UpperComputerDb;Integrated Security=True;Encrypt=True;TrustServerCertificate=True;";
-        private const string DefaultSqlServerTableName = "dbo.IndustrialDataHistory";
+        private const string DefaultSqlServerTableName = "dbo.InduLinkDataHistory";
         private const string DefaultMySqlConnectionString = "Server=localhost;Port=3306;Database=upper_computer;User ID=root;Password=;SslMode=Preferred;DateTimeKind=Utc;";
-        private const string DefaultMySqlTableName = "IndustrialDataHistory";
+        private const string DefaultMySqlTableName = "InduLinkDataHistory";
 
         private DemoAppContext _ctx;
-        private BufferedIndustrialDataRecorder _recorder;
+        private BufferedInduLinkDataRecorder _recorder;
         private CancellationTokenSource _historyCts;
         private Task _historyTask;
-        private IIndustrialHistoryStore _managementStore;
+        private IInduLinkHistoryStore _managementStore;
         private string _selectedProvider = SqlServerProvider;
         private string _sqlServerConnectionString = DefaultSqlServerConnectionString;
         private string _sqlServerTableName = DefaultSqlServerTableName;
@@ -118,7 +118,7 @@ namespace InduLinkDemo.Views
                 await StopRecorderCoreAsync();
                 var settings = CaptureSelectedStoreSettings();
                 var store = CreateStore(settings);
-                var recorder = new BufferedIndustrialDataRecorder(
+                var recorder = new BufferedInduLinkDataRecorder(
                     store,
                     new BufferedDataRecorderOptions
                     {
@@ -209,11 +209,11 @@ namespace InduLinkDemo.Views
             };
         }
 
-        private static IIndustrialHistoryStore CreateStore(DatabaseStoreSettings settings)
+        private static IInduLinkHistoryStore CreateStore(DatabaseStoreSettings settings)
         {
             if (settings.Provider == MySqlProvider)
             {
-                return new MySqlIndustrialDataStore(new MySqlDataStoreOptions
+                return new MySqlInduLinkDataStore(new MySqlDataStoreOptions
                 {
                     ConnectionString = settings.ConnectionString,
                     TableName = settings.TableName,
@@ -221,7 +221,7 @@ namespace InduLinkDemo.Views
                 });
             }
 
-            return new SqlServerIndustrialDataStore(new SqlServerDataStoreOptions
+            return new SqlServerInduLinkDataStore(new SqlServerDataStoreOptions
             {
                 ConnectionString = settings.ConnectionString,
                 TableName = settings.TableName,

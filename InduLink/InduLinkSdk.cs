@@ -14,23 +14,23 @@ using InduLink.Runtime;
 
 namespace InduLink
 {
-    public sealed class IndustrialSdk
+    public sealed class InduLinkSdk
     {
-        private readonly IIndustrialLogger _logger;
+        private readonly IInduLinkLogger _logger;
 
-        public IndustrialSdk(IndustrialProtocolRegistry protocols, IIndustrialLogger logger = null)
+        public InduLinkSdk(InduLinkProtocolRegistry protocols, IInduLinkLogger logger = null)
         {
             Protocols = protocols ?? throw new ArgumentNullException(nameof(protocols));
-            _logger = logger ?? NullIndustrialLogger.Instance;
-            Configuration = new IndustrialConfigurationSerializer(protocols);
+            _logger = logger ?? NullInduLinkLogger.Instance;
+            Configuration = new InduLinkConfigurationSerializer(protocols);
         }
 
-        public IndustrialProtocolRegistry Protocols { get; private set; }
-        public IndustrialConfigurationSerializer Configuration { get; private set; }
+        public InduLinkProtocolRegistry Protocols { get; private set; }
+        public InduLinkConfigurationSerializer Configuration { get; private set; }
 
-        public static IndustrialSdk CreateDefault(IIndustrialLogger logger = null)
+        public static InduLinkSdk CreateDefault(IInduLinkLogger logger = null)
         {
-            return new IndustrialSdk(new IndustrialProtocolRegistry()
+            return new InduLinkSdk(new InduLinkProtocolRegistry()
                 .Register(new ModbusTcpProtocolProvider())
                 .Register(new ModbusRtuProtocolProvider())
                 .Register(new SiemensS7ProtocolProvider())
@@ -41,12 +41,12 @@ namespace InduLink
                 .Register(new AdsProtocolProvider()), logger);
         }
 
-        public IndustrialSdkConfig LoadConfiguration(string filePath) { return Configuration.Load(filePath); }
-        public IndustrialSdkConfig ParseConfiguration(string json) { return Configuration.Parse(json); }
-        public string SerializeConfiguration(IndustrialSdkConfig config) { return Configuration.Serialize(config); }
-        public void SaveConfiguration(IndustrialSdkConfig config, string filePath) { Configuration.Save(config, filePath); }
+        public InduLinkSdkConfig LoadConfiguration(string filePath) { return Configuration.Load(filePath); }
+        public InduLinkSdkConfig ParseConfiguration(string json) { return Configuration.Parse(json); }
+        public string SerializeConfiguration(InduLinkSdkConfig config) { return Configuration.Serialize(config); }
+        public void SaveConfiguration(InduLinkSdkConfig config, string filePath) { Configuration.Save(config, filePath); }
 
-        public IIndustrialClient CreateClient(IndustrialDeviceConfig device)
+        public IInduLinkClient CreateClient(InduLinkDeviceConfig device)
         {
             if (device == null) throw new ArgumentNullException(nameof(device));
             if (device.Runtime == null) throw new ArgumentException("Device runtime cannot be null.", nameof(device));
@@ -55,26 +55,26 @@ namespace InduLink
             return Protocols.Get(device.Protocol).CreateClient(device, _logger);
         }
 
-        public IndustrialConfiguredClient Open(string configFilePath, string deviceName)
+        public InduLinkConfiguredClient Open(string configFilePath, string deviceName)
         {
             if (string.IsNullOrWhiteSpace(configFilePath)) throw new ArgumentException("Config path cannot be empty.", nameof(configFilePath));
             var fullPath = Path.GetFullPath(configFilePath);
             var config = LoadConfiguration(fullPath);
             var device = config.FindDevice(deviceName);
             var tags = TagTable.Load(device.ResolvePointsFile(Path.GetDirectoryName(fullPath)));
-            return new IndustrialConfiguredClient(device.Name, CreateClient(device), tags);
+            return new InduLinkConfiguredClient(device.Name, CreateClient(device), tags);
         }
 
-        public IndustrialDeviceHost CreateDeviceHost(string configFilePath)
+        public InduLinkDeviceHost CreateDeviceHost(string configFilePath)
         {
             if (string.IsNullOrWhiteSpace(configFilePath)) throw new ArgumentException("Config path cannot be empty.", nameof(configFilePath));
             var fullPath = Path.GetFullPath(configFilePath);
             return CreateDeviceHost(LoadConfiguration(fullPath), Path.GetDirectoryName(fullPath));
         }
 
-        public IndustrialDeviceHost CreateDeviceHost(IndustrialSdkConfig config, string configDirectory)
+        public InduLinkDeviceHost CreateDeviceHost(InduLinkSdkConfig config, string configDirectory)
         {
-            return new IndustrialDeviceHost(config, configDirectory, CreateClient, _logger);
+            return new InduLinkDeviceHost(config, configDirectory, CreateClient, _logger);
         }
     }
 }

@@ -11,14 +11,14 @@ namespace InduLink.Tests
     public sealed class JsonConfigurationValidationTests
     {
         private string _configDirectory;
-        private IndustrialSdk _sdk;
+        private InduLinkSdk _sdk;
         private JsonConfigurationValidationService _service;
 
         [SetUp]
         public void SetUp()
         {
             _configDirectory = FindConfigDirectory();
-            _sdk = IndustrialSdk.CreateDefault();
+            _sdk = InduLinkSdk.CreateDefault();
             _service = new JsonConfigurationValidationService(_sdk, _configDirectory);
         }
 

@@ -15,7 +15,7 @@ namespace InduLink.Protocols.Common
             if (type == DataType.ByteArray)
             {
                 var bytes = value as byte[];
-                if (bytes == null) throw new IndustrialDataConversionException("ByteArray requires byte[].");
+                if (bytes == null) throw new InduLinkDataConversionException("ByteArray requires byte[].");
                 return (byte[])bytes.Clone();
             }
             try
@@ -25,7 +25,7 @@ namespace InduLink.Protocols.Common
                     : Convert.ToString(value, CultureInfo.InvariantCulture);
                 return Encoding.UTF8.GetBytes(text ?? string.Empty);
             }
-            catch (Exception ex) { throw new IndustrialDataConversionException("Cannot encode value as " + type + ".", ex); }
+            catch (Exception ex) { throw new InduLinkDataConversionException("Cannot encode value as " + type + ".", ex); }
         }
 
         public static object Decode(DataType type, byte[] bytes)
@@ -50,7 +50,7 @@ namespace InduLink.Protocols.Common
                     default: throw new NotSupportedException("Unsupported text data type: " + type);
                 }
             }
-            catch (Exception ex) { throw new IndustrialDataConversionException("Cannot decode payload as " + type + ".", ex); }
+            catch (Exception ex) { throw new InduLinkDataConversionException("Cannot decode payload as " + type + ".", ex); }
         }
     }
 }

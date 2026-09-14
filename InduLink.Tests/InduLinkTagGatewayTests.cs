@@ -13,7 +13,7 @@ using NUnit.Framework;
 namespace InduLink.Tests
 {
     [TestFixture]
-    public sealed class IndustrialTagGatewayTests
+    public sealed class InduLinkTagGatewayTests
     {
         [Test]
         public void TagTable_PreservesWritableAndDefaultsOldFilesToFalse()
@@ -72,7 +72,7 @@ namespace InduLink.Tests
                     "{\"address\":\"D2\",\"type\":\"Int16\"}]}");
                 var fake = new GatewayFakeClient("device");
                 using (var host = CreateHost(directory, fake))
-                using (var gateway = new IndustrialTagGateway(host))
+                using (var gateway = new InduLinkTagGateway(host))
                 {
                     Assert.That(gateway.GetTags("device").Select(tag => tag.Name), Is.EqualTo(new[] { "ReadOnly", "Setpoint" }));
                     Assert.That(gateway.GetTags("device").All(tag => tag.Address == null), Is.True);
@@ -113,7 +113,7 @@ namespace InduLink.Tests
                 File.WriteAllText(Path.Combine(directory, "points.json"),
                     "{\"tags\":[{\"name\":\"Value\",\"address\":\"D0\",\"type\":\"Int16\"}]}");
                 using (var host = CreateHost(directory, new GatewayFakeClient("device")))
-                using (var gateway = new IndustrialTagGateway(host))
+                using (var gateway = new InduLinkTagGateway(host))
                 {
                     var request = new TagGatewayRawReadItem("device", "D99", DataType.Int16);
                     Assert.ThrowsAsync<UnauthorizedAccessException>(() => gateway.ReadAddressAsync(request));
@@ -140,7 +140,7 @@ namespace InduLink.Tests
                     "{\"tags\":[{\"name\":\"Value\",\"address\":\"DB1.DBD0\",\"type\":\"Int32\"}]}");
                 var fake = new GatewayFakeClient("device") { FailureMessage = "Read DB1.DBD0 failed" };
                 using (var host = CreateHost(directory, fake))
-                using (var gateway = new IndustrialTagGateway(host))
+                using (var gateway = new InduLinkTagGateway(host))
                 {
                     var hidden = await gateway.ReadAsync(new[] { new TagGatewayReadItem("device", "Value") });
                     StringAssert.DoesNotContain("DB1.DBD0", hidden[0].ErrorMessage);
@@ -226,27 +226,27 @@ namespace InduLink.Tests
             return directory;
         }
 
-        private static IndustrialDeviceHost CreateHost(string directory, IIndustrialClient client)
+        private static InduLinkDeviceHost CreateHost(string directory, IInduLinkClient client)
         {
-            var config = new IndustrialSdkConfig
+            var config = new InduLinkSdkConfig
             {
-                Devices = new List<IndustrialDeviceConfig>
+                Devices = new List<InduLinkDeviceConfig>
                 {
-                    new IndustrialDeviceConfig
+                    new InduLinkDeviceConfig
                     {
                         Name = "device",
                         DeviceId = "device",
                         Protocol = "modbus-tcp",
                         PointsFile = "points.json",
                         Enabled = true,
-                        Runtime = new IndustrialDeviceRuntimeOptions(),
+                        Runtime = new InduLinkDeviceRuntimeOptions(),
                     },
                 },
             };
-            return new IndustrialDeviceHost(config, directory, _ => client);
+            return new InduLinkDeviceHost(config, directory, _ => client);
         }
 
-        private sealed class GatewayFakeClient : IIndustrialClient
+        private sealed class GatewayFakeClient : IInduLinkClient
         {
             public GatewayFakeClient(string deviceId) { DeviceId = deviceId; }
             public string DeviceId { get; }

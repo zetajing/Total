@@ -6,9 +6,9 @@ using InduLink.Abstractions;
 
 namespace InduLink.Runtime
 {
-    public sealed class IndustrialConfiguredClient : IDisposable
+    public sealed class InduLinkConfiguredClient : IDisposable
     {
-        public IndustrialConfiguredClient(string deviceName, IIndustrialClient client, TagTable tags)
+        public InduLinkConfiguredClient(string deviceName, IInduLinkClient client, TagTable tags)
         {
             if (string.IsNullOrWhiteSpace(deviceName)) throw new ArgumentException("Device name cannot be empty.", nameof(deviceName));
             DeviceName = deviceName;
@@ -17,7 +17,7 @@ namespace InduLink.Runtime
         }
 
         public string DeviceName { get; private set; }
-        public IIndustrialClient Client { get; private set; }
+        public IInduLinkClient Client { get; private set; }
         public TagTable Tags { get; private set; }
 
         public Task ConnectAsync(CancellationToken cancellationToken = default) { return Client.ConnectAsync(cancellationToken); }
@@ -35,7 +35,7 @@ namespace InduLink.Runtime
             return Client.ReadValueAsync<T>(tag.Address, tag.DataType, tag.Length, cancellationToken);
         }
 
-        public Task<IndustrialTagReadResult> ReadManyAsync(CancellationToken cancellationToken = default)
+        public Task<InduLinkTagReadResult> ReadManyAsync(CancellationToken cancellationToken = default)
         {
             return Client.ReadManyAsync(Tags.Tags, cancellationToken);
         }
@@ -49,8 +49,8 @@ namespace InduLink.Runtime
         public Task WriteManyAsync(IReadOnlyDictionary<string, object> values, CancellationToken cancellationToken = default)
         {
             if (values == null) throw new ArgumentNullException(nameof(values));
-            var writes = new List<IndustrialWrite>();
-            foreach (var value in values) writes.Add(new IndustrialWrite(Tags.Get(value.Key), value.Value));
+            var writes = new List<InduLinkWrite>();
+            foreach (var value in values) writes.Add(new InduLinkWrite(Tags.Get(value.Key), value.Value));
             return Client.WriteManyAsync(writes, cancellationToken);
         }
 

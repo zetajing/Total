@@ -53,7 +53,7 @@ namespace InduLinkDemo.Views
             if (CapabilityTextBlock == null) return;
             var capabilities = _client == null
                 ? ProtocolCapabilities.ForProtocol(GetSelectedProtocolKind())
-                : IndustrialClientPlatformExtensions.GetCapabilities(_client);
+                : InduLinkClientPlatformExtensions.GetCapabilities(_client);
             CapabilityTextBlock.Text = CapabilityDisplayHelper.Format(capabilities);
         }
 
@@ -203,7 +203,7 @@ namespace InduLinkDemo.Views
                     ? "广播报文发送完成（站号 0 不返回响应）。"
                     : "原始 RTU 报文收发完成，响应 CRC 正确。";
             }
-            catch (InduLink.Exceptions.IndustrialTimeoutException ex)
+            catch (InduLink.Exceptions.InduLinkTimeoutException ex)
             {
                 RtuRxTextBox.Text = "接收超时 / 从站无响应";
                 ResultTextBlock.Text = ex.Message;

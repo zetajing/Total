@@ -16,7 +16,7 @@ namespace InduLink.Protocols.OpcUa
         public int SessionTimeoutMilliseconds { get; set; } = 60000;
     }
 
-    public sealed class OpcUaProtocolProvider : IndustrialProtocolProvider<OpcUaSettings>
+    public sealed class OpcUaProtocolProvider : InduLinkProtocolProvider<OpcUaSettings>
     {
         public override string Protocol { get { return "opc-ua"; } }
 
@@ -28,7 +28,7 @@ namespace InduLink.Protocols.OpcUa
                 settings.SessionTimeoutMilliseconds <= 0 ? "sessionTimeoutMilliseconds must be positive." : null);
         }
 
-        protected override IIndustrialClient CreateClient(IndustrialDeviceConfig device, OpcUaSettings settings, IIndustrialLogger logger)
+        protected override IInduLinkClient CreateClient(InduLinkDeviceConfig device, OpcUaSettings settings, IInduLinkLogger logger)
         {
             return new OpcUaClient(new OpcUaClientOptions
             {

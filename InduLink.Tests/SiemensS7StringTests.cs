@@ -28,7 +28,7 @@ namespace InduLink.Tests
             bytes[0] = 60;
             bytes[1] = 61;
 
-            Assert.Throws<IndustrialDataConversionException>(() => S7StringCodec.Decode(bytes, 60));
+            Assert.Throws<InduLinkDataConversionException>(() => S7StringCodec.Decode(bytes, 60));
         }
 
         [TestCase(0)]
@@ -59,7 +59,7 @@ namespace InduLink.Tests
                 Host = "127.0.0.1"
             }))
             {
-                Assert.Throws<IndustrialAddressParseException>(
+                Assert.Throws<InduLinkAddressParseException>(
                     () => client.ReadDbStringAsync("DB2000.DBX6.1", 60));
             }
         }

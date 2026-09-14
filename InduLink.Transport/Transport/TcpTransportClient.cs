@@ -81,7 +81,7 @@ namespace InduLink.Transport
                         CloseClient(client);
                         await IgnoreFailureAsync(connectTask).ConfigureAwait(false);
                         cancellationToken.ThrowIfCancellationRequested();
-                        throw new IndustrialTimeoutException("TCP connect timeout.");
+                        throw new InduLinkTimeoutException("TCP connect timeout.");
                     }
 
                     await connectTask.ConfigureAwait(false);
@@ -100,7 +100,7 @@ namespace InduLink.Transport
             }
             catch (SocketException ex)
             {
-                throw new IndustrialConnectionException("TCP connect failed.", ex);
+                throw new InduLinkConnectionException("TCP connect failed.", ex);
             }
             catch (ObjectDisposedException ex)
             {
@@ -109,7 +109,7 @@ namespace InduLink.Transport
                     throw new ObjectDisposedException(nameof(TcpTransportClient));
                 }
 
-                throw new IndustrialConnectionException("TCP connect was interrupted.", ex);
+                throw new InduLinkConnectionException("TCP connect was interrupted.", ex);
             }
             finally
             {
@@ -150,7 +150,7 @@ namespace InduLink.Transport
                         "TCP send timeout.",
                         cancellationToken).ConfigureAwait(false);
                 }
-                catch (IndustrialTimeoutException)
+                catch (InduLinkTimeoutException)
                 {
                     throw;
                 }
@@ -192,7 +192,7 @@ namespace InduLink.Transport
                         if (remainingTimeout <= 0)
                         {
                             InvalidateConnection(connection);
-                            throw new IndustrialTimeoutException("TCP receive timeout.");
+                            throw new InduLinkTimeoutException("TCP receive timeout.");
                         }
 
                         var read = await AwaitIoAsync(
@@ -204,7 +204,7 @@ namespace InduLink.Transport
                         if (read == 0)
                         {
                             InvalidateConnection(connection);
-                            throw new IndustrialConnectionException("Remote peer closed the connection.");
+                            throw new InduLinkConnectionException("Remote peer closed the connection.");
                         }
 
                         offset += read;
@@ -212,7 +212,7 @@ namespace InduLink.Transport
 
                     return buffer;
                 }
-                catch (InduLinkunicationException)
+                catch (InduLinkCommunicationException)
                 {
                     throw;
                 }
@@ -261,7 +261,7 @@ namespace InduLink.Transport
                     if (read == 0)
                     {
                         InvalidateConnection(connection);
-                        throw new IndustrialConnectionException("Remote peer closed the connection.");
+                        throw new InduLinkConnectionException("Remote peer closed the connection.");
                     }
 
                     if (read != buffer.Length)
@@ -273,7 +273,7 @@ namespace InduLink.Transport
 
                     return new TransportReadResult(buffer, connection.Generation);
                 }
-                catch (InduLinkunicationException)
+                catch (InduLinkCommunicationException)
                 {
                     throw;
                 }
@@ -313,7 +313,7 @@ namespace InduLink.Transport
             InvalidateConnection(connection);
             await IgnoreFailureAsync(operation).ConfigureAwait(false);
             cancellationToken.ThrowIfCancellationRequested();
-            throw new IndustrialTimeoutException(timeoutMessage);
+            throw new InduLinkTimeoutException(timeoutMessage);
         }
 
         private async Task<T> AwaitIoAsync<T>(
@@ -333,7 +333,7 @@ namespace InduLink.Transport
             InvalidateConnection(connection);
             await IgnoreFailureAsync(operation).ConfigureAwait(false);
             cancellationToken.ThrowIfCancellationRequested();
-            throw new IndustrialTimeoutException(timeoutMessage);
+            throw new InduLinkTimeoutException(timeoutMessage);
         }
 
         private async Task<ConnectionState> EnsureConnectedAsync(CancellationToken cancellationToken)
@@ -347,7 +347,7 @@ namespace InduLink.Transport
 
             if (!_options.AutoReconnect)
             {
-                throw new IndustrialConnectionException("TCP client is not connected.");
+                throw new InduLinkConnectionException("TCP client is not connected.");
             }
 
             await ConnectAsync(cancellationToken).ConfigureAwait(false);
@@ -355,7 +355,7 @@ namespace InduLink.Transport
             connection = GetConnectedState();
             if (connection == null)
             {
-                throw new IndustrialConnectionException("TCP client is not connected.");
+                throw new InduLinkConnectionException("TCP client is not connected.");
             }
 
             return connection;
@@ -404,7 +404,7 @@ namespace InduLink.Transport
                 throw new ObjectDisposedException(nameof(TcpTransportClient));
             }
 
-            throw new IndustrialConnectionException(message, innerException);
+            throw new InduLinkConnectionException(message, innerException);
         }
 
         private static bool IsConnectionFailure(Exception exception)

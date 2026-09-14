@@ -61,7 +61,7 @@ namespace InduLink.Protocols.Modbus
         /// <returns>
         /// 解析后的 <see cref="ModbusAddress"/> 对象，包含 Modbus 区域和基于零的偏移地址。
         /// </returns>
-        /// <exception cref="IndustrialAddressParseException">
+        /// <exception cref="InduLinkAddressParseException">
         /// 当地址格式无法识别、地址类型不受支持或地址索引超出范围时抛出。
         /// </exception>
         ModbusAddress ParseAddress(string address);

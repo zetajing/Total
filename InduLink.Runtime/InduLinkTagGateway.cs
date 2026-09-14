@@ -10,7 +10,7 @@ using Newtonsoft.Json.Linq;
 namespace InduLink.Runtime
 {
     /// <summary>控制工业点位向 HTTP、MQTT 和 WebSocket 等远程入口公开时的安全策略。</summary>
-    public sealed class IndustrialTagGatewayOptions
+    public sealed class InduLinkTagGatewayOptions
     {
         /// <summary>是否允许远程写入。点位自身还必须标记为 Writable。</summary>
         public bool EnableRemoteWrites { get; set; }
@@ -23,9 +23,9 @@ namespace InduLink.Runtime
     }
 
     /// <summary>为外部通信入口提供仅按配置点位访问的统一设备网关。</summary>
-    public interface IIndustrialTagGateway
+    public interface IInduLinkTagGateway
     {
-        IndustrialTagGatewayOptions Options { get; }
+        InduLinkTagGatewayOptions Options { get; }
         IReadOnlyList<TagGatewayDevice> Devices { get; }
         IReadOnlyList<TagGatewayTag> GetTags(string deviceName);
         Task<IReadOnlyList<TagGatewayValue>> ReadAsync(IReadOnlyCollection<TagGatewayReadItem> items, CancellationToken cancellationToken = default);
@@ -35,21 +35,21 @@ namespace InduLink.Runtime
         event EventHandler<TagGatewayDeviceStateChangedEventArgs> DeviceStateChanged;
     }
 
-    /// <summary>基于 IndustrialDeviceHost 的默认点位网关实现。</summary>
-    public sealed class IndustrialTagGateway : IIndustrialTagGateway, IDisposable
+    /// <summary>基于 InduLinkDeviceHost 的默认点位网关实现。</summary>
+    public sealed class InduLinkTagGateway : IInduLinkTagGateway, IDisposable
     {
-        private readonly IndustrialDeviceHost _host;
+        private readonly InduLinkDeviceHost _host;
         private int _disposed;
 
-        public IndustrialTagGateway(IndustrialDeviceHost host, IndustrialTagGatewayOptions options = null)
+        public InduLinkTagGateway(InduLinkDeviceHost host, InduLinkTagGatewayOptions options = null)
         {
             _host = host ?? throw new ArgumentNullException(nameof(host));
-            Options = options ?? new IndustrialTagGatewayOptions();
+            Options = options ?? new InduLinkTagGatewayOptions();
             _host.ValuesReceived += HostOnValuesReceived;
             _host.DeviceStateChanged += HostOnDeviceStateChanged;
         }
 
-        public IndustrialTagGatewayOptions Options { get; }
+        public InduLinkTagGatewayOptions Options { get; }
 
         public IReadOnlyList<TagGatewayDevice> Devices
         {
@@ -269,7 +269,7 @@ namespace InduLink.Runtime
             _host.DeviceStateChanged -= HostOnDeviceStateChanged;
         }
 
-        private void HostOnValuesReceived(object sender, IndustrialDeviceValuesEventArgs args)
+        private void HostOnValuesReceived(object sender, InduLinkDeviceValuesEventArgs args)
         {
             var values = new List<TagGatewayValue>();
             var count = Math.Min(args.Tags.Count, args.Values.Count);
@@ -285,7 +285,7 @@ namespace InduLink.Runtime
             }
         }
 
-        private void HostOnDeviceStateChanged(object sender, IndustrialDeviceStateChangedEventArgs args)
+        private void HostOnDeviceStateChanged(object sender, InduLinkDeviceStateChangedEventArgs args)
         {
             var error = args.ErrorMessage ?? args.Health.LastError;
             if (!Options.ExposeRawAddresses && !string.IsNullOrWhiteSpace(error))
@@ -298,7 +298,7 @@ namespace InduLink.Runtime
                 error)));
         }
 
-        private TagGatewayValue CreateValue(string deviceName, IndustrialTag tag, DataValue value)
+        private TagGatewayValue CreateValue(string deviceName, InduLinkTag tag, DataValue value)
         {
             return new TagGatewayValue(
                 deviceName,
@@ -313,7 +313,7 @@ namespace InduLink.Runtime
                 Options.ExposeRawAddresses ? value.Address : null);
         }
 
-        private TagGatewayDevice CreateDeviceSnapshot(IndustrialHostedDevice device)
+        private TagGatewayDevice CreateDeviceSnapshot(InduLinkHostedDevice device)
         {
             var health = device.Health;
             var error = device.LastError ?? health.LastError;
@@ -385,12 +385,12 @@ namespace InduLink.Runtime
 
         private void ThrowIfDisposed()
         {
-            if (Volatile.Read(ref _disposed) != 0) throw new ObjectDisposedException(nameof(IndustrialTagGateway));
+            if (Volatile.Read(ref _disposed) != 0) throw new ObjectDisposedException(nameof(InduLinkTagGateway));
         }
 
         private class ReadWorkItem
         {
-            public ReadWorkItem(int index, IndustrialHostedDevice device, IndustrialTag tag)
+            public ReadWorkItem(int index, InduLinkHostedDevice device, InduLinkTag tag)
             {
                 Index = index;
                 Device = device;
@@ -398,13 +398,13 @@ namespace InduLink.Runtime
             }
 
             public int Index { get; }
-            public IndustrialHostedDevice Device { get; }
-            public IndustrialTag Tag { get; }
+            public InduLinkHostedDevice Device { get; }
+            public InduLinkTag Tag { get; }
         }
 
         private sealed class WriteWorkItem : ReadWorkItem
         {
-            public WriteWorkItem(int index, IndustrialHostedDevice device, IndustrialTag tag, object value)
+            public WriteWorkItem(int index, InduLinkHostedDevice device, InduLinkTag tag, object value)
                 : base(index, device, tag)
             {
                 Value = value;

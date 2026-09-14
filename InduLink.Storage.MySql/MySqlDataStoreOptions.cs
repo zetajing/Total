@@ -12,12 +12,12 @@ namespace InduLink.Storage.MySql
         /// 历史表名。可使用 <c>table</c> 或 <c>database.table</c> 格式；
         /// 标识符只允许字母、数字和下划线。
         /// </summary>
-        public string TableName { get; set; } = "IndustrialDataHistory";
+        public string TableName { get; set; } = "InduLinkDataHistory";
 
         /// <summary>SQL 命令超时秒数。</summary>
         public int CommandTimeoutSeconds { get; set; } = 15;
 
-        internal MySqlIndustrialDataStore.MySqlTableIdentifier ValidateAndGetTable()
+        internal MySqlInduLinkDataStore.MySqlTableIdentifier ValidateAndGetTable()
         {
             if (string.IsNullOrWhiteSpace(ConnectionString))
             {
@@ -29,7 +29,7 @@ namespace InduLink.Storage.MySql
                 throw new InvalidOperationException("SQL 命令超时必须大于 0 秒。");
             }
 
-            return MySqlIndustrialDataStore.MySqlTableIdentifier.Parse(TableName);
+            return MySqlInduLinkDataStore.MySqlTableIdentifier.Parse(TableName);
         }
     }
 }

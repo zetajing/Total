@@ -14,7 +14,7 @@ namespace InduLink.Tests
         [Test]
         public void OperationTimeout_RoundTripsThroughJson()
         {
-            var sdk = IndustrialSdk.CreateDefault();
+            var sdk = InduLinkSdk.CreateDefault();
             var config = sdk.ParseConfiguration("{\"devices\":[{\"name\":\"plc\",\"protocol\":\"modbus-tcp\",\"pointsFile\":\"points.json\",\"enabled\":true,\"runtime\":{\"pollingIntervalMilliseconds\":1000,\"reconnectDelayMilliseconds\":3000,\"operationTimeoutMilliseconds\":1234},\"settings\":{\"host\":\"127.0.0.1\"}}]}");
             Assert.AreEqual(1234, config.Devices[0].Runtime.OperationTimeoutMilliseconds);
             StringAssert.Contains("operationTimeoutMilliseconds", sdk.SerializeConfiguration(config));

@@ -16,15 +16,15 @@ namespace InduLink.Runtime
     /// </summary>
     public sealed class TagTable
     {
-        private readonly Dictionary<string, IndustrialTag> _nameIndexes;
-        private readonly Dictionary<string, IndustrialTag> _addressIndexes;
+        private readonly Dictionary<string, InduLinkTag> _nameIndexes;
+        private readonly Dictionary<string, InduLinkTag> _addressIndexes;
 
         /// <summary>使用给定点位集合创建点位表。</summary>
-        public TagTable(IReadOnlyList<IndustrialTag> tags)
+        public TagTable(IReadOnlyList<InduLinkTag> tags)
         {
             Tags = tags ?? throw new ArgumentNullException(nameof(tags));
-            _nameIndexes = new Dictionary<string, IndustrialTag>(StringComparer.OrdinalIgnoreCase);
-            _addressIndexes = new Dictionary<string, IndustrialTag>(StringComparer.OrdinalIgnoreCase);
+            _nameIndexes = new Dictionary<string, InduLinkTag>(StringComparer.OrdinalIgnoreCase);
+            _addressIndexes = new Dictionary<string, InduLinkTag>(StringComparer.OrdinalIgnoreCase);
 
             foreach (var tag in tags)
             {
@@ -47,7 +47,7 @@ namespace InduLink.Runtime
         }
 
         /// <summary>获取点位表中按原始顺序保存的全部点位。</summary>
-        public IReadOnlyList<IndustrialTag> Tags { get; private set; }
+        public IReadOnlyList<InduLinkTag> Tags { get; private set; }
 
         /// <summary>根据文件扩展名自动加载 JSON 或 CSV 点位表。</summary>
         public static TagTable Load(string filePath)
@@ -158,7 +158,7 @@ namespace InduLink.Runtime
             }
 
             var headers = BuildHeaderIndexes(rows[0]);
-            var tags = new List<IndustrialTag>();
+            var tags = new List<InduLinkTag>();
             for (var i = 1; i < rows.Count; i++)
             {
                 var row = rows[i];
@@ -179,11 +179,11 @@ namespace InduLink.Runtime
         }
 
         /// <summary>按点位名称查找，名称匹配不区分大小写。</summary>
-        public IndustrialTag Get(string name)
+        public InduLinkTag Get(string name)
         {
             if (string.IsNullOrWhiteSpace(name)) throw new ArgumentException("Tag name cannot be null or empty.", nameof(name));
 
-            IndustrialTag tag;
+            InduLinkTag tag;
             if (_nameIndexes.TryGetValue(name, out tag))
             {
                 return tag;
@@ -193,11 +193,11 @@ namespace InduLink.Runtime
         }
 
         /// <summary>按设备地址查找，地址匹配不区分大小写。</summary>
-        public IndustrialTag GetByAddress(string address)
+        public InduLinkTag GetByAddress(string address)
         {
             if (string.IsNullOrWhiteSpace(address)) throw new ArgumentException("Tag address cannot be null or empty.", nameof(address));
 
-            IndustrialTag tag;
+            InduLinkTag tag;
             if (_addressIndexes.TryGetValue(address, out tag))
             {
                 return tag;
@@ -213,7 +213,7 @@ namespace InduLink.Runtime
                 throw new InvalidOperationException("Tag table JSON must contain a tags array.");
             }
 
-            var tags = new List<IndustrialTag>(dto.Tags.Count);
+            var tags = new List<InduLinkTag>(dto.Tags.Count);
             foreach (var tag in dto.Tags)
             {
                 if (tag == null)
@@ -227,7 +227,7 @@ namespace InduLink.Runtime
             return new TagTable(tags);
         }
 
-        private static IndustrialTag CreateTag(string address, string type, string length, string name, string writable)
+        private static InduLinkTag CreateTag(string address, string type, string length, string name, string writable)
         {
             ushort? parsedLength = null;
             if (string.IsNullOrWhiteSpace(length))
@@ -245,7 +245,7 @@ namespace InduLink.Runtime
             return CreateTag(address, type, parsedLength, name, ParseWritable(writable));
         }
 
-        private static IndustrialTag CreateTag(string address, string type, ushort? length, string name, bool writable)
+        private static InduLinkTag CreateTag(string address, string type, ushort? length, string name, bool writable)
         {
             ushort? inlineLength;
             var dataType = ParseDataType(type, out inlineLength);
@@ -255,7 +255,7 @@ namespace InduLink.Runtime
                     inlineLength.Value,
                     length.Value));
 
-            return new IndustrialTag(
+            return new InduLinkTag(
                 address,
                 dataType,
                 inlineLength ?? length.GetValueOrDefault(1),
@@ -279,7 +279,7 @@ namespace InduLink.Runtime
             throw new FormatException("Invalid tag writable value: " + value);
         }
 
-        private static string SerializeTagType(IndustrialTag tag)
+        private static string SerializeTagType(InduLinkTag tag)
         {
             if (tag.DataType == DataType.S7String)
                 return string.Format(CultureInfo.InvariantCulture, "STRING[{0}]", tag.Length);
