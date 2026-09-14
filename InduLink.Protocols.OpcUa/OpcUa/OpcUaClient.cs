@@ -362,6 +362,7 @@ namespace InduLink.Protocols.OpcUa
                 {
                     ApplicationCertificate = new CertificateIdentifier { StoreType = "Directory", StorePath = "%LocalApplicationData%/InduLink/pki/own", SubjectName = "CN=InduLink" },
                     TrustedPeerCertificates = new CertificateTrustList { StoreType = "Directory", StorePath = "%LocalApplicationData%/InduLink/pki/trusted" },
+                    TrustedIssuerCertificates = new CertificateTrustList { StoreType = "Directory", StorePath = "%LocalApplicationData%/InduLink/pki/issuers" },
                     RejectedCertificateStore = new CertificateTrustList { StoreType = "Directory", StorePath = "%LocalApplicationData%/InduLink/pki/rejected" },
                     AutoAcceptUntrustedCertificates = _options.AutoAcceptUntrustedCertificates
                 },
