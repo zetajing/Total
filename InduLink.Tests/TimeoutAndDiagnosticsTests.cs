@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using InduLink.Abstractions;
@@ -91,6 +92,49 @@ namespace InduLink.Tests
             }
         }
 
+        [Test]
+        public async Task BatchRead_UsesLongestExplicitTimeoutAsOverallBudget()
+        {
+            using (var client = new ControlledBatchClient())
+            {
+                var requests = new[]
+                {
+                    new ReadRequest(client.DeviceId, "A", DataType.Int16, timeout: TimeSpan.FromMilliseconds(20)),
+                    new ReadRequest(client.DeviceId, "B", DataType.Int16, timeout: TimeSpan.FromMilliseconds(500)),
+                };
+
+                var operation = client.ReadManyAsync(requests, CancellationToken.None);
+                await client.CoreEntered.Task.ConfigureAwait(false);
+                await Task.Delay(100).ConfigureAwait(false);
+                Assert.That(operation.IsCompleted, Is.False);
+
+                client.Release.TrySetResult(true);
+                var result = await operation.ConfigureAwait(false);
+                Assert.That(result.Values, Has.All.Property(nameof(DataValue.Quality)).EqualTo(QualityStatus.Good));
+            }
+        }
+
+        [Test]
+        public async Task BatchWrite_UsesLongestExplicitTimeoutAsOverallBudget()
+        {
+            using (var client = new ControlledBatchClient())
+            {
+                var requests = new[]
+                {
+                    new WriteRequest(client.DeviceId, "A", DataType.Int16, (short)1, timeout: TimeSpan.FromMilliseconds(20)),
+                    new WriteRequest(client.DeviceId, "B", DataType.Int16, (short)2, timeout: TimeSpan.FromMilliseconds(500)),
+                };
+
+                var operation = client.WriteManyAsync(requests, CancellationToken.None);
+                await client.CoreEntered.Task.ConfigureAwait(false);
+                await Task.Delay(100).ConfigureAwait(false);
+                Assert.That(operation.IsCompleted, Is.False);
+
+                client.Release.TrySetResult(true);
+                await operation.ConfigureAwait(false);
+            }
+        }
+
         private sealed class DelayedClient : InduLinkClientBase
         {
             private readonly int _delay;
@@ -106,6 +150,65 @@ namespace InduLink.Tests
                 return new DataValue(request.Address, request.DataType, (short)1, null, QualityStatus.Good, DateTimeOffset.UtcNow, null);
             }
             protected override async Task WriteCoreAsync(WriteRequest request, CancellationToken cancellationToken) { await Task.Delay(_delay); }
+            protected override void DisposeCore() { }
+        }
+
+        private sealed class ControlledBatchClient : InduLinkClientBase
+        {
+            public ControlledBatchClient()
+                : base("batch-test", ProtocolKind.TcpSocket, new PollingScheduler(), NullInduLinkLogger.Instance, 25) { }
+
+            public TaskCompletionSource<bool> CoreEntered { get; } =
+                new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+            public TaskCompletionSource<bool> Release { get; } =
+                new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+            public override bool IsConnected { get { return true; } }
+
+            protected override Task ConnectCoreAsync(CancellationToken cancellationToken) { return Task.CompletedTask; }
+            protected override Task DisconnectCoreAsync(CancellationToken cancellationToken) { return Task.CompletedTask; }
+
+            protected override Task<DataValue> ReadCoreAsync(ReadRequest request, CancellationToken cancellationToken)
+            {
+                return Task.FromResult(new DataValue(
+                    request.Address,
+                    request.DataType,
+                    (short)1,
+                    null,
+                    QualityStatus.Good,
+                    DateTimeOffset.UtcNow,
+                    null));
+            }
+
+            protected override Task WriteCoreAsync(WriteRequest request, CancellationToken cancellationToken)
+            {
+                return Task.CompletedTask;
+            }
+
+            protected override async Task<BatchReadResult> ReadManyCoreAsync(
+                IReadOnlyCollection<ReadRequest> requests,
+                CancellationToken cancellationToken)
+            {
+                CoreEntered.TrySetResult(true);
+                await Release.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
+                var values = new List<DataValue>();
+                foreach (var request in requests)
+                {
+                    values.Add(await ReadCoreAsync(request, cancellationToken).ConfigureAwait(false));
+                }
+
+                return new BatchReadResult(values);
+            }
+
+            protected override async Task WriteManyCoreAsync(
+                IReadOnlyCollection<WriteRequest> requests,
+                CancellationToken cancellationToken)
+            {
+                CoreEntered.TrySetResult(true);
+                await Release.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
+            }
+
             protected override void DisposeCore() { }
         }
     }

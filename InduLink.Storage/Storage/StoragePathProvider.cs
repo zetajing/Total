@@ -29,8 +29,25 @@ namespace InduLink.Storage
             Directory.CreateDirectory(Path.Combine(normalized, "Logs", "SDK"));
             Directory.CreateDirectory(Path.Combine(normalized, "State"));
             Directory.CreateDirectory(Path.Combine(normalized, "Cache"));
-            File.WriteAllText(GetConfigPath(normalized), normalized);
+            WriteAtomic(GetConfigPath(normalized), normalized);
             lock (SyncRoot) _dataRoot = normalized;
+        }
+
+        private static void WriteAtomic(string path, string content)
+        {
+            var temporary = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
+            try
+            {
+                File.WriteAllText(temporary, content);
+                if (File.Exists(path))
+                    File.Replace(temporary, path, null, true);
+                else
+                    File.Move(temporary, path);
+            }
+            finally
+            {
+                if (File.Exists(temporary)) File.Delete(temporary);
+            }
         }
 
         private static string LoadOrCreateDefault()

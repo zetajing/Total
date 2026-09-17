@@ -213,14 +213,17 @@ namespace InduLink.Runtime
             foreach (var deviceId in deviceIds) ValidateDeviceId(deviceId);
         }
 
-        private static TimeSpan? GetShortestTimeout(IEnumerable<TimeSpan?> timeouts)
+        private static TimeSpan GetBatchTimeout(IEnumerable<TimeSpan?> timeouts, TimeSpan defaultTimeout)
         {
-            TimeSpan? shortest = null;
+            // Each request keeps its own timeout in ReadManyCoreAsync/WriteManyCoreAsync.
+            // The outer budget must cover the slowest explicit request instead of being
+            // shortened by an unrelated fast request in the same batch.
+            var longest = defaultTimeout;
             foreach (var timeout in timeouts)
             {
-                if (timeout.HasValue && (!shortest.HasValue || timeout.Value < shortest.Value)) shortest = timeout;
+                if (timeout.HasValue && timeout.Value > longest) longest = timeout.Value;
             }
-            return shortest;
+            return longest;
         }
 
         private static CancellationTokenSource CreateOperationCancellation(TimeSpan? timeout, CancellationToken cancellationToken)

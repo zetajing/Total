@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
+using InduLink.Diagnostics;
 using InduLink.Storage;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Serialization;
@@ -61,13 +62,16 @@ namespace InduLinkDemo.Services
             ContractResolver = new CamelCasePropertyNamesContractResolver(),
         };
 
-        public NetworkServicesConfigurationStore(string filePath = null)
+        private readonly IInduLinkLogger _logger;
+
+        public NetworkServicesConfigurationStore(string filePath = null, IInduLinkLogger logger = null)
         {
             FilePath = Path.GetFullPath(filePath ?? Path.Combine(
                 AppDomain.CurrentDomain.BaseDirectory,
                 "Config",
                 "network-services.json"));
             SecretsDirectory = Path.Combine(StoragePathProvider.StateRoot, "network-secrets");
+            _logger = logger ?? NullInduLinkLogger.Instance;
         }
 
         public string FilePath { get; }
@@ -90,11 +94,12 @@ namespace InduLinkDemo.Services
                 Validate(configuration);
                 return configuration;
             }
-            catch
+            catch (Exception ex)
             {
                 // A damaged or stale optional Demo configuration must not prevent the
                 // application from starting.  Keep the original file for diagnosis;
                 // the user can explicitly save a validated replacement.
+                _logger.Error("网络服务配置读取失败，已回退到默认配置。文件将保留以便诊断。", ex);
                 return Normalize(new NetworkServicesConfiguration());
             }
         }

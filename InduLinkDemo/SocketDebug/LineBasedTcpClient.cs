@@ -21,11 +21,7 @@ namespace InduLinkDemo.SocketDebug
         /// 发送操作专用的信号量锁，保证同一时间只有一个发送操作进行。
         /// </summary>
         private readonly SemaphoreSlim _sendLock = new SemaphoreSlim(1, 1);
-
-        /// <summary>
-        /// 接收字节缓冲区，用于暂存尚未拼成完整行的数据。
-        /// </summary>
-        private readonly List<byte> _pendingBytes = new List<byte>();
+        private readonly object _stateSync = new object();
 
         /// <summary>
         /// 底层的 <see cref="TcpClient"/> 实例。
@@ -47,6 +43,7 @@ namespace InduLinkDemo.SocketDebug
         /// </summary>
         private Task _receiveLoopTask;
         private int _disposed;
+        private long _connectionGeneration;
 
         /// <summary>
         /// 获取一个值，指示当前客户端是否已成功连接到远程终结点并处于可用状态。
@@ -113,9 +110,14 @@ namespace InduLinkDemo.SocketDebug
             ThrowIfDisposed();
             cancellationToken.ThrowIfCancellationRequested();
             await DisconnectAsync(CancellationToken.None).ConfigureAwait(false);
+            var generation = Interlocked.Increment(ref _connectionGeneration);
+            ThrowIfDisposed();
 
             var client = new TcpClient();
             client.NoDelay = true;
+            NetworkStream stream = null;
+            CancellationTokenSource source = null;
+            var installed = false;
 
             try
             {
@@ -130,15 +132,47 @@ namespace InduLinkDemo.SocketDebug
                 }
 
                 await connectTask.ConfigureAwait(false);
-                _client = client;
-                _stream = client.GetStream();
-                _cts = new CancellationTokenSource();
-                _pendingBytes.Clear();
-                _receiveLoopTask = Task.Run(() => ReceiveLoopAsync(_cts.Token), _cts.Token);
-                RaiseSafely(Connected, EventArgs.Empty);
+                cancellationToken.ThrowIfCancellationRequested();
+                ThrowIfDisposed();
+
+                stream = client.GetStream();
+                source = new CancellationTokenSource();
+                var remoteEndPoint = client.Client.RemoteEndPoint == null
+                    ? string.Empty
+                    : client.Client.RemoteEndPoint.ToString();
+                lock (_stateSync)
+                {
+                    if (Volatile.Read(ref _disposed) != 0 ||
+                        Volatile.Read(ref _connectionGeneration) != generation)
+                        throw new OperationCanceledException("A newer TCP connection superseded this connection attempt.");
+
+                    _client = client;
+                    _stream = stream;
+                    _cts = source;
+                    try
+                    {
+                        var receiveCancellationToken = source.Token;
+                        _receiveLoopTask = Task.Run(
+                            () => ReceiveLoopAsync(client, stream, remoteEndPoint, receiveCancellationToken),
+                            receiveCancellationToken);
+                        installed = true;
+                    }
+                    catch
+                    {
+                        _client = null;
+                        _stream = null;
+                        _cts = null;
+                        throw;
+                    }
+                }
+
+                if (Volatile.Read(ref _disposed) == 0 &&
+                    Volatile.Read(ref _connectionGeneration) == generation)
+                    RaiseSafely(Connected, EventArgs.Empty);
             }
             catch
             {
+                if (!installed) source?.Dispose();
                 client.Close();
                 throw;
             }
@@ -152,8 +186,16 @@ namespace InduLinkDemo.SocketDebug
         /// <returns>表示异步断开操作的任务。</returns>
         public async Task DisconnectAsync(CancellationToken cancellationToken)
         {
-            var source = _cts;
-            _cts = null;
+            Interlocked.Increment(ref _connectionGeneration);
+            CancellationTokenSource source;
+            Task receiveLoop;
+            lock (_stateSync)
+            {
+                source = _cts;
+                _cts = null;
+                receiveLoop = _receiveLoopTask;
+                _receiveLoopTask = null;
+            }
 
             if (source != null)
             {
@@ -162,19 +204,15 @@ namespace InduLinkDemo.SocketDebug
 
             CloseClient();
 
-            if (_receiveLoopTask != null)
+            if (receiveLoop != null && Task.CurrentId != receiveLoop.Id)
             {
                 try
                 {
-                    await _receiveLoopTask.ConfigureAwait(false);
+                    await receiveLoop.ConfigureAwait(false);
                 }
                 catch
                 {
                     // 忽略接收循环任务中的异常
-                }
-                finally
-                {
-                    _receiveLoopTask = null;
                 }
             }
 
@@ -206,7 +244,20 @@ namespace InduLinkDemo.SocketDebug
             try
             {
                 ThrowIfDisposed();
-                await _stream.WriteAsync(payload, 0, payload.Length, cancellationToken).ConfigureAwait(false);
+                NetworkStream stream;
+                TcpClient client;
+                lock (_stateSync)
+                {
+                    client = _client;
+                    stream = _stream;
+                }
+
+                if (client == null || stream == null || !client.Connected)
+                {
+                    throw new InvalidOperationException("TCP client is not connected.");
+                }
+
+                await stream.WriteAsync(payload, 0, payload.Length, cancellationToken).ConfigureAwait(false);
             }
             finally
             {
@@ -233,9 +284,14 @@ namespace InduLinkDemo.SocketDebug
         /// </summary>
         /// <param name="cancellationToken">用于取消接收循环的取消令牌。</param>
         /// <returns>表示异步接收循环的任务。</returns>
-        private async Task ReceiveLoopAsync(CancellationToken cancellationToken)
+        private async Task ReceiveLoopAsync(
+            TcpClient client,
+            NetworkStream stream,
+            string remoteEndPoint,
+            CancellationToken cancellationToken)
         {
             var buffer = new byte[4096];
+            var pendingBytes = new List<byte>();
             try
             {
                 while (!cancellationToken.IsCancellationRequested)
@@ -243,19 +299,19 @@ namespace InduLinkDemo.SocketDebug
                     Task<int> readTask;
                     try
                     {
-                        readTask = _stream.ReadAsync(buffer, 0, buffer.Length, cancellationToken);
+                        readTask = stream.ReadAsync(buffer, 0, buffer.Length, cancellationToken);
 
                         // 有些设备发送的是无 CRLF 的裸文本。TCP 本身没有消息边界，因此在已有
                         // 未完成数据时等待一个很短的静默窗口；窗口内没有后续字节，就把当前
                         // 缓冲区作为一条消息提交，避免数据已收到却一直不显示。
-                        if (_pendingBytes.Count > 0)
+                        if (pendingBytes.Count > 0)
                         {
                             var completed = await Task.WhenAny(
                                 readTask,
                                 Task.Delay(UnframedMessageIdleMilliseconds, cancellationToken)).ConfigureAwait(false);
                             if (completed != readTask)
                             {
-                                DispatchPendingMessage();
+                                DispatchPendingMessage(pendingBytes, remoteEndPoint);
                             }
                         }
 
@@ -265,7 +321,7 @@ namespace InduLinkDemo.SocketDebug
                             break;
                         }
 
-                        AppendAndDispatch(buffer, read);
+                        AppendAndDispatch(pendingBytes, buffer, read, remoteEndPoint);
                     }
                     catch
                     {
@@ -275,55 +331,55 @@ namespace InduLinkDemo.SocketDebug
             }
             finally
             {
-                DispatchPendingMessage();
-                CloseClient();
+                DispatchPendingMessage(pendingBytes, remoteEndPoint);
+                CloseClient(client, stream);
                 RaiseSafely(Disconnected, EventArgs.Empty);
             }
         }
 
         /// <summary>
-        /// 将接收到的字节追加到 <see cref="_pendingBytes"/> 缓冲区，并尝试从中提取完整的行。
+        /// 将接收到的字节追加到当前连接会话的接收缓冲区，并尝试从中提取完整的行。
         /// 找到 <c>\r\n</c> 分隔符时，提取该行数据并通过 <see cref="MessageReceived"/> 事件通知。
         /// 重复此过程直到缓冲区中不再包含完整的行。
         /// </summary>
         /// <param name="buffer">从网络流读取到的字节数组。</param>
         /// <param name="count">本次读取的有效字节数。</param>
-        private void AppendAndDispatch(byte[] buffer, int count)
+        private void AppendAndDispatch(List<byte> pendingBytes, byte[] buffer, int count, string remoteEndPoint)
         {
             for (var index = 0; index < count; index++)
             {
-                _pendingBytes.Add(buffer[index]);
-                if (_pendingBytes.Count >= MaxPendingBytes)
+                pendingBytes.Add(buffer[index]);
+                if (pendingBytes.Count >= MaxPendingBytes)
                 {
-                    DispatchPendingMessage();
+                    DispatchPendingMessage(pendingBytes, remoteEndPoint);
                 }
             }
 
             while (true)
             {
                 int delimiterLength;
-                var lineEndIndex = FindLineEnding(_pendingBytes, out delimiterLength);
+                var lineEndIndex = FindLineEnding(pendingBytes, out delimiterLength);
                 if (lineEndIndex < 0)
                 {
                     return;
                 }
 
-                var lineBytes = _pendingBytes.GetRange(0, lineEndIndex).ToArray();
-                _pendingBytes.RemoveRange(0, lineEndIndex + delimiterLength);
-                RaiseSafely(MessageReceived, new SocketTextMessageEventArgs(Guid.Empty, RemoteEndPoint, Encoding.UTF8.GetString(lineBytes)));
+                var lineBytes = pendingBytes.GetRange(0, lineEndIndex).ToArray();
+                pendingBytes.RemoveRange(0, lineEndIndex + delimiterLength);
+                RaiseSafely(MessageReceived, new SocketTextMessageEventArgs(Guid.Empty, remoteEndPoint, Encoding.UTF8.GetString(lineBytes)));
             }
         }
 
-        private void DispatchPendingMessage()
+        private void DispatchPendingMessage(List<byte> pendingBytes, string remoteEndPoint)
         {
-            if (_pendingBytes.Count == 0)
+            if (pendingBytes.Count == 0)
             {
                 return;
             }
 
-            var messageBytes = _pendingBytes.ToArray();
-            _pendingBytes.Clear();
-            RaiseSafely(MessageReceived, new SocketTextMessageEventArgs(Guid.Empty, RemoteEndPoint, Encoding.UTF8.GetString(messageBytes)));
+            var messageBytes = pendingBytes.ToArray();
+            pendingBytes.Clear();
+            RaiseSafely(MessageReceived, new SocketTextMessageEventArgs(Guid.Empty, remoteEndPoint, Encoding.UTF8.GetString(messageBytes)));
         }
 
         private void RaiseSafely<TEventArgs>(EventHandler<TEventArgs> handlers, TEventArgs args)
@@ -359,32 +415,46 @@ namespace InduLinkDemo.SocketDebug
         /// 关闭并清理底层的 <see cref="NetworkStream"/> 和 <see cref="TcpClient"/> 实例。
         /// 每个对象释放时捕获并忽略所有异常。
         /// </summary>
-        private void CloseClient()
+        private void CloseClient(TcpClient expectedClient = null, NetworkStream expectedStream = null)
         {
-            if (_stream != null)
+            NetworkStream stream;
+            TcpClient client;
+            lock (_stateSync)
             {
-                try
+                if (expectedClient != null && !ReferenceEquals(_client, expectedClient))
                 {
-                    _stream.Dispose();
+                    stream = expectedStream;
+                    client = expectedClient;
                 }
-                catch
+                else
                 {
+                    stream = _stream;
+                    client = _client;
+                    _stream = null;
+                    _client = null;
                 }
-
-                _stream = null;
             }
 
-            if (_client != null)
+            if (stream != null)
             {
                 try
                 {
-                    _client.Close();
+                    stream.Dispose();
                 }
                 catch
                 {
                 }
+            }
 
-                _client = null;
+            if (client != null)
+            {
+                try
+                {
+                    client.Close();
+                }
+                catch
+                {
+                }
             }
         }
 

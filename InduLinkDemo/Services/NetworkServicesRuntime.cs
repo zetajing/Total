@@ -56,7 +56,7 @@ namespace InduLinkDemo.Services
         {
             _applicationRuntime = applicationRuntime ?? throw new ArgumentNullException(nameof(applicationRuntime));
             _logger = logger ?? NullInduLinkLogger.Instance;
-            _configurationStore = new NetworkServicesConfigurationStore(configurationFilePath);
+            _configurationStore = new NetworkServicesConfigurationStore(configurationFilePath, _logger);
             _secretStore = new DpapiSecretStore(_configurationStore.SecretsDirectory);
             _configuration = CloneConfiguration(_configurationStore.Load());
             _applicationRuntime.TagGatewayChanged += ApplicationRuntimeOnTagGatewayChanged;

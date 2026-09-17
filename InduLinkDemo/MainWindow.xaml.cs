@@ -155,7 +155,7 @@ namespace InduLinkDemo
             MesControlTag.SaveState();
             DatabaseControlTag.SaveState();
             NetworkServicesControlTag.SaveState();
-            _uiStateStore.Save(_uiState);
+            _ctx.UiStateStore.Save(_uiState);
         }
 
         // ── Header status compatibility callback ──

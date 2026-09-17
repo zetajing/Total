@@ -41,9 +41,15 @@ namespace InduLinkDemo
         public AppLogger SdkLogger { get; }
         public InduLinkApplicationRuntime Runtime { get; }
         public NetworkServicesRuntime NetworkServices { get; }
-        public UiStateStore UiStateStore { get; }
+        public UiStateStore UiStateStore { get; private set; }
         public DemoUiState UiState { get; }
         public Action<string, Brush> SetHeaderStatus { get; }
+
+        /// <summary>切换数据目录后替换共享 UI 状态存储，避免关闭时写回旧目录。</summary>
+        public void ReplaceUiStateStore(UiStateStore uiStateStore)
+        {
+            UiStateStore = uiStateStore ?? throw new ArgumentNullException(nameof(uiStateStore));
+        }
 
         /// <summary>
         /// Shared database recorder. Set by the Database tab when user enables recording.

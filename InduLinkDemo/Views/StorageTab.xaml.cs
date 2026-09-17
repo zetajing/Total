@@ -33,6 +33,7 @@ namespace InduLinkDemo.Views
                 StoragePathProvider.SetDataRoot(DataDirectoryTextBox.Text);
                 var newStore = new Services.UiStateStore();
                 newStore.Save(_ctx.UiState);
+                _ctx.ReplaceUiStateStore(newStore);
                 DataDirectoryTextBox.Text = StoragePathProvider.DataRoot;
                 DataDirectoryHintTextBlock.Text = "已应用：" + StoragePathProvider.DataRoot + "（后续日志、状态和缓存将写入此处）";
                 _ctx.DemoLogger.Info("本地数据目录已切换到 " + StoragePathProvider.DataRoot);

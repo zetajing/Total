@@ -90,8 +90,7 @@ namespace InduLink.Runtime
             try
             {
                 ThrowIfDisposed();
-                var timeout = GetShortestTimeout(requests.Select(request => request.Timeout))
-                    ?? _defaultOperationTimeout;
+                var timeout = GetBatchTimeout(requests.Select(request => request.Timeout), _defaultOperationTimeout);
                 using (var operationCts = CreateOperationCancellation(timeout, cancellationToken))
                 {
                     try
@@ -210,8 +209,7 @@ namespace InduLink.Runtime
             try
             {
                 ThrowIfDisposed();
-                var timeout = GetShortestTimeout(requests.Select(request => request.Timeout))
-                    ?? _defaultOperationTimeout;
+                var timeout = GetBatchTimeout(requests.Select(request => request.Timeout), _defaultOperationTimeout);
                 using (var operationCts = CreateOperationCancellation(timeout, cancellationToken))
                 {
                     try
