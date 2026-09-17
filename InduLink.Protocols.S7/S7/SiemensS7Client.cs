@@ -43,6 +43,28 @@ namespace InduLink.Protocols.S7
         private readonly S7AddressParser _parser;
         private Plc _plc;
 
+        /// <summary>使用常用参数快速创建 Siemens S7 客户端；高级配置仍可使用 Options 构造函数。</summary>
+        public static SiemensS7Client Create(
+            string host,
+            short rack = 0,
+            short slot = 1,
+            CpuType cpuType = CpuType.S71200,
+            string deviceId = null,
+            IInduLinkLogger logger = null)
+        {
+            var target = host?.Trim();
+            return new SiemensS7Client(
+                new SiemensS7ClientOptions
+                {
+                    DeviceId = ResolveDeviceId(deviceId, $"s7:{target}"),
+                    Host = target,
+                    Rack = rack,
+                    Slot = slot,
+                    CpuType = cpuType,
+                },
+                logger);
+        }
+
         public SiemensS7Client(
             SiemensS7ClientOptions options,
             IInduLinkLogger logger = null,
@@ -69,6 +91,11 @@ namespace InduLink.Protocols.S7
             if (string.IsNullOrWhiteSpace(options.DeviceId))
                 throw new ArgumentException("Device ID is required.", nameof(options));
             return options.DeviceId;
+        }
+
+        private static string ResolveDeviceId(string deviceId, string fallback)
+        {
+            return string.IsNullOrWhiteSpace(deviceId) ? fallback : deviceId.Trim();
         }
 
         public override bool IsConnected

@@ -46,6 +46,25 @@ namespace InduLink.Protocols.Ads
         private AdsDeviceStateSnapshot _deviceState;
         private int _transportLost;
 
+        /// <summary>使用常用参数快速创建 TwinCAT ADS 客户端；高级配置仍可使用 Options 构造函数。</summary>
+        public static AdsClient Create(
+            string amsNetId = null,
+            int port = 851,
+            string deviceId = null,
+            IInduLinkLogger logger = null)
+        {
+            var normalizedAmsNetId = string.IsNullOrWhiteSpace(amsNetId) ? null : amsNetId.Trim();
+            var target = normalizedAmsNetId ?? "local";
+            return new AdsClient(
+                new AdsClientOptions
+                {
+                    DeviceId = ResolveDeviceId(deviceId, $"ads:{target}:{port}"),
+                    AmsNetId = normalizedAmsNetId,
+                    Port = port,
+                },
+                logger);
+        }
+
         public AdsClient(
             AdsClientOptions options,
             IInduLinkLogger logger = null,
@@ -1053,6 +1072,11 @@ namespace InduLink.Protocols.Ads
             if (options == null) throw new ArgumentNullException(nameof(options));
             if (string.IsNullOrWhiteSpace(options.DeviceId)) throw new ArgumentException("Device ID is required.", nameof(options));
             return options.DeviceId;
+        }
+
+        private static string ResolveDeviceId(string deviceId, string fallback)
+        {
+            return string.IsNullOrWhiteSpace(deviceId) ? fallback : deviceId.Trim();
         }
 
         private static int GetOperationTimeout(AdsClientOptions options)

@@ -34,30 +34,26 @@ dotnet build Total.sln -c Release
 dotnet test InduLink.Tests/InduLink.Tests.csproj -c Release
 ```
 
-只连接一种协议时，直接引用对应模块并构造具体 Client：
+只连接一种协议时，直接引用对应模块并使用客户端的快速创建入口：
 
 ```csharp
 using InduLink.Protocols.Modbus;
 using InduLink.Runtime;
 
-using (var client = new ModbusTcpClient(new ModbusTcpClientOptions
+var client = ModbusTcpClient.Create(
+    "192.168.1.10",
+    slaveId: 1,
+    deviceId: "plc1",
+    deviceProfile: ModbusDeviceProfiles.InovanceEasyPlc);
+
+await client.UseAsync(async connected =>
 {
-    DeviceId = "plc1",
-    Host = "192.168.1.10",
-    Port = 502,
-    SlaveId = 1,
-    DeviceProfile = ModbusDeviceProfiles.InovanceEasyPlc,
-    ConnectTimeoutMilliseconds = 3000,
-    OperationTimeoutMilliseconds = 5000
-}))
-{
-    await client.UseAsync(async connected =>
-    {
-        var speed = await connected.ReadInt16Async("D100");
-        await connected.WriteAsync("D101", (short)(speed + 1));
-    });
-}
+    var speed = await connected.ReadInt16Async("D100");
+    await connected.WriteAsync("D101", (short)(speed + 1));
+});
 ```
+
+需要设置重连、超时、串口校验位或批量上限时，继续使用原有 `*ClientOptions` 构造函数。
 
 配置驱动的多设备程序使用聚合入口：
 
@@ -72,12 +68,9 @@ var validation = config.Validate(
 if (!validation.IsValid)
     throw new InvalidOperationException(string.Join(Environment.NewLine, validation.Errors));
 
-using (var host = sdk.CreateDeviceHost(config, "Config"))
-{
-    await host.StartAsync();
-    var value = await host.Get("plc1").ReadAsync("Speed");
-    await host.StopAsync();
-}
+await using var host = sdk.CreateDeviceHost(config, "Config");
+await host.StartAsync();
+var value = await host.Get("plc1").ReadAsync("Speed");
 ```
 
 协议键固定为 `modbus-tcp`、`modbus-rtu`、`siemens-s7`、`mitsubishi-mc`、`ads`、`opc-ua`、`mqtt` 和 `redis`。设备公共字段、运行参数和协议 `settings` 分离，完整配置约定见 [架构与配置](docs/architecture.md#配置驱动运行)。

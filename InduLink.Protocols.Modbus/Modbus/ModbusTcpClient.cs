@@ -59,6 +59,28 @@ namespace InduLink.Protocols.Modbus
         private TcpClient _tcpClient;
         private IModbusMaster _master;
 
+        /// <summary>使用常用参数快速创建 Modbus TCP 客户端；高级配置仍可使用 Options 构造函数。</summary>
+        public static ModbusTcpClient Create(
+            string host,
+            byte slaveId = 1,
+            int port = 502,
+            string deviceId = null,
+            IModbusDeviceProfile deviceProfile = null,
+            IInduLinkLogger logger = null)
+        {
+            var target = host?.Trim();
+            return new ModbusTcpClient(
+                new ModbusTcpClientOptions
+                {
+                    DeviceId = ResolveDeviceId(deviceId, $"modbus-tcp:{target}:{port}:{slaveId}"),
+                    Host = target,
+                    Port = port,
+                    SlaveId = slaveId,
+                    DeviceProfile = deviceProfile ?? ModbusDeviceProfiles.InovanceEasyPlc,
+                },
+                logger);
+        }
+
         /// <summary>
         /// 初始化 <see cref="ModbusTcpClient"/> 类的新实例。
         /// </summary>
@@ -78,6 +100,11 @@ namespace InduLink.Protocols.Modbus
         {
             if (options == null) throw new ArgumentNullException(nameof(options));
             return options.DeviceId;
+        }
+
+        private static string ResolveDeviceId(string deviceId, string fallback)
+        {
+            return string.IsNullOrWhiteSpace(deviceId) ? fallback : deviceId.Trim();
         }
 
         private static void ValidateOptions(ModbusTcpClientOptions options)

@@ -22,6 +22,26 @@ namespace InduLink.Protocols.Modbus
         private SerialPort _serialPort;
         private IModbusMaster _master;
 
+        /// <summary>使用常用参数快速创建 Modbus RTU 客户端；高级串口配置仍可使用 Options 构造函数。</summary>
+        public static ModbusRtuClient Create(
+            string portName,
+            byte slaveId = 1,
+            int baudRate = 9600,
+            string deviceId = null,
+            IInduLinkLogger logger = null)
+        {
+            var serialPort = portName?.Trim();
+            return new ModbusRtuClient(
+                new ModbusRtuClientOptions
+                {
+                    DeviceId = ResolveDeviceId(deviceId, $"modbus-rtu:{serialPort}:{slaveId}"),
+                    PortName = serialPort,
+                    BaudRate = baudRate,
+                    SlaveId = slaveId,
+                },
+                logger);
+        }
+
         /// <summary>实际写入或从串口组装完成的标准 Modbus RTU 帧。</summary>
         public event EventHandler<ModbusRtuFrameEventArgs> FrameTraced;
 
@@ -146,6 +166,11 @@ namespace InduLink.Protocols.Modbus
         {
             if (options == null) throw new ArgumentNullException(nameof(options));
             return options.DeviceId;
+        }
+
+        private static string ResolveDeviceId(string deviceId, string fallback)
+        {
+            return string.IsNullOrWhiteSpace(deviceId) ? fallback : deviceId.Trim();
         }
 
         private static void ValidateOptions(ModbusRtuClientOptions options)

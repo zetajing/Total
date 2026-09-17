@@ -161,6 +161,24 @@ namespace InduLink.Protocols.Mc
         private readonly ITransportClient _transport;
         private readonly McAddressParser _parser;
 
+        /// <summary>使用常用参数快速创建 Mitsubishi MC 客户端；高级配置仍可使用 Options 构造函数。</summary>
+        public static MitsubishiMcClient Create(
+            string host,
+            int port = 5000,
+            string deviceId = null,
+            IInduLinkLogger logger = null)
+        {
+            var target = host?.Trim();
+            return new MitsubishiMcClient(
+                new MitsubishiMcClientOptions
+                {
+                    DeviceId = ResolveDeviceId(deviceId, $"mc:{target}:{port}"),
+                    Host = target,
+                    Port = port,
+                },
+                logger);
+        }
+
         public MitsubishiMcClient(
             MitsubishiMcClientOptions options,
             IInduLinkLogger logger = null,
@@ -201,6 +219,11 @@ namespace InduLink.Protocols.Mc
         {
             if (options == null) throw new ArgumentNullException(nameof(options));
             return options.DeviceId;
+        }
+
+        private static string ResolveDeviceId(string deviceId, string fallback)
+        {
+            return string.IsNullOrWhiteSpace(deviceId) ? fallback : deviceId.Trim();
         }
 
         public override bool IsConnected { get { return _transport.IsConnected; } }
