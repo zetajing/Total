@@ -1,7 +1,7 @@
 namespace InduLinkMinimal.WinForms
 {
     // 本文件由 Visual Studio WinForms 设计器维护。
-    // 这里只保存控件声明、布局属性和事件绑定；协议通讯逻辑统一放在 MainForm.cs 中。
+    // 这里只保存控件声明、布局属性和事件绑定；业务逻辑按职责放在 MainForm.*.cs 中。
     // 手工修改后应立即用“查看设计器”验证，避免破坏设计器的代码序列化结构。
     partial class MainForm
     {
@@ -36,7 +36,7 @@ namespace InduLinkMinimal.WinForms
         }
 
         /// <summary>
-        /// 创建六个协议页签及其输入、操作和日志控件，并绑定 MainForm.cs 中的事件处理方法。
+        /// 创建六个协议页签及其输入、操作和日志控件，并绑定 MainForm.*.cs 中的事件处理方法。
         /// 此方法只应由窗体构造函数调用。
         /// </summary>
         private void InitializeComponent()
@@ -333,7 +333,7 @@ namespace InduLinkMinimal.WinForms
             ModbusTcpReadButton.Size = new System.Drawing.Size(75, 23);
             ModbusTcpReadButton.TabIndex = 13;
             ModbusTcpReadButton.Text = "读取";
-            ModbusTcpReadButton.Click += InduLinkReadButton_Click;
+            ModbusTcpReadButton.Click += ModbusTcpReadButton_Click;
             // 
             // ModbusTcpWriteButton
             // 
@@ -342,7 +342,7 @@ namespace InduLinkMinimal.WinForms
             ModbusTcpWriteButton.Size = new System.Drawing.Size(75, 23);
             ModbusTcpWriteButton.TabIndex = 14;
             ModbusTcpWriteButton.Text = "写入";
-            ModbusTcpWriteButton.Click += InduLinkWriteButton_Click;
+            ModbusTcpWriteButton.Click += ModbusTcpWriteButton_Click;
             // 
             // ModbusTcpDisconnectButton
             // 
@@ -351,7 +351,7 @@ namespace InduLinkMinimal.WinForms
             ModbusTcpDisconnectButton.Size = new System.Drawing.Size(75, 23);
             ModbusTcpDisconnectButton.TabIndex = 15;
             ModbusTcpDisconnectButton.Text = "断开";
-            ModbusTcpDisconnectButton.Click += InduLinkDisconnectButton_Click;
+            ModbusTcpDisconnectButton.Click += ModbusTcpDisconnectButton_Click;
             // 
             // ModbusTcpOutputTextBox
             // 
@@ -526,7 +526,7 @@ namespace InduLinkMinimal.WinForms
             ModbusRtuReadButton.Size = new System.Drawing.Size(75, 23);
             ModbusRtuReadButton.TabIndex = 13;
             ModbusRtuReadButton.Text = "读取";
-            ModbusRtuReadButton.Click += InduLinkReadButton_Click;
+            ModbusRtuReadButton.Click += ModbusRtuReadButton_Click;
             // 
             // ModbusRtuWriteButton
             // 
@@ -535,7 +535,7 @@ namespace InduLinkMinimal.WinForms
             ModbusRtuWriteButton.Size = new System.Drawing.Size(75, 23);
             ModbusRtuWriteButton.TabIndex = 14;
             ModbusRtuWriteButton.Text = "写入";
-            ModbusRtuWriteButton.Click += InduLinkWriteButton_Click;
+            ModbusRtuWriteButton.Click += ModbusRtuWriteButton_Click;
             // 
             // ModbusRtuDisconnectButton
             // 
@@ -544,7 +544,7 @@ namespace InduLinkMinimal.WinForms
             ModbusRtuDisconnectButton.Size = new System.Drawing.Size(75, 23);
             ModbusRtuDisconnectButton.TabIndex = 15;
             ModbusRtuDisconnectButton.Text = "断开";
-            ModbusRtuDisconnectButton.Click += InduLinkDisconnectButton_Click;
+            ModbusRtuDisconnectButton.Click += ModbusRtuDisconnectButton_Click;
             // 
             // ModbusRtuOutputTextBox
             // 
@@ -704,7 +704,7 @@ namespace InduLinkMinimal.WinForms
             S7ReadButton.Size = new System.Drawing.Size(75, 23);
             S7ReadButton.TabIndex = 13;
             S7ReadButton.Text = "读取";
-            S7ReadButton.Click += InduLinkReadButton_Click;
+            S7ReadButton.Click += S7ReadButton_Click;
             // 
             // S7WriteButton
             // 
@@ -713,7 +713,7 @@ namespace InduLinkMinimal.WinForms
             S7WriteButton.Size = new System.Drawing.Size(75, 23);
             S7WriteButton.TabIndex = 14;
             S7WriteButton.Text = "写入";
-            S7WriteButton.Click += InduLinkWriteButton_Click;
+            S7WriteButton.Click += S7WriteButton_Click;
             // 
             // S7DisconnectButton
             // 
@@ -722,7 +722,7 @@ namespace InduLinkMinimal.WinForms
             S7DisconnectButton.Size = new System.Drawing.Size(75, 23);
             S7DisconnectButton.TabIndex = 15;
             S7DisconnectButton.Text = "断开";
-            S7DisconnectButton.Click += InduLinkDisconnectButton_Click;
+            S7DisconnectButton.Click += S7DisconnectButton_Click;
             // 
             // S7OutputTextBox
             // 
@@ -882,7 +882,7 @@ namespace InduLinkMinimal.WinForms
             McReadButton.Size = new System.Drawing.Size(75, 23);
             McReadButton.TabIndex = 13;
             McReadButton.Text = "读取";
-            McReadButton.Click += InduLinkReadButton_Click;
+            McReadButton.Click += McReadButton_Click;
             // 
             // McWriteButton
             // 
@@ -891,7 +891,7 @@ namespace InduLinkMinimal.WinForms
             McWriteButton.Size = new System.Drawing.Size(75, 23);
             McWriteButton.TabIndex = 14;
             McWriteButton.Text = "写入";
-            McWriteButton.Click += InduLinkWriteButton_Click;
+            McWriteButton.Click += McWriteButton_Click;
             // 
             // McDisconnectButton
             // 
@@ -900,7 +900,7 @@ namespace InduLinkMinimal.WinForms
             McDisconnectButton.Size = new System.Drawing.Size(75, 23);
             McDisconnectButton.TabIndex = 15;
             McDisconnectButton.Text = "断开";
-            McDisconnectButton.Click += InduLinkDisconnectButton_Click;
+            McDisconnectButton.Click += McDisconnectButton_Click;
             // 
             // McOutputTextBox
             // 
