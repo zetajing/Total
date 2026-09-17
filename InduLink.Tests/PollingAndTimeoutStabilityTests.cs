@@ -244,6 +244,24 @@ namespace InduLink.Tests
             await CompletesWithin(disposeTask, 1000);
         }
 
+        [Test]
+        public async Task ClientDisposeAsync_StopsWaitingAfterConfiguredBudget()
+        {
+            var client = new NonCooperativeClient(new RecordingLogger(), 35, TimeSpan.FromMilliseconds(100));
+            var result = await client.ReadAsync(
+                new ReadRequest(client.DeviceId, "blocked", DataType.Int16),
+                CancellationToken.None);
+            Assert.AreEqual(QualityStatus.Bad, result.Quality);
+
+            var disposeTask = client.DisposeAsync().AsTask();
+            await CompletesWithin(disposeTask, 1000);
+            Assert.IsFalse(client.DisposeCompleted.Task.IsCompleted,
+                "DisposeCore must not run while the non-cooperative core operation still owns the connection lock.");
+
+            client.FirstRead.TrySetResult(true);
+            await CompletesWithin(client.DisposeCompleted.Task, 1000);
+        }
+
         private static SubscriptionRequest Request(string key, string deviceId, TimeSpan interval)
         {
             return new SubscriptionRequest(
@@ -343,20 +361,27 @@ namespace InduLink.Tests
 
         private sealed class NonCooperativeClient : InduLinkClientBase
         {
+            private readonly TimeSpan? _disposeWaitTimeout;
             private int _readCalls;
             private int _activeCoreCalls;
             private int _maximumConcurrentCoreCalls;
 
-            public NonCooperativeClient(IInduLinkLogger logger, int timeoutMilliseconds)
+            public NonCooperativeClient(IInduLinkLogger logger, int timeoutMilliseconds, TimeSpan? disposeWaitTimeout = null)
                 : base("timeout-device", ProtocolKind.ModbusTcp, new PollingScheduler(), logger, timeoutMilliseconds)
             {
+                _disposeWaitTimeout = disposeWaitTimeout;
             }
 
             public TaskCompletionSource<bool> FirstRead { get; } = NewSignal();
             public TaskCompletionSource<bool> SecondReadEntered { get; } = NewSignal();
+            public TaskCompletionSource<bool> DisposeCompleted { get; } = NewSignal();
             public int TimeoutCleanupCalls { get; private set; }
             public int MaximumConcurrentCoreCalls { get { return Volatile.Read(ref _maximumConcurrentCoreCalls); } }
             public override bool IsConnected { get { return true; } }
+            protected override TimeSpan DisposeWaitTimeout
+            {
+                get { return _disposeWaitTimeout ?? base.DisposeWaitTimeout; }
+            }
 
             protected override Task ConnectCoreAsync(CancellationToken cancellationToken) { return Task.CompletedTask; }
             protected override Task DisconnectCoreAsync(CancellationToken cancellationToken) { return Task.CompletedTask; }
@@ -388,6 +413,11 @@ namespace InduLink.Tests
             protected override void OnOperationTimeout()
             {
                 TimeoutCleanupCalls++;
+            }
+
+            protected override void DisposeCore()
+            {
+                DisposeCompleted.TrySetResult(true);
             }
 
             private void UpdateMaximum(int value)

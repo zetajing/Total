@@ -684,7 +684,7 @@ namespace InduLink.FileTransfer.Ftp
                 throw new ArgumentOutOfRangeException(nameof(options), "All FTP timeouts must be positive.");
             if (options.RetryAttempts < 0)
                 throw new ArgumentOutOfRangeException(nameof(options.RetryAttempts));
-            if ((options.SslProtocols & (SslProtocols.Ssl2 | SslProtocols.Ssl3)) != 0)
+            if (ContainsLegacySslProtocol(options.SslProtocols))
                 throw new ArgumentException("SSL 2.0 and SSL 3.0 are not permitted.", nameof(options));
             var normalizedThumbprint = FtpCertificateValidator.NormalizeThumbprint(options.TrustedCertificateThumbprint);
             if (!string.IsNullOrWhiteSpace(options.TrustedCertificateThumbprint) &&
@@ -727,6 +727,19 @@ namespace InduLink.FileTransfer.Ftp
             foreach (var value in suffix)
                 if (char.IsControl(value))
                     throw new ArgumentException("Atomic upload temporary suffix cannot contain control characters.", nameof(suffix));
+        }
+
+        private static bool ContainsLegacySslProtocol(SslProtocols protocols)
+        {
+            // Ssl2/Ssl3 enum members are obsolete in modern .NET. Resolve the names
+            // at runtime so old persisted numeric values are still rejected without
+            // compiling against unsupported protocol members.
+            SslProtocols legacy;
+            if (Enum.TryParse("Ssl2", out legacy) && (protocols & legacy) != 0)
+                return true;
+            if (Enum.TryParse("Ssl3", out legacy) && (protocols & legacy) != 0)
+                return true;
+            return false;
         }
 
         private void ThrowIfDisposed()

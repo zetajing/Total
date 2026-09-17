@@ -228,11 +228,24 @@ namespace InduLink.Protocols.Mqtt
             if (options.TlsProtocols.HasValue)
             {
                 var protocols = options.TlsProtocols.Value;
-                if ((protocols & (SslProtocols.Ssl2 | SslProtocols.Ssl3)) != 0)
+                if (ContainsLegacySslProtocol(protocols))
                     throw new ArgumentException("SSL 2.0 and SSL 3.0 are not permitted for MQTT TLS connections.", nameof(options));
                 if (protocols != SslProtocols.None && (protocols & SslProtocols.Tls12) == 0)
                     throw new ArgumentException("MQTT TLS connections require TLS 1.2 or a system-default protocol set.", nameof(options));
             }
+        }
+
+        private static bool ContainsLegacySslProtocol(SslProtocols protocols)
+        {
+            // Ssl2/Ssl3 enum members are obsolete in modern .NET. Resolve the names
+            // at runtime so old persisted numeric values are still rejected without
+            // compiling against unsupported protocol members.
+            SslProtocols legacy;
+            if (Enum.TryParse("Ssl2", out legacy) && (protocols & legacy) != 0)
+                return true;
+            if (Enum.TryParse("Ssl3", out legacy) && (protocols & legacy) != 0)
+                return true;
+            return false;
         }
 
         protected override async Task ConnectCoreAsync(CancellationToken cancellationToken)

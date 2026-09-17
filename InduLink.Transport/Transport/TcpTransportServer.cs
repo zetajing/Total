@@ -15,6 +15,8 @@ namespace InduLink.Transport
     /// </summary>
     public sealed class TcpTransportServer : IAsyncTransportServer
     {
+        private static readonly TimeSpan DefaultShutdownTimeout = TimeSpan.FromSeconds(10);
+
         /// <summary>
         /// 服务器监听的 IP 地址。
         /// </summary>
@@ -24,6 +26,7 @@ namespace InduLink.Transport
         /// 服务器监听的端口号。
         /// </summary>
         private readonly int _port;
+        private readonly TimeSpan _shutdownTimeout;
 
         /// <summary>
         /// 当前已连接的所有客户端会话的并发字典，以会话 GUID 为键。
@@ -51,10 +54,14 @@ namespace InduLink.Transport
         /// </summary>
         /// <param name="address">服务器绑定的 IP 地址。如果为 <c>null</c>，则使用 <see cref="IPAddress.Any"/>。</param>
         /// <param name="port">服务器监听的端口号。</param>
-        public TcpTransportServer(IPAddress address, int port)
+        /// <param name="shutdownTimeout">停止时等待会话回调排空的最长时间。</param>
+        public TcpTransportServer(IPAddress address, int port, TimeSpan? shutdownTimeout = null)
         {
             _address = address ?? IPAddress.Any;
             _port = port;
+            _shutdownTimeout = shutdownTimeout ?? DefaultShutdownTimeout;
+            if (_shutdownTimeout <= TimeSpan.Zero)
+                throw new ArgumentOutOfRangeException(nameof(shutdownTimeout));
         }
 
         /// <summary>
@@ -204,7 +211,11 @@ namespace InduLink.Transport
                 // Stop from disposing a session between TryAdd and Start/SessionConnected.
                 var sessions = DetachAndDisposeSessions();
                 if (sessions.Count > 0)
-                    await Task.WhenAll(sessions.Select(session => session.Completion)).ConfigureAwait(false);
+                {
+                    var drain = Task.WhenAll(sessions.Select(session => session.Completion));
+                    if (await Task.WhenAny(drain, Task.Delay(_shutdownTimeout)).ConfigureAwait(false) == drain)
+                        await drain.ConfigureAwait(false);
+                }
 
                 if (acceptFailure != null) throw acceptFailure;
             }

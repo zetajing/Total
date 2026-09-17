@@ -182,6 +182,33 @@ namespace InduLink.Tests
         }
 
         [Test]
+        [Timeout(10000)]
+        public async Task Broker_StartedHandlerCanDisposeWithoutDeadlock()
+        {
+            var broker = new MqttBrokerService(new MqttBrokerOptions
+            {
+                Port = GetFreeTcpPort(),
+            });
+            var disposed = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            broker.Started += (sender, args) =>
+            {
+                broker.Dispose();
+                disposed.TrySetResult(true);
+            };
+
+            try
+            {
+                await broker.StartAsync(CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(3));
+                await disposed.Task.WaitAsync(TimeSpan.FromSeconds(3));
+                Assert.IsFalse(broker.IsRunning);
+            }
+            finally
+            {
+                broker.Dispose();
+            }
+        }
+
+        [Test]
         [Timeout(15000)]
         public async Task Broker_TopicAuthorizersRejectPublishAndSubscribe()
         {
@@ -513,13 +540,30 @@ namespace InduLink.Tests
                 DeviceId = "mqtt-legacy-tls",
                 Host = "localhost",
                 UseTls = true,
-                TlsProtocols = SslProtocols.Ssl3,
+                TlsProtocols = (SslProtocols)0x30,
             }));
 
             using (var broker = new MqttBrokerService(new MqttBrokerOptions
             {
                 UseTls = true,
-                TlsProtocols = SslProtocols.Ssl3,
+                TlsProtocols = (SslProtocols)0x30,
+            }))
+            {
+                Assert.ThrowsAsync<ArgumentException>(async () => await broker.StartAsync(CancellationToken.None));
+            }
+
+            Assert.Throws<ArgumentException>(() => new MqttClient(new MqttClientOptions
+            {
+                DeviceId = "mqtt-legacy-tls-with-tls12",
+                Host = "localhost",
+                UseTls = true,
+                TlsProtocols = SslProtocols.Tls12 | (SslProtocols)0x30,
+            }));
+
+            using (var broker = new MqttBrokerService(new MqttBrokerOptions
+            {
+                UseTls = true,
+                TlsProtocols = SslProtocols.Tls12 | (SslProtocols)0x30,
             }))
             {
                 Assert.ThrowsAsync<ArgumentException>(async () => await broker.StartAsync(CancellationToken.None));

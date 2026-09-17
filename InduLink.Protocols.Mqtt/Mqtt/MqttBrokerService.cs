@@ -144,6 +144,7 @@ namespace InduLink.Protocols.Mqtt
         public async Task StartAsync(CancellationToken cancellationToken)
         {
             ThrowIfDisposed();
+            var started = false;
             await _lifecycleLock.WaitAsync(cancellationToken).ConfigureAwait(false);
             try
             {
@@ -169,7 +170,7 @@ namespace InduLink.Protocols.Mqtt
                         IPAddress.IsLoopback(bindAddress) ? _options.Port.ToString() : "disabled",
                         _options.UseTls ? _options.TlsPort.ToString() : "disabled",
                         _options.UseTls));
-                    RaiseSimpleEvent(Started, "MQTT broker started event handler failed.");
+                    started = true;
                 }
                 catch
                 {
@@ -182,18 +183,30 @@ namespace InduLink.Protocols.Mqtt
             {
                 _lifecycleLock.Release();
             }
+
+            if (started)
+            {
+                RaiseSimpleEvent(Started, "MQTT broker started event handler failed.");
+            }
         }
 
         public async Task StopAsync(CancellationToken cancellationToken)
         {
+            var stopped = false;
             await _lifecycleLock.WaitAsync(cancellationToken).ConfigureAwait(false);
             try
             {
+                stopped = _server != null;
                 await StopCoreAsync().ConfigureAwait(false);
             }
             finally
             {
                 _lifecycleLock.Release();
+            }
+
+            if (stopped)
+            {
+                RaiseSimpleEvent(Stopped, "MQTT broker stopped event handler failed.");
             }
         }
 
@@ -474,10 +487,23 @@ namespace InduLink.Protocols.Mqtt
         {
             if (!protocols.HasValue) return;
             var value = protocols.Value;
-            if ((value & (SslProtocols.Ssl2 | SslProtocols.Ssl3)) != 0)
+            if (ContainsLegacySslProtocol(value))
                 throw new ArgumentException("SSL 2.0 and SSL 3.0 are not permitted for the MQTT broker TLS endpoint.", nameof(protocols));
             if (value != SslProtocols.None && (value & SslProtocols.Tls12) == 0)
                 throw new ArgumentException("The MQTT broker TLS endpoint requires TLS 1.2 or a system-default protocol set.", nameof(protocols));
+        }
+
+        private static bool ContainsLegacySslProtocol(SslProtocols protocols)
+        {
+            // Ssl2/Ssl3 enum members are obsolete in modern .NET. Resolve the names
+            // at runtime so old persisted numeric values are still rejected without
+            // compiling against unsupported protocol members.
+            SslProtocols legacy;
+            if (Enum.TryParse("Ssl2", out legacy) && (protocols & legacy) != 0)
+                return true;
+            if (Enum.TryParse("Ssl3", out legacy) && (protocols & legacy) != 0)
+                return true;
+            return false;
         }
 
         private static DateTimeOffset ToDateTimeOffset(DateTime value)
@@ -519,7 +545,6 @@ namespace InduLink.Protocols.Mqtt
                 server.Dispose();
                 _sessions.Clear();
                 _logger.Info("MQTT broker stopped.");
-                RaiseSimpleEvent(Stopped, "MQTT broker stopped event handler failed.");
             }
         }
 

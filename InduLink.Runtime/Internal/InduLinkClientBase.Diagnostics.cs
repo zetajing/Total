@@ -13,6 +13,8 @@ namespace InduLink.Runtime
     /// <summary>工业客户端公共基类，统一处理操作串行化、超时、健康状态和轮询订阅。</summary>
     public abstract partial class InduLinkClientBase
     {
+        private static readonly TimeSpan DefaultDisposeWaitTimeout = TimeSpan.FromSeconds(10);
+
         protected void RecordSuccess(long elapsedMilliseconds = 0)
         {
             Interlocked.Increment(ref _totalOperations);
@@ -314,6 +316,14 @@ namespace InduLink.Runtime
             if (Volatile.Read(ref _disposed) != 0) throw new ObjectDisposedException(GetType().FullName);
         }
 
+        /// <summary>
+        /// 获取释放时等待轮询器和当前操作的最长时间。非协作协议实现超时后，真正的协议资源释放会延后到当前操作结束。
+        /// </summary>
+        protected virtual TimeSpan DisposeWaitTimeout
+        {
+            get { return DefaultDisposeWaitTimeout; }
+        }
+
         public void Dispose()
         {
             DisposeAsync().AsTask().GetAwaiter().GetResult();
@@ -323,24 +333,80 @@ namespace InduLink.Runtime
         {
             if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
 
+            var disposeTimeout = DisposeWaitTimeout;
+            if (disposeTimeout <= TimeSpan.Zero)
+                disposeTimeout = DefaultDisposeWaitTimeout;
+
             if (_pollingScheduler is IAsyncDisposable asyncPollingScheduler)
             {
-                await asyncPollingScheduler.DisposeAsync().ConfigureAwait(false);
+                try
+                {
+                    await asyncPollingScheduler.DisposeAsync().AsTask().WaitAsync(disposeTimeout).ConfigureAwait(false);
+                }
+                catch (TimeoutException ex)
+                {
+                    _logger.Error(
+                        string.Format("Polling scheduler disposal exceeded the configured budget | Device={0} | Protocol={1}", DeviceId, Kind),
+                        ex);
+                }
+                catch (Exception ex)
+                {
+                    _logger.Error(
+                        string.Format("Polling scheduler disposal failed | Device={0} | Protocol={1}", DeviceId, Kind),
+                        ex);
+                }
             }
             else
             {
                 _pollingScheduler.Dispose();
             }
 
-            await _operationLock.WaitAsync().ConfigureAwait(false);
+            if (!await _operationLock.WaitAsync(disposeTimeout).ConfigureAwait(false))
+            {
+                _logger.Error(
+                    string.Format("Client disposal deferred because an operation did not release the connection lock | Device={0} | Protocol={1}", DeviceId, Kind),
+                    new TimeoutException("The client operation lock was not released before disposal timed out."));
+                _ = FinishDisposeAfterOperationAsync();
+                return;
+            }
+
             try
             {
                 DisposeCore();
-                _status = ConnectionStatus.Disconnected;
+                lock (_diagnosticSync)
+                {
+                    _status = ConnectionStatus.Disconnected;
+                }
             }
             finally
             {
                 _operationLock.Release();
+            }
+        }
+
+        private async Task FinishDisposeAfterOperationAsync()
+        {
+            try
+            {
+                await _operationLock.WaitAsync().ConfigureAwait(false);
+                try
+                {
+                    DisposeCore();
+                    lock (_diagnosticSync)
+                    {
+                        _status = ConnectionStatus.Disconnected;
+                    }
+                }
+                finally
+                {
+                    _operationLock.Release();
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(
+                    string.Format("Deferred client disposal failed | Device={0} | Protocol={1}", DeviceId, Kind),
+                    ex);
             }
         }
 

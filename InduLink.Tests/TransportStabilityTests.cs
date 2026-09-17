@@ -429,6 +429,41 @@ namespace InduLink.Tests
         }
 
         [Test]
+        public async Task TcpTransportServer_StopCompletesAfterSessionDrainBudget()
+        {
+            var reserved = StartListener(out var port);
+            reserved.Stop();
+            var callbackEntered = NewSignal();
+            var releaseCallback = NewSignal();
+            var server = new TcpTransportServer(IPAddress.Loopback, port, TimeSpan.FromMilliseconds(100));
+            try
+            {
+                server.DataReceivedAsync += async (sender, args, cancellationToken) =>
+                {
+                    callbackEntered.TrySetResult(true);
+                    await releaseCallback.Task;
+                };
+                await server.StartAsync(CancellationToken.None);
+
+                using (var client = new TcpClient())
+                {
+                    await client.ConnectAsync(IPAddress.Loopback, port);
+                    await client.GetStream().WriteAsync(new byte[] { 1 }, 0, 1);
+                    await WithTimeout(callbackEntered.Task);
+
+                    await WithTimeout(server.StopAsync(CancellationToken.None), 1000);
+                    Assert.That(server.IsRunning, Is.False);
+                    Assert.That(server.SessionCount, Is.Zero);
+                }
+            }
+            finally
+            {
+                releaseCallback.TrySetResult(true);
+                server.Dispose();
+            }
+        }
+
+        [Test]
         public async Task TcpTransportServer_SessionConnectedCanSynchronouslyStopWithoutDeadlock()
         {
             var reserved = StartListener(out var port);
@@ -707,6 +742,17 @@ namespace InduLink.Tests
         private static async Task WithTimeout(Task task)
         {
             var completed = await Task.WhenAny(task, Task.Delay(5000));
+            if (completed != task)
+            {
+                throw new TimeoutException("The loopback test operation did not complete in time.");
+            }
+
+            await task;
+        }
+
+        private static async Task WithTimeout(Task task, int timeoutMilliseconds)
+        {
+            var completed = await Task.WhenAny(task, Task.Delay(timeoutMilliseconds));
             if (completed != task)
             {
                 throw new TimeoutException("The loopback test operation did not complete in time.");
