@@ -23,25 +23,43 @@ namespace InduLink.Runtime.Configuration
         where TSettings : class, IProtocolSettings, new()
     {
         public abstract string Protocol { get; }
-        public Type SettingsType { get { return typeof(TSettings); } }
-        public virtual IProtocolSettings CreateDefaultSettings() { return new TSettings(); }
+        public Type SettingsType => typeof(TSettings);
+
+        public virtual IProtocolSettings CreateDefaultSettings()
+        {
+            return new TSettings();
+        }
 
         public IReadOnlyList<string> Validate(IProtocolSettings settings)
         {
-            var typed = settings as TSettings;
-            if (typed == null) return new[] { "Settings type must be " + typeof(TSettings).Name + "." };
-            return Validate(typed);
+            return settings is TSettings typed
+                ? Validate(typed)
+                : new[] { $"Settings type must be {typeof(TSettings).Name}." };
         }
 
         public IInduLinkClient CreateClient(InduLinkDeviceConfig device, IInduLinkLogger logger)
         {
-            if (device == null) throw new ArgumentNullException(nameof(device));
+            if (device == null)
+            {
+                throw new ArgumentNullException(nameof(device));
+            }
+
             if (device.Runtime == null || device.Runtime.OperationTimeoutMilliseconds <= 0)
+            {
                 throw new ArgumentException("Device runtime and a positive operation timeout are required.", nameof(device));
-            var typed = device.Settings as TSettings;
-            if (typed == null) throw new ArgumentException("Settings type does not match protocol '" + Protocol + "'.", nameof(device));
+            }
+
+            if (device.Settings is not TSettings typed)
+            {
+                throw new ArgumentException($"Settings type does not match protocol '{Protocol}'.", nameof(device));
+            }
+
             var errors = Validate(typed);
-            if (errors.Count > 0) throw new ArgumentException(string.Join(" ", errors), nameof(device));
+            if (errors.Count > 0)
+            {
+                throw new ArgumentException(string.Join(" ", errors), nameof(device));
+            }
+
             return CreateClient(device, typed, logger ?? NullInduLinkLogger.Instance);
         }
 
@@ -61,17 +79,33 @@ namespace InduLink.Runtime.Configuration
 
         public IReadOnlyList<IInduLinkProtocolProvider> Providers
         {
-            get { return _providers.Values.OrderBy(provider => provider.Protocol, StringComparer.Ordinal).ToList().AsReadOnly(); }
+            get
+            {
+                return _providers.Values
+                    .OrderBy(provider => provider.Protocol, StringComparer.Ordinal)
+                    .ToList()
+                    .AsReadOnly();
+            }
         }
 
         public InduLinkProtocolRegistry Register(IInduLinkProtocolProvider provider)
         {
-            if (provider == null) throw new ArgumentNullException(nameof(provider));
+            if (provider == null)
+            {
+                throw new ArgumentNullException(nameof(provider));
+            }
+
             ValidateProtocolKey(provider.Protocol);
             if (provider.SettingsType == null || !typeof(IProtocolSettings).IsAssignableFrom(provider.SettingsType))
+            {
                 throw new ArgumentException("Provider SettingsType must implement IProtocolSettings.", nameof(provider));
+            }
+
             if (_providers.ContainsKey(provider.Protocol))
-                throw new InvalidOperationException("Protocol is already registered: " + provider.Protocol);
+            {
+                throw new InvalidOperationException($"Protocol is already registered: {provider.Protocol}");
+            }
+
             _providers.Add(provider.Protocol, provider);
             return this;
         }
@@ -84,20 +118,33 @@ namespace InduLink.Runtime.Configuration
 
         public IInduLinkProtocolProvider Get(string protocol)
         {
-            IInduLinkProtocolProvider provider;
-            if (!TryGet(protocol, out provider))
-                throw new KeyNotFoundException("Unsupported protocol: " + protocol);
+            if (!TryGet(protocol, out var provider))
+            {
+                throw new KeyNotFoundException($"Unsupported protocol: {protocol}");
+            }
+
             return provider;
         }
 
         private static void ValidateProtocolKey(string protocol)
         {
-            if (string.IsNullOrWhiteSpace(protocol)) throw new ArgumentException("Protocol key cannot be empty.");
+            if (string.IsNullOrWhiteSpace(protocol))
+            {
+                throw new ArgumentException("Protocol key cannot be empty.");
+            }
+
             if (!string.Equals(protocol, protocol.Trim().ToLowerInvariant(), StringComparison.Ordinal))
-                throw new ArgumentException("Protocol key must be canonical lowercase text: " + protocol);
-            foreach (var value in protocol)
-                if (!(value >= 'a' && value <= 'z') && !(value >= '0' && value <= '9') && value != '-')
-                    throw new ArgumentException("Protocol key contains an unsupported character: " + protocol);
+            {
+                throw new ArgumentException($"Protocol key must be canonical lowercase text: {protocol}");
+            }
+
+            if (protocol.Any(value =>
+                    (value < 'a' || value > 'z') &&
+                    (value < '0' || value > '9') &&
+                    value != '-'))
+            {
+                throw new ArgumentException($"Protocol key contains an unsupported character: {protocol}");
+            }
         }
     }
 }

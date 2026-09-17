@@ -16,12 +16,19 @@ namespace InduLink.Runtime
             Tags = tags ?? throw new ArgumentNullException(nameof(tags));
         }
 
-        public string DeviceName { get; private set; }
-        public IInduLinkClient Client { get; private set; }
-        public TagTable Tags { get; private set; }
+        public string DeviceName { get; }
+        public IInduLinkClient Client { get; }
+        public TagTable Tags { get; }
 
-        public Task ConnectAsync(CancellationToken cancellationToken = default) { return Client.ConnectAsync(cancellationToken); }
-        public Task DisconnectAsync(CancellationToken cancellationToken = default) { return Client.DisconnectAsync(cancellationToken); }
+        public Task ConnectAsync(CancellationToken cancellationToken = default)
+        {
+            return Client.ConnectAsync(cancellationToken);
+        }
+
+        public Task DisconnectAsync(CancellationToken cancellationToken = default)
+        {
+            return Client.DisconnectAsync(cancellationToken);
+        }
 
         public Task<DataValue> ReadAsync(string tagName, CancellationToken cancellationToken = default)
         {
@@ -48,12 +55,23 @@ namespace InduLink.Runtime
 
         public Task WriteManyAsync(IReadOnlyDictionary<string, object> values, CancellationToken cancellationToken = default)
         {
-            if (values == null) throw new ArgumentNullException(nameof(values));
-            var writes = new List<InduLinkWrite>();
-            foreach (var value in values) writes.Add(new InduLinkWrite(Tags.Get(value.Key), value.Value));
+            if (values == null)
+            {
+                throw new ArgumentNullException(nameof(values));
+            }
+
+            var writes = new List<InduLinkWrite>(values.Count);
+            foreach (var value in values)
+            {
+                writes.Add(new InduLinkWrite(Tags.Get(value.Key), value.Value));
+            }
+
             return Client.WriteManyAsync(writes, cancellationToken);
         }
 
-        public void Dispose() { Client.Dispose(); }
+        public void Dispose()
+        {
+            Client.Dispose();
+        }
     }
 }

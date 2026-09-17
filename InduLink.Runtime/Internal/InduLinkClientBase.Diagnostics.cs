@@ -12,12 +12,19 @@ namespace InduLink.Runtime
 {
     /// <summary>工业客户端公共基类，统一处理操作串行化、超时、健康状态和轮询订阅。</summary>
     public abstract partial class InduLinkClientBase
-    {        protected void RecordSuccess(long elapsedMilliseconds = 0)
+    {
+        protected void RecordSuccess(long elapsedMilliseconds = 0)
         {
             Interlocked.Increment(ref _totalOperations);
             Interlocked.Increment(ref _successfulOperations);
             Interlocked.Exchange(ref _lastOperationElapsedMilliseconds, elapsedMilliseconds);
-            lock (_diagnosticSync) { _lastFailureCategory = InduLinkFailureCategory.None; _lastOperationUtc = DateTimeOffset.UtcNow; }
+
+            lock (_diagnosticSync)
+            {
+                _lastFailureCategory = InduLinkFailureCategory.None;
+                _lastOperationUtc = DateTimeOffset.UtcNow;
+            }
+
             _lastSuccessUtc = DateTimeOffset.UtcNow;
             Interlocked.Exchange(ref _consecutiveFailures, 0);
             _lastError = null;
@@ -32,9 +39,16 @@ namespace InduLink.Runtime
         private void RecordReadResult(DataValue value, long elapsedMilliseconds)
         {
             if (value != null && value.Quality == QualityStatus.Good)
+            {
                 RecordSuccess(elapsedMilliseconds);
+            }
             else
-                RecordFailure(new InduLinkCommunicationException(value == null ? "Read returned no value." : value.ErrorMessage ?? "Read returned bad quality."), false, elapsedMilliseconds);
+            {
+                var message = value == null
+                    ? "Read returned no value."
+                    : value.ErrorMessage ?? "Read returned bad quality.";
+                RecordFailure(new InduLinkCommunicationException(message), false, elapsedMilliseconds);
+            }
         }
 
         private void RecordBatchResult(BatchReadResult result, long elapsedMilliseconds)
@@ -51,7 +65,12 @@ namespace InduLink.Runtime
                 Interlocked.Increment(ref _totalOperations);
                 Interlocked.Increment(ref _successfulOperations);
                 Interlocked.Exchange(ref _lastOperationElapsedMilliseconds, elapsedMilliseconds);
-                lock (_diagnosticSync) { _lastOperationUtc = DateTimeOffset.UtcNow; _lastFailureCategory = InduLinkFailureCategory.None; }
+                lock (_diagnosticSync)
+                {
+                    _lastOperationUtc = DateTimeOffset.UtcNow;
+                    _lastFailureCategory = InduLinkFailureCategory.None;
+                }
+
                 _lastSuccessUtc = DateTimeOffset.UtcNow;
                 _status = IsConnected ? ConnectionStatus.Connected : _status;
                 if (goodCount == result.Values.Count)
@@ -75,12 +94,25 @@ namespace InduLink.Runtime
         {
             Interlocked.Increment(ref _totalOperations);
             Interlocked.Increment(ref _failedOperations);
-            if (IsTimeoutFailure(ex)) Interlocked.Increment(ref _timeoutCount);
+            if (IsTimeoutFailure(ex))
+            {
+                Interlocked.Increment(ref _timeoutCount);
+            }
+
             Interlocked.Exchange(ref _lastOperationElapsedMilliseconds, elapsedMilliseconds);
-            lock (_diagnosticSync) { _lastFailureCategory = ClassifyFailure(ex); _lastOperationUtc = DateTimeOffset.UtcNow; }
+            lock (_diagnosticSync)
+            {
+                _lastFailureCategory = ClassifyFailure(ex);
+                _lastOperationUtc = DateTimeOffset.UtcNow;
+            }
+
             Interlocked.Increment(ref _consecutiveFailures);
-            _lastError = ex == null ? null : ex.Message;
-            if (connectionFailure) _status = ConnectionStatus.Faulted;
+            _lastError = ex?.Message;
+            if (connectionFailure)
+            {
+                _status = ConnectionStatus.Faulted;
+            }
+
             _logger.Error(string.Format("Operation failed | Device={0} | Protocol={1}", DeviceId, Kind), ex);
         }
 
@@ -88,18 +120,38 @@ namespace InduLink.Runtime
         {
             lock (_diagnosticSync)
             {
-                return new InduLinkDiagnosticSnapshot(DeviceId, Kind, Interlocked.Read(ref _totalOperations),
-                    Interlocked.Read(ref _successfulOperations), Interlocked.Read(ref _failedOperations),
-                    Interlocked.Read(ref _timeoutCount), Volatile.Read(ref _consecutiveFailures),
-                    Interlocked.Read(ref _lastOperationElapsedMilliseconds), _lastFailureCategory, _lastError, _lastOperationUtc,
-                    Interlocked.Read(ref _serialPortOpenFailureCount), Interlocked.Read(ref _responseTimeoutCount),
+                return new InduLinkDiagnosticSnapshot(
+                    DeviceId,
+                    Kind,
+                    Interlocked.Read(ref _totalOperations),
+                    Interlocked.Read(ref _successfulOperations),
+                    Interlocked.Read(ref _failedOperations),
+                    Interlocked.Read(ref _timeoutCount),
+                    Volatile.Read(ref _consecutiveFailures),
+                    Interlocked.Read(ref _lastOperationElapsedMilliseconds),
+                    _lastFailureCategory,
+                    _lastError,
+                    _lastOperationUtc,
+                    Interlocked.Read(ref _serialPortOpenFailureCount),
+                    Interlocked.Read(ref _responseTimeoutCount),
                     Interlocked.Read(ref _frameErrorCount));
             }
         }
 
-        protected void RecordSerialPortOpenFailure() { Interlocked.Increment(ref _serialPortOpenFailureCount); }
-        protected void RecordResponseTimeout() { Interlocked.Increment(ref _responseTimeoutCount); }
-        protected void RecordFrameError() { Interlocked.Increment(ref _frameErrorCount); }
+        protected void RecordSerialPortOpenFailure()
+        {
+            Interlocked.Increment(ref _serialPortOpenFailureCount);
+        }
+
+        protected void RecordResponseTimeout()
+        {
+            Interlocked.Increment(ref _responseTimeoutCount);
+        }
+
+        protected void RecordFrameError()
+        {
+            Interlocked.Increment(ref _frameErrorCount);
+        }
 
         private static InduLinkFailureCategory ClassifyFailure(Exception ex)
         {
