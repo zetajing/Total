@@ -9,7 +9,7 @@ using InduLink.Runtime.Configuration;
 namespace InduLink.Runtime
 {
     /// <summary>表示 DeviceHost 管理的一台设备，并代理按点位名称的读写操作。</summary>
-    public sealed class InduLinkHostedDevice : IDisposable
+    public sealed class InduLinkHostedDevice : IDisposable, IAsyncDisposable
     {
         private readonly InduLinkDeviceConfig _config;
         private readonly Action<InduLinkDeviceStateChangedEventArgs> _stateChanged;
@@ -163,6 +163,12 @@ namespace InduLink.Runtime
         /// <summary>停止后台任务并释放底层协议客户端。</summary>
         public void Dispose()
         {
+            DisposeAsync().AsTask().GetAwaiter().GetResult();
+        }
+
+        /// <summary>异步停止后台任务并释放底层协议客户端。</summary>
+        public async ValueTask DisposeAsync()
+        {
             if (Interlocked.Exchange(ref _disposed, 1) != 0)
             {
                 return;
@@ -174,7 +180,7 @@ namespace InduLink.Runtime
             }
             finally
             {
-                Device.Dispose();
+                await Device.DisposeAsync().ConfigureAwait(false);
                 _lifecycleGate.Dispose();
             }
         }

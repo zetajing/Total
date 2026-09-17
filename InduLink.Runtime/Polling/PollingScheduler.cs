@@ -16,7 +16,7 @@ namespace InduLink.Runtime.Polling
     /// 按设备合并轮询的调度器。同一客户端仅运行一个后台循环，多个订阅到期时会合并重复点位，
     /// 减少重复请求，并使用固定节拍推进下一次轮询时间，避免“读取耗时 + Interval”造成累计漂移。
     /// </summary>
-    public sealed partial class PollingScheduler : IPollingScheduler
+    public sealed partial class PollingScheduler : IPollingScheduler, IAsyncDisposable
     {
         private readonly ConcurrentDictionary<string, SubscriptionRegistration> _subscriptions =
             new ConcurrentDictionary<string, SubscriptionRegistration>(StringComparer.OrdinalIgnoreCase);
@@ -133,6 +133,11 @@ namespace InduLink.Runtime.Polling
 
         public void Dispose()
         {
+            DisposeAsync().AsTask().GetAwaiter().GetResult();
+        }
+
+        public async ValueTask DisposeAsync()
+        {
             DeviceWorker[] workers;
             lock (_lifecycleSync)
             {
@@ -143,7 +148,7 @@ namespace InduLink.Runtime.Polling
             }
 
             foreach (var worker in workers)
-                worker.Dispose();
+                await worker.DisposeAsync().ConfigureAwait(false);
 
             _workers.Clear();
             _retiringWorkers.Clear();

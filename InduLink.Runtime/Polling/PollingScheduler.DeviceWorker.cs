@@ -18,7 +18,7 @@ namespace InduLink.Runtime.Polling
     /// </summary>
     public sealed partial class PollingScheduler : IPollingScheduler
     {
-        private sealed class DeviceWorker : IDisposable
+        private sealed class DeviceWorker : IDisposable, IAsyncDisposable
         {
             private const int StateActive = 0;
             private const int StateStopping = 1;
@@ -482,6 +482,11 @@ namespace InduLink.Runtime.Polling
 
             public void Dispose()
             {
+                DisposeAsync().AsTask().GetAwaiter().GetResult();
+            }
+
+            public async ValueTask DisposeAsync()
+            {
                 BeginStop();
 
                 // A handler may synchronously dispose its scheduler. Waiting for this
@@ -492,7 +497,7 @@ namespace InduLink.Runtime.Polling
                 if (ReferenceEquals(CurrentWorker.Value, this) || ReferenceEquals(_dispatchingWorker, this))
                     return;
 
-                _loopTask.GetAwaiter().GetResult();
+                await _loopTask.ConfigureAwait(false);
                 DisposeResources();
             }
         }

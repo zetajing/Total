@@ -57,7 +57,7 @@ namespace InduLink.Runtime
                 }
                 finally
                 {
-                    client.Dispose();
+                    await ((IAsyncDisposable)client).DisposeAsync().ConfigureAwait(false);
                 }
             }
         }
@@ -87,7 +87,7 @@ namespace InduLink.Runtime
                 }
                 finally
                 {
-                    client.Dispose();
+                    await ((IAsyncDisposable)client).DisposeAsync().ConfigureAwait(false);
                 }
             }
         }

@@ -304,9 +304,23 @@ namespace InduLink.Runtime
 
         public void Dispose()
         {
+            DisposeAsync().AsTask().GetAwaiter().GetResult();
+        }
+
+        public async ValueTask DisposeAsync()
+        {
             if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
-            _pollingScheduler.Dispose();
-            _operationLock.Wait();
+
+            if (_pollingScheduler is IAsyncDisposable asyncPollingScheduler)
+            {
+                await asyncPollingScheduler.DisposeAsync().ConfigureAwait(false);
+            }
+            else
+            {
+                _pollingScheduler.Dispose();
+            }
+
+            await _operationLock.WaitAsync().ConfigureAwait(false);
             try
             {
                 DisposeCore();

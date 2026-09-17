@@ -10,7 +10,7 @@ using InduLink.Diagnostics;
 namespace InduLink.Runtime
 {
     /// <summary>承载多个配置化设备的运行时，负责启动、轮询、状态通知和断线重连。</summary>
-    public sealed class InduLinkDeviceHost : IDisposable
+    public sealed class InduLinkDeviceHost : IDisposable, IAsyncDisposable
     {
         private readonly Dictionary<string, InduLinkHostedDevice> _devices = new Dictionary<string, InduLinkHostedDevice>(StringComparer.OrdinalIgnoreCase);
         private readonly IInduLinkLogger _logger;
@@ -192,6 +192,12 @@ namespace InduLink.Runtime
         /// <summary>停止设备主机并释放所有底层协议客户端。</summary>
         public void Dispose()
         {
+            DisposeAsync().AsTask().GetAwaiter().GetResult();
+        }
+
+        /// <summary>异步停止设备主机并释放全部底层协议客户端。</summary>
+        public async ValueTask DisposeAsync()
+        {
             if (Interlocked.Exchange(ref _disposed, 1) != 0)
             {
                 return;
@@ -199,7 +205,7 @@ namespace InduLink.Runtime
 
             try
             {
-                StopAsync(CancellationToken.None).GetAwaiter().GetResult();
+                await StopAsync(CancellationToken.None).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
@@ -209,7 +215,7 @@ namespace InduLink.Runtime
             {
                 foreach (var device in _devices.Values)
                 {
-                    device.Dispose();
+                    await device.DisposeAsync().ConfigureAwait(false);
                 }
                 _lifecycleGate.Dispose();
             }

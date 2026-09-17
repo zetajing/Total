@@ -110,6 +110,38 @@ namespace InduLink.Tests
         }
 
         [Test]
+        public async Task DeviceHost_DisposeAsyncStopsAndDisposesClients()
+        {
+            var directory = CreatePointDirectory();
+            try
+            {
+                var client = new LifecycleClient("device");
+                var host = new InduLinkDeviceHost(Config(Device("device")), directory, _ => client);
+
+                await host.StartAsync(CancellationToken.None);
+                await host.DisposeAsync();
+
+                Assert.IsFalse(client.IsConnected);
+                Assert.IsTrue(client.Disposed);
+                Assert.AreEqual(1, client.UnsubscribeCalls);
+            }
+            finally
+            {
+                Directory.Delete(directory, true);
+            }
+        }
+
+        [Test]
+        public async Task Connection_DefaultDisposeAsyncFallsBackToDispose()
+        {
+            var client = new LifecycleClient("default-async-dispose");
+
+            await ((IAsyncDisposable)client).DisposeAsync();
+
+            Assert.IsTrue(client.Disposed);
+        }
+
+        [Test]
         public async Task BufferedRecorder_SerializesStartAndStopAndRejectsRestart()
         {
             var store = new LifecycleStore { BlockInitialize = true };

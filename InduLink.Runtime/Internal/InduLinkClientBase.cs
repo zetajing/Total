@@ -11,7 +11,7 @@ using InduLink.Exceptions;
 namespace InduLink.Runtime
 {
     /// <summary>工业客户端公共基类，统一处理操作串行化、超时、健康状态和轮询订阅。</summary>
-    public abstract partial class InduLinkClientBase : IInduLinkClient, IProtocolCapabilityProvider, IInduLinkDiagnosticsProvider
+    public abstract partial class InduLinkClientBase : IInduLinkClient, IProtocolCapabilityProvider, IInduLinkDiagnosticsProvider, IAsyncDisposable
     {
         private readonly SemaphoreSlim _operationLock = new SemaphoreSlim(1, 1);
         private readonly IPollingScheduler _pollingScheduler;

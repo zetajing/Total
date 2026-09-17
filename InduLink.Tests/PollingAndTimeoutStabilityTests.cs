@@ -123,6 +123,28 @@ namespace InduLink.Tests
         }
 
         [Test]
+        public async Task DisposeAsync_WaitsWithoutBlockingTheCallerThread()
+        {
+            var scheduler = new PollingScheduler();
+            using (var client = new PollingClient("async-dispose-device") { BlockReads = true })
+            {
+                await scheduler.SubscribeAsync(
+                    client,
+                    Request("async-blocked", client.DeviceId, TimeSpan.FromMilliseconds(100)),
+                    null,
+                    CancellationToken.None);
+                await CompletesWithin(client.ReadStarted.Task, 1000);
+
+                var disposeTask = scheduler.DisposeAsync().AsTask();
+                Assert.IsFalse(disposeTask.IsCompleted,
+                    "DisposeAsync should yield while an in-flight read is still using the worker.");
+
+                client.ReleaseRead.TrySetResult(true);
+                await CompletesWithin(disposeTask, 1000);
+            }
+        }
+
+        [Test]
         public async Task Dispose_WaitsForRetiringWorkerAfterClientReplacement()
         {
             var scheduler = new PollingScheduler();
@@ -203,6 +225,23 @@ namespace InduLink.Tests
                 await CompletesWithin(logger.LateFailureLogged.Task, 1000);
                 StringAssert.Contains("Late read core task failed", logger.LastErrorMessage);
             }
+        }
+
+        [Test]
+        public async Task ClientDisposeAsync_WaitsForNonCooperativeCoreWithoutBlockingCaller()
+        {
+            var client = new NonCooperativeClient(new RecordingLogger(), 35);
+            var result = await client.ReadAsync(
+                new ReadRequest(client.DeviceId, "blocked", DataType.Int16),
+                CancellationToken.None);
+            Assert.AreEqual(QualityStatus.Bad, result.Quality);
+
+            var disposeTask = client.DisposeAsync().AsTask();
+            Assert.IsFalse(disposeTask.IsCompleted,
+                "DisposeAsync should yield while the timed-out core operation still owns the connection lock.");
+
+            client.FirstRead.TrySetResult(true);
+            await CompletesWithin(disposeTask, 1000);
         }
 
         private static SubscriptionRequest Request(string key, string deviceId, TimeSpan interval)

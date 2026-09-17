@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 namespace InduLink.Abstractions
 {
     /// <summary>Common lifecycle contract shared by protocol capability clients.</summary>
-    public interface IInduLinkConnection : IDisposable
+    public interface IInduLinkConnection : IDisposable, IAsyncDisposable
     {
         string DeviceId { get; }
         ProtocolKind Kind { get; }
@@ -14,6 +14,16 @@ namespace InduLink.Abstractions
         Task ConnectAsync(CancellationToken cancellationToken);
         Task DisconnectAsync(CancellationToken cancellationToken);
         HealthSnapshot GetHealth();
+
+        /// <summary>
+        /// Asynchronously releases the connection. Existing custom clients that only implement
+        /// <see cref="IDisposable"/> keep working through this synchronous fallback.
+        /// </summary>
+        ValueTask IAsyncDisposable.DisposeAsync()
+        {
+            Dispose();
+            return ValueTask.CompletedTask;
+        }
     }
 
     /// <summary>Register/bit address read and write capability for PLC-like protocols.</summary>

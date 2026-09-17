@@ -6,7 +6,7 @@ using InduLink.Abstractions;
 
 namespace InduLink.Runtime
 {
-    public sealed class InduLinkConfiguredClient : IDisposable
+    public sealed class InduLinkConfiguredClient : IDisposable, IAsyncDisposable
     {
         public InduLinkConfiguredClient(string deviceName, IInduLinkClient client, TagTable tags)
         {
@@ -72,6 +72,17 @@ namespace InduLink.Runtime
         public void Dispose()
         {
             Client.Dispose();
+        }
+
+        public ValueTask DisposeAsync()
+        {
+            if (Client is IAsyncDisposable asyncClient)
+            {
+                return asyncClient.DisposeAsync();
+            }
+
+            Client.Dispose();
+            return ValueTask.CompletedTask;
         }
     }
 }
