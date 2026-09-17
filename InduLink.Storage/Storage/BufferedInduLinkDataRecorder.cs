@@ -27,6 +27,12 @@ namespace InduLink.Storage
         public int QueueCapacity { get; set; } = 1000;
         /// <summary>单批失败后的重试次数。重试仍失败时记录错误并放弃该批数据。</summary>
         public int RetryCount { get; set; } = 2;
+
+        /// <summary>
+        /// Dispose 等待优雅排空的最长时间。超时后会取消后台写入并丢弃仍在队列中的批次；
+        /// 若底层存储不响应取消，资源会在后台任务真正退出后再释放。
+        /// </summary>
+        public TimeSpan DisposeTimeout { get; set; } = TimeSpan.FromSeconds(5);
     }
 
     public sealed class BufferedRecorderSnapshot
@@ -76,6 +82,7 @@ namespace InduLink.Storage
         private long _lastSuccessfulWriteUtcTicks;
         private string _lastError;
         private int _disposed;
+        private int _resourcesDisposed;
 
         /// <summary>
         /// 创建后台记录器，但此时还没有连接数据库或启动后台任务。
@@ -93,6 +100,7 @@ namespace InduLink.Storage
             if (_options.BatchSize <= 0) throw new ArgumentOutOfRangeException(nameof(options), "BatchSize 必须大于 0。");
             if (_options.QueueCapacity <= 0) throw new ArgumentOutOfRangeException(nameof(options), "QueueCapacity 必须大于 0。");
             if (_options.RetryCount < 0) throw new ArgumentOutOfRangeException(nameof(options), "RetryCount 不能小于 0。");
+            if (_options.DisposeTimeout <= TimeSpan.Zero) throw new ArgumentOutOfRangeException(nameof(options), "DisposeTimeout 必须大于 0。");
             _logger = logger ?? NullInduLinkLogger.Instance;
             _queue = new BlockingCollection<IReadOnlyCollection<InduLinkDataRecord>>(_options.QueueCapacity);
         }
@@ -223,17 +231,59 @@ namespace InduLink.Storage
                 return;
             }
 
-            // 即使先前 StopAsync 的“等待”被取消，实际排空任务仍保存在 _stopTask 中，
-            // Dispose 必须重新等待它，不能直接释放队列和存储对象。
-            try { StopAsync(CancellationToken.None).GetAwaiter().GetResult(); }
-            catch (Exception ex) { _logger.Error("停止数据库记录器失败。", ex); }
+            // Dispose 不能无限期等待数据库驱动或自定义存储实现。正常情况下先
+            // 优雅排空；超时后取消消费者并丢弃尚未开始写入的队列数据。
+            Task stopTask = null;
+            try
+            {
+                stopTask = StopAsync(CancellationToken.None);
+                if (!stopTask.Wait(_options.DisposeTimeout))
+                {
+                    _logger.Warn("停止数据库记录器超时，取消后台写入并丢弃未处理队列数据。");
+                    try { _stopSource.Cancel(); } catch (ObjectDisposedException) { }
+                    DropQueuedRecords();
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.Error("停止数据库记录器失败。", ex);
+            }
 
-            // 释放顺序：通知任务取消 → 释放队列/令牌源 → 释放具体数据库存储。
-            _stopSource.Cancel();
-            _queue.Dispose();
-            _stopSource.Dispose();
-            _store.Dispose();
-            _lifecycleGate.Dispose();
+            if (stopTask == null || stopTask.IsCompleted)
+            {
+                DisposeResources();
+            }
+            else
+            {
+                // 自定义存储可能忽略取消。不要在消费者仍运行时释放队列或存储，
+                // 让后台任务退出后完成最后的资源回收，避免并发 Dispose 竞态。
+                _ = stopTask.ContinueWith(
+                    completed =>
+                    {
+                        if (completed.IsFaulted)
+                            _logger.Error("后台数据库记录器最终停止失败。", completed.Exception);
+                        DisposeResources();
+                    },
+                    CancellationToken.None,
+                    TaskContinuationOptions.ExecuteSynchronously,
+                    TaskScheduler.Default);
+            }
+        }
+
+        private void DropQueuedRecords()
+        {
+            IReadOnlyCollection<InduLinkDataRecord> records;
+            while (_queue.TryTake(out records))
+                Interlocked.Add(ref _droppedRecordCount, records.Count);
+        }
+
+        private void DisposeResources()
+        {
+            if (Interlocked.Exchange(ref _resourcesDisposed, 1) != 0) return;
+            try { _queue.Dispose(); } catch { }
+            try { _stopSource.Dispose(); } catch { }
+            try { _store.Dispose(); } catch { }
+            try { _lifecycleGate.Dispose(); } catch { }
             Interlocked.Exchange(ref _started, 0);
         }
 

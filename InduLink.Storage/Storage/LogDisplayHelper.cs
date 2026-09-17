@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.Text;
 using System.Threading;
@@ -64,7 +65,7 @@ namespace InduLink.Storage
 
             var builder = new StringBuilder();
             builder.Append('[')
-                .Append(Timestamp.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss.fff"))
+                .Append(Timestamp.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss.fff", CultureInfo.InvariantCulture))
                 .Append("] [")
                 .Append(Channel)
                 .Append("] [")
@@ -476,7 +477,7 @@ namespace InduLink.Storage
             foreach (var entry in batch)
             {
                 var channel = LogDisplayHelper.NormalizeChannel(entry.Channel);
-                var hour = entry.Timestamp.ToLocalTime().ToString("yyyyMMdd_HH");
+                var hour = entry.Timestamp.ToLocalTime().ToString("yyyyMMdd_HH", CultureInfo.InvariantCulture);
                 var key = channel + "|" + hour;
                 if (!groupMap.TryGetValue(key, out var group))
                 {

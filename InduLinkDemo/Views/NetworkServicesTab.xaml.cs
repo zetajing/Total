@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Net;
 using System.Net.Http;
 using System.Text;
 using System.Threading;
@@ -559,6 +560,8 @@ namespace InduLinkDemo.Views
             var secrets = new List<string>();
             if (useSavedApiKey)
             {
+                if (!IsSafeApiKeyTarget(uri))
+                    throw new InvalidOperationException("为避免泄露 API Key，只允许向当前 Web 网关同源地址或 HTTPS 回环地址发送保存的 API Key。");
                 string apiKey;
                 var secretName = _ctx.NetworkServices.Configuration.WebGateway.ApiKeySecretName;
                 if (!_ctx.NetworkServices.TryGetSecret(secretName, out apiKey) || string.IsNullOrEmpty(apiKey))
@@ -571,6 +574,21 @@ namespace InduLinkDemo.Views
             AppendLog(HttpLogTextBox, string.Format("{0:HH:mm:ss} {1} {2} -> {3} {4}\r\n{5}",
                 DateTime.Now, method.Method, uri.GetLeftPart(UriPartial.Path), (int)response.StatusCode,
                 response.ReasonPhrase, responseText));
+        }
+
+        private bool IsSafeApiKeyTarget(Uri target)
+        {
+            var configured = _ctx.NetworkServices.Configuration.WebGateway.ListenPrefix;
+            Uri gateway;
+            if (Uri.TryCreate(configured, UriKind.Absolute, out gateway) &&
+                string.Equals(target.Scheme, gateway.Scheme, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(target.Host, gateway.Host, StringComparison.OrdinalIgnoreCase) &&
+                target.Port == gateway.Port)
+                return true;
+
+            IPAddress address;
+            return target.Scheme == Uri.UriSchemeHttps &&
+                IPAddress.TryParse(target.Host, out address) && IPAddress.IsLoopback(address);
         }
 
         private void AttachWebGatewayEvents()

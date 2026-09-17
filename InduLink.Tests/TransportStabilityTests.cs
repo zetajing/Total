@@ -358,7 +358,7 @@ namespace InduLink.Tests
             var server = new TcpTransportServer(IPAddress.Loopback, port);
             try
             {
-                server.DataReceivedAsync += async (sender, args) =>
+                server.DataReceivedAsync += async (sender, args, cancellationToken) =>
                 {
                     await server.StopAsync(CancellationToken.None);
                     callbackReturned.TrySetResult(true);
@@ -392,7 +392,7 @@ namespace InduLink.Tests
             var server = new TcpTransportServer(IPAddress.Loopback, port);
             try
             {
-                server.DataReceivedAsync += async (sender, args) =>
+                server.DataReceivedAsync += async (sender, args, cancellationToken) =>
                 {
                     callbackEntered.TrySetResult(true);
                     await releaseCallback.Task;
@@ -513,7 +513,7 @@ namespace InduLink.Tests
             var server = new TcpTransportServer(IPAddress.Loopback, port);
             try
             {
-                server.DataReceivedAsync += async (sender, args) =>
+                server.DataReceivedAsync += async (sender, args, cancellationToken) =>
                 {
                     await server.StopAsync(CancellationToken.None);
                     try

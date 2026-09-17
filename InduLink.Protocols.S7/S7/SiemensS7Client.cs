@@ -299,6 +299,13 @@ namespace InduLink.Protocols.S7
             }
             catch (InduLinkAddressParseException) { throw; }
             catch (InduLinkDataConversionException) { throw; }
+            catch (PlcException ex)
+            {
+                // S7.Net reports PLC-level request errors separately from transport
+                // failures.  Do not close/reconnect/replay a request that was
+                // deterministically rejected by the PLC.
+                throw new InduLinkProtocolException("S7 PLC rejected the request.", ex);
+            }
             catch (Exception first)
             {
                 ClosePlc();

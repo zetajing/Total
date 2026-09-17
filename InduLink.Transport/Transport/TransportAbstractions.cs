@@ -6,7 +6,10 @@ using System.Threading.Tasks;
 namespace InduLink.Transport
 {
     /// <summary>可等待的 TCP 数据接收回调，适合需要执行异步回复或持久化的订阅者。</summary>
-    public delegate Task TransportDataReceivedAsyncEventHandler(object sender, TransportDataReceivedEventArgs e);
+    public delegate Task TransportDataReceivedAsyncEventHandler(
+        object sender,
+        TransportDataReceivedEventArgs e,
+        CancellationToken cancellationToken);
 
     /// <summary>
     /// TCP 传输选项。提供用于配置 TCP 客户端连接行为的参数，包括主机地址、端口号以及各种超时设置。

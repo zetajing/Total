@@ -128,6 +128,12 @@ namespace InduLink.Protocols.Modbus
             {
                 throw;
             }
+            catch (SlaveException ex)
+            {
+                // The slave did receive and reject the request.  This is a
+                // deterministic protocol failure, not an unknown write outcome.
+                throw new InduLinkProtocolException("Modbus slave rejected the request.", ex);
+            }
             catch (Exception ex)
             {
                 throw new InduLinkWriteUncertainException(

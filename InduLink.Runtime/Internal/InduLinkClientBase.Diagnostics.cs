@@ -25,10 +25,13 @@ namespace InduLink.Runtime
                 _lastOperationUtc = DateTimeOffset.UtcNow;
             }
 
-            _lastSuccessUtc = DateTimeOffset.UtcNow;
-            Interlocked.Exchange(ref _consecutiveFailures, 0);
-            _lastError = null;
-            _status = IsConnected ? ConnectionStatus.Connected : _status;
+            lock (_diagnosticSync)
+            {
+                _lastSuccessUtc = DateTimeOffset.UtcNow;
+                Interlocked.Exchange(ref _consecutiveFailures, 0);
+                _lastError = null;
+                _status = IsConnected ? ConnectionStatus.Connected : _status;
+            }
         }
 
         protected void RecordFailure(Exception ex)
@@ -71,17 +74,20 @@ namespace InduLink.Runtime
                     _lastFailureCategory = InduLinkFailureCategory.None;
                 }
 
-                _lastSuccessUtc = DateTimeOffset.UtcNow;
-                _status = IsConnected ? ConnectionStatus.Connected : _status;
-                if (goodCount == result.Values.Count)
+                lock (_diagnosticSync)
                 {
-                    Interlocked.Exchange(ref _consecutiveFailures, 0);
-                    _lastError = null;
-                }
-                else
-                {
-                    Interlocked.Increment(ref _consecutiveFailures);
-                    _lastError = "Batch read completed with partial bad quality values.";
+                    _lastSuccessUtc = DateTimeOffset.UtcNow;
+                    _status = IsConnected ? ConnectionStatus.Connected : _status;
+                    if (goodCount == result.Values.Count)
+                    {
+                        Interlocked.Exchange(ref _consecutiveFailures, 0);
+                        _lastError = null;
+                    }
+                    else
+                    {
+                        Interlocked.Increment(ref _consecutiveFailures);
+                        _lastError = "Batch read completed with partial bad quality values.";
+                    }
                 }
             }
             else
@@ -106,11 +112,14 @@ namespace InduLink.Runtime
                 _lastOperationUtc = DateTimeOffset.UtcNow;
             }
 
-            Interlocked.Increment(ref _consecutiveFailures);
-            _lastError = ex?.Message;
-            if (connectionFailure)
+            lock (_diagnosticSync)
             {
-                _status = ConnectionStatus.Faulted;
+                Interlocked.Increment(ref _consecutiveFailures);
+                _lastError = ex?.Message;
+                if (connectionFailure)
+                {
+                    _status = ConnectionStatus.Faulted;
+                }
             }
 
             _logger.Error(string.Format("Operation failed | Device={0} | Protocol={1}", DeviceId, Kind), ex);

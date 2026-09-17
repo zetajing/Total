@@ -60,6 +60,19 @@ namespace InduLink.Tests
         }
 
         [Test]
+        public void TagTable_RejectsDuplicateAddressesAndNumericTypes()
+        {
+            var duplicateAddress = Assert.Throws<ArgumentException>(() => TagTable.FromJson(
+                "{\"tags\":[" +
+                "{\"name\":\"A\",\"address\":\"D1\",\"type\":\"Int16\"}," +
+                "{\"name\":\"B\",\"address\":\"d1\",\"type\":\"Int16\"}]}"));
+            StringAssert.Contains("address", duplicateAddress.Message.ToLowerInvariant());
+
+            Assert.Throws<ArgumentException>(() => TagTable.FromJson(
+                "{\"tags\":[{\"address\":\"D2\",\"type\":\"5\"}]}"));
+        }
+
+        [Test]
         public async Task Gateway_UsesNamedTagsAndEnforcesBothWriteSwitches()
         {
             var directory = CreateDirectory();

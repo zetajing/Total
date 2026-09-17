@@ -53,7 +53,8 @@ namespace InduLink.Mes
                     return;
                 }
 
-                if (!IsAuthorized(context.Request.Headers["Authorization"]))
+                if (!IsAuthorized(context.Request.Headers["Authorization"]) ||
+                    !IsOriginAllowed(context.Request.Headers["Origin"]))
                 {
                     await WriteJsonAsync(response, 401, "{\"error\":\"unauthorized\"}", stopToken).ConfigureAwait(false);
                     return;
@@ -211,6 +212,25 @@ namespace InduLink.Mes
             var difference = 0;
             for (var i = 0; i < required.Length; i++) difference |= actual[i] ^ required[i];
             return difference == 0;
+        }
+
+        private bool IsOriginAllowed(string actual)
+        {
+            if (string.IsNullOrWhiteSpace(actual)) return true;
+            if (_options.AllowedOrigins.Count == 0) return true;
+            foreach (var allowed in _options.AllowedOrigins)
+            {
+                if (string.Equals(NormalizeOrigin(actual), NormalizeOrigin(allowed), StringComparison.OrdinalIgnoreCase))
+                    return true;
+            }
+            return false;
+        }
+
+        private static string NormalizeOrigin(string origin)
+        {
+            Uri parsed;
+            if (!Uri.TryCreate(origin, UriKind.Absolute, out parsed)) return string.Empty;
+            return parsed.GetLeftPart(UriPartial.Authority).TrimEnd('/');
         }
 
         private static bool IsJsonContentType(string contentType)

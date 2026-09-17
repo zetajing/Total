@@ -456,6 +456,34 @@ namespace InduLink.Mes
                 throw new ArgumentOutOfRangeException(nameof(options.RequestBodyTimeoutMilliseconds));
             if (options.HandlerTimeoutMilliseconds <= 0)
                 throw new ArgumentOutOfRangeException(nameof(options.HandlerTimeoutMilliseconds));
+
+            if (!IsLoopback(prefix))
+            {
+                if (prefix.Scheme != Uri.UriSchemeHttps)
+                    throw new ArgumentException("MES receiver must use HTTPS when listening on a non-loopback host.", nameof(options));
+                if (string.IsNullOrWhiteSpace(options.RequiredAuthorizationHeaderValue))
+                    throw new ArgumentException("MES receiver must require Authorization when listening on a non-loopback host.", nameof(options));
+            }
+
+            if (options.AllowedOrigins == null)
+                throw new ArgumentException("MES receiver AllowedOrigins cannot be null.", nameof(options));
+            foreach (var origin in options.AllowedOrigins)
+            {
+                Uri parsedOrigin;
+                if (string.IsNullOrWhiteSpace(origin) ||
+                    !Uri.TryCreate(origin, UriKind.Absolute, out parsedOrigin) ||
+                    (parsedOrigin.Scheme != Uri.UriSchemeHttp && parsedOrigin.Scheme != Uri.UriSchemeHttps) ||
+                    !string.IsNullOrEmpty(parsedOrigin.PathAndQuery.Trim('/')) ||
+                    !string.IsNullOrEmpty(parsedOrigin.Fragment))
+                    throw new ArgumentException("MES receiver AllowedOrigins must contain absolute HTTP/HTTPS origins.", nameof(options));
+            }
+        }
+
+        private static bool IsLoopback(Uri prefix)
+        {
+            if (prefix.Host.Equals("localhost", StringComparison.OrdinalIgnoreCase)) return true;
+            IPAddress address;
+            return IPAddress.TryParse(prefix.Host, out address) && IPAddress.IsLoopback(address);
         }
 
         private void ThrowIfDisposed()

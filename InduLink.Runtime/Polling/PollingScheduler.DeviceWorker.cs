@@ -310,7 +310,7 @@ namespace InduLink.Runtime.Polling
                         var planned = ExtractReadBatches(plan);
                         if (planned.Count > 0)
                         {
-                            _logger.Info(
+                            _logger.Trace(
                                 string.Format(
                                     CultureInfo.InvariantCulture,
                                     "Polling batch plan | Device={0} | Protocol={1} | Planner={2} | OriginalRequests={3} | PlannedBatches={4} | SavedCalls={5}",

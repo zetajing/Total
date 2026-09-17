@@ -121,7 +121,12 @@
       "properties": {
         "amsNetId": { "type": "string", "pattern": "^([0-9]{1,3}\\.){5}[0-9]{1,3}$" },
         "port": { "type": "integer", "minimum": 1, "maximum": 65535 },
-        "connectTimeoutMilliseconds": { "type": "integer", "minimum": 1 }
+        "connectTimeoutMilliseconds": { "type": "integer", "minimum": 1 },
+        "enableSumCommands": { "type": "boolean" },
+        "maxBatchItems": { "type": "integer", "minimum": 1 },
+        "maxBatchPayloadBytes": { "type": "integer", "minimum": 4096 },
+        "validateTargetStateOnConnect": { "type": "boolean" },
+        "synchronizeNotifications": { "type": "boolean" }
       }
     },
     "mqttSettings": {

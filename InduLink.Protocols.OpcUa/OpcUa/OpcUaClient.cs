@@ -302,11 +302,14 @@ namespace InduLink.Protocols.OpcUa
                 {
                     case DataType.Bool: return Convert.ToBoolean(request.Value, CultureInfo.InvariantCulture);
                     case DataType.Byte: return Convert.ToByte(request.Value, CultureInfo.InvariantCulture);
+                    case DataType.SByte: return Convert.ToSByte(request.Value, CultureInfo.InvariantCulture);
                     case DataType.Char: return Convert.ToChar(request.Value, CultureInfo.InvariantCulture).ToString();
                     case DataType.Int16: return Convert.ToInt16(request.Value, CultureInfo.InvariantCulture);
                     case DataType.UInt16: return Convert.ToUInt16(request.Value, CultureInfo.InvariantCulture);
                     case DataType.Int32: return Convert.ToInt32(request.Value, CultureInfo.InvariantCulture);
                     case DataType.UInt32: return Convert.ToUInt32(request.Value, CultureInfo.InvariantCulture);
+                    case DataType.Int64: return Convert.ToInt64(request.Value, CultureInfo.InvariantCulture);
+                    case DataType.UInt64: return Convert.ToUInt64(request.Value, CultureInfo.InvariantCulture);
                     case DataType.Float: return Convert.ToSingle(request.Value, CultureInfo.InvariantCulture);
                     case DataType.Double: return Convert.ToDouble(request.Value, CultureInfo.InvariantCulture);
                     case DataType.String: return Convert.ToString(request.Value, CultureInfo.InvariantCulture);
@@ -334,11 +337,14 @@ namespace InduLink.Protocols.OpcUa
                 {
                     case DataType.Bool: value = Convert.ToBoolean(source.Value, CultureInfo.InvariantCulture); break;
                     case DataType.Byte: value = Convert.ToByte(source.Value, CultureInfo.InvariantCulture); break;
+                    case DataType.SByte: value = Convert.ToSByte(source.Value, CultureInfo.InvariantCulture); break;
                     case DataType.Char: value = Convert.ToChar(source.Value, CultureInfo.InvariantCulture); break;
                     case DataType.Int16: value = Convert.ToInt16(source.Value, CultureInfo.InvariantCulture); break;
                     case DataType.UInt16: value = Convert.ToUInt16(source.Value, CultureInfo.InvariantCulture); break;
                     case DataType.Int32: value = Convert.ToInt32(source.Value, CultureInfo.InvariantCulture); break;
                     case DataType.UInt32: value = Convert.ToUInt32(source.Value, CultureInfo.InvariantCulture); break;
+                    case DataType.Int64: value = Convert.ToInt64(source.Value, CultureInfo.InvariantCulture); break;
+                    case DataType.UInt64: value = Convert.ToUInt64(source.Value, CultureInfo.InvariantCulture); break;
                     case DataType.Float: value = Convert.ToSingle(source.Value, CultureInfo.InvariantCulture); break;
                     case DataType.Double: value = Convert.ToDouble(source.Value, CultureInfo.InvariantCulture); break;
                     case DataType.String: value = Convert.ToString(source.Value, CultureInfo.InvariantCulture); break;

@@ -77,9 +77,21 @@ namespace InduLinkDemo.Services
             // 数据目录可能在程序运行期间被人工删除。构造函数创建过目录并不代表
             // 保存时目录仍然存在，因此每次落盘前都要重新确保 State 目录可用。
             Directory.CreateDirectory(Path.GetDirectoryName(_filePath));
-            using (var stream = File.Create(_filePath))
+            var temporary = _filePath + "." + Guid.NewGuid().ToString("N") + ".tmp";
+            try
             {
-                Serializer.WriteObject(stream, state);
+                using (var stream = File.Create(temporary))
+                {
+                    Serializer.WriteObject(stream, state);
+                }
+                if (File.Exists(_filePath))
+                    File.Replace(temporary, _filePath, null, true);
+                else
+                    File.Move(temporary, _filePath);
+            }
+            finally
+            {
+                if (File.Exists(temporary)) File.Delete(temporary);
             }
         }
 

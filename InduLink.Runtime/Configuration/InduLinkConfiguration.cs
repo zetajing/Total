@@ -45,7 +45,15 @@ namespace InduLink.Runtime.Configuration
         {
             if (string.IsNullOrWhiteSpace(configDirectory)) throw new ArgumentException("Config directory cannot be empty.", nameof(configDirectory));
             if (string.IsNullOrWhiteSpace(PointsFile)) throw new InvalidOperationException("pointsFile cannot be empty.");
-            return Path.GetFullPath(Path.IsPathRooted(PointsFile) ? PointsFile : Path.Combine(configDirectory, PointsFile));
+            var root = Path.GetFullPath(configDirectory);
+            var candidate = Path.GetFullPath(Path.IsPathRooted(PointsFile) ? PointsFile : Path.Combine(root, PointsFile));
+            var rootWithSeparator = root.EndsWith(Path.DirectorySeparatorChar.ToString(), StringComparison.Ordinal)
+                ? root
+                : root + Path.DirectorySeparatorChar;
+            if (!string.Equals(candidate, root, StringComparison.OrdinalIgnoreCase) &&
+                !candidate.StartsWith(rootWithSeparator, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException("pointsFile must remain inside the configuration directory.");
+            return candidate;
         }
     }
 
@@ -165,7 +173,19 @@ namespace InduLink.Runtime.Configuration
             var fullPath = Path.GetFullPath(filePath);
             var directory = Path.GetDirectoryName(fullPath);
             if (!string.IsNullOrWhiteSpace(directory)) Directory.CreateDirectory(directory);
-            File.WriteAllText(fullPath, Serialize(config), new UTF8Encoding(false));
+            var temporary = fullPath + "." + Guid.NewGuid().ToString("N") + ".tmp";
+            try
+            {
+                File.WriteAllText(temporary, Serialize(config), new UTF8Encoding(false));
+                if (File.Exists(fullPath))
+                    File.Replace(temporary, fullPath, null, true);
+                else
+                    File.Move(temporary, fullPath);
+            }
+            finally
+            {
+                if (File.Exists(temporary)) File.Delete(temporary);
+            }
         }
 
         public string SerializeSettings(IProtocolSettings settings)

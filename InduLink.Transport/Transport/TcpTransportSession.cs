@@ -65,7 +65,7 @@ namespace InduLink.Transport
         /// </summary>
         public event EventHandler<byte[]> DataReceived;
 
-        internal event Func<TcpTransportSession, byte[], Task> DataReceivedAsync;
+        internal event Func<TcpTransportSession, byte[], CancellationToken, Task> DataReceivedAsync;
 
         /// <summary>
         /// 当会话因连接关闭或发生错误而终止时触发。
@@ -129,7 +129,7 @@ namespace InduLink.Transport
 
                     var data = new byte[read];
                     Buffer.BlockCopy(buffer, 0, data, 0, read);
-                    await InvokeDataReceivedSafelyAsync(data).ConfigureAwait(false);
+                    await InvokeDataReceivedSafelyAsync(data, cancellationToken).ConfigureAwait(false);
                 }
             }
             catch
@@ -138,10 +138,7 @@ namespace InduLink.Transport
             }
             finally
             {
-                if (Interlocked.Exchange(ref _closed, 1) == 0)
-                {
-                    InvokeClosedSafely();
-                }
+                SignalClosed();
             }
         }
 
@@ -172,10 +169,11 @@ namespace InduLink.Transport
             catch
             {
             }
+            SignalClosed();
             _cts.Dispose();
         }
 
-        private async Task InvokeDataReceivedSafelyAsync(byte[] data)
+        private async Task InvokeDataReceivedSafelyAsync(byte[] data, CancellationToken cancellationToken)
         {
             var handlers = DataReceived;
             if (handlers != null)
@@ -199,10 +197,18 @@ namespace InduLink.Transport
                 return;
             }
 
-            foreach (Func<TcpTransportSession, byte[], Task> handler in asyncHandlers.GetInvocationList())
+            foreach (Func<TcpTransportSession, byte[], CancellationToken, Task> handler in asyncHandlers.GetInvocationList())
             {
-                try { await handler(this, data).ConfigureAwait(false); }
+                try { await handler(this, data, cancellationToken).ConfigureAwait(false); }
                 catch { /* 异步业务回调失败同样不能关闭 Socket 会话。 */ }
+            }
+        }
+
+        private void SignalClosed()
+        {
+            if (Interlocked.Exchange(ref _closed, 1) == 0)
+            {
+                InvokeClosedSafely();
             }
         }
 

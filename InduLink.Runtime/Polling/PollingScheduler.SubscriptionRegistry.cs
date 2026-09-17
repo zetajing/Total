@@ -50,11 +50,29 @@ namespace InduLink.Runtime.Polling
             {
                 lock (_sync)
                 {
-                    do
+                    var intervalTicks = Request.Interval.Ticks;
+                    if (intervalTicks <= 0)
                     {
-                        _nextDueUtc = _nextDueUtc.Add(Request.Interval);
+                        _nextDueUtc = now.AddTicks(1);
+                        return;
                     }
-                    while (_nextDueUtc <= now);
+
+                    if (_nextDueUtc > now)
+                        return;
+
+                    // Jump over all missed slots in one calculation.  A stalled
+                    // callback must not make the scheduler spend thousands of
+                    // iterations catching up one interval at a time.
+                    var elapsedTicks = now.Ticks - _nextDueUtc.Ticks;
+                    var intervals = elapsedTicks / intervalTicks + 1;
+                    try
+                    {
+                        _nextDueUtc = _nextDueUtc.AddTicks(checked(intervals * intervalTicks));
+                    }
+                    catch (OverflowException)
+                    {
+                        _nextDueUtc = now.Add(Request.Interval);
+                    }
                 }
             }
 

@@ -82,9 +82,21 @@ namespace InduLinkDemo.Services
                 return defaults;
             }
 
-            var json = File.ReadAllText(FilePath, Encoding.UTF8);
-            var configuration = JsonConvert.DeserializeObject<NetworkServicesConfiguration>(json, JsonSettings);
-            return Normalize(configuration ?? new NetworkServicesConfiguration());
+            try
+            {
+                var json = File.ReadAllText(FilePath, Encoding.UTF8);
+                var configuration = Normalize(JsonConvert.DeserializeObject<NetworkServicesConfiguration>(json, JsonSettings)
+                    ?? new NetworkServicesConfiguration());
+                Validate(configuration);
+                return configuration;
+            }
+            catch
+            {
+                // A damaged or stale optional Demo configuration must not prevent the
+                // application from starting.  Keep the original file for diagnosis;
+                // the user can explicitly save a validated replacement.
+                return Normalize(new NetworkServicesConfiguration());
+            }
         }
 
         public void Save(NetworkServicesConfiguration configuration)

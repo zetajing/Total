@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+
 namespace InduLink.Mes
 {
     /// <summary>MES HTTP JSON 接收器选项。</summary>
@@ -34,5 +36,11 @@ namespace InduLink.Mes
         /// 可选的 Authorization 请求头完整值。为空时不校验；生产环境对外监听时建议配置。
         /// </summary>
         public string RequiredAuthorizationHeaderValue { get; set; }
+
+        /// <summary>
+        /// 可选的浏览器 Origin 白名单。请求不带 Origin 时视为非浏览器客户端；
+        /// 请求带 Origin 时必须命中此列表。
+        /// </summary>
+        public IList<string> AllowedOrigins { get; private set; } = new List<string>();
     }
 }

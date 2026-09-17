@@ -323,7 +323,10 @@ namespace InduLink.Transport
         /// </summary>
         /// <param name="sender">触发事件的会话对象。</param>
         /// <param name="payload">从会话接收到的二进制数据负载。</param>
-        private async Task OnSessionDataReceivedAsync(TcpTransportSession session, byte[] payload)
+        private async Task OnSessionDataReceivedAsync(
+            TcpTransportSession session,
+            byte[] payload,
+            CancellationToken cancellationToken)
         {
             var previousContext = _callbackContext.Value;
             var context = new CallbackContext(previousContext);
@@ -331,7 +334,10 @@ namespace InduLink.Transport
             try
             {
                 InvokeSafely(DataReceived, new TransportDataReceivedEventArgs(session, payload));
-                await InvokeAsyncSafely(DataReceivedAsync, new TransportDataReceivedEventArgs(session, payload)).ConfigureAwait(false);
+                await InvokeAsyncSafely(
+                    DataReceivedAsync,
+                    new TransportDataReceivedEventArgs(session, payload),
+                    cancellationToken).ConfigureAwait(false);
             }
             finally
             {
@@ -430,8 +436,8 @@ namespace InduLink.Transport
         private void UnsubscribeAndDispose(TcpTransportSession session)
         {
             session.DataReceivedAsync -= OnSessionDataReceivedAsync;
-            session.Closed -= OnSessionClosed;
             session.Dispose();
+            session.Closed -= OnSessionClosed;
         }
 
         private void InvokeSafely<TEventArgs>(EventHandler<TEventArgs> handlers, TEventArgs args)
@@ -455,7 +461,10 @@ namespace InduLink.Transport
             }
         }
 
-        private async Task InvokeAsyncSafely(TransportDataReceivedAsyncEventHandler handlers, TransportDataReceivedEventArgs args)
+        private async Task InvokeAsyncSafely(
+            TransportDataReceivedAsyncEventHandler handlers,
+            TransportDataReceivedEventArgs args,
+            CancellationToken cancellationToken)
         {
             if (handlers == null)
             {
@@ -464,7 +473,7 @@ namespace InduLink.Transport
 
             foreach (TransportDataReceivedAsyncEventHandler handler in handlers.GetInvocationList())
             {
-                try { await handler(this, args).ConfigureAwait(false); }
+                try { await handler(this, args, cancellationToken).ConfigureAwait(false); }
                 catch { /* 单个异步订阅者失败不能中断其他订阅者和接收循环。 */ }
             }
         }

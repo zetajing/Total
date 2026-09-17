@@ -2,6 +2,7 @@ using System;
 using System.Collections.Concurrent;
 using System.IO;
 using System.Linq;
+using System.Globalization;
 using System.Threading;
 using InduLink.Storage;
 using NUnit.Framework;
@@ -29,9 +30,10 @@ namespace InduLink.Tests
                     exception)), Is.True);
                 Assert.That(engine.Shutdown(TimeSpan.FromSeconds(5)), Is.True);
 
-                var file = Path.Combine(root, "SDK", "20260902_09.log");
+                var local = timestamp.ToLocalTime();
+                var file = Path.Combine(root, "SDK", local.ToString("yyyyMMdd_HH", CultureInfo.InvariantCulture) + ".log");
                 var text = File.ReadAllText(file);
-                StringAssert.Contains("[2026-09-02 09:48:28.124] [SDK] [ERROR] 连接失败", text);
+                StringAssert.Contains("[" + local.ToString("yyyy-MM-dd HH:mm:ss.fff", CultureInfo.InvariantCulture) + "] [SDK] [ERROR] 连接失败", text);
                 StringAssert.Contains("System.InvalidOperationException: outer", text);
                 StringAssert.Contains("System.ArgumentException: inner", text);
             }
@@ -60,7 +62,8 @@ namespace InduLink.Tests
                     true)), Is.True);
                 Assert.That(engine.Shutdown(TimeSpan.FromSeconds(5)), Is.True);
 
-                var file = Path.Combine(root, "APP", "20260902_10.log");
+                var local = timestamp.ToLocalTime();
+                var file = Path.Combine(root, "APP", local.ToString("yyyyMMdd_HH", CultureInfo.InvariantCulture) + ".log");
                 var text = File.ReadAllText(file);
                 Assert.That(text.Trim(), Is.EqualTo("[09:00:00] [APP] [INFO] 旧格式消息"));
             }

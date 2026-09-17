@@ -39,10 +39,11 @@ namespace InduLink.Runtime
                     _nameIndexes.Add(tag.Name, tag);
                 }
 
-                if (!_addressIndexes.ContainsKey(tag.Address))
-                {
-                    _addressIndexes.Add(tag.Address, tag);
-                }
+                if (_addressIndexes.ContainsKey(tag.Address))
+                    throw new ArgumentException(
+                        string.Format("Tag address '{0}' is duplicated. Addresses must be unique (case-insensitive).", tag.Address),
+                        nameof(tags));
+                _addressIndexes.Add(tag.Address, tag);
             }
         }
 
@@ -135,7 +136,28 @@ namespace InduLink.Runtime
             var fullPath = Path.GetFullPath(filePath);
             var directory = Path.GetDirectoryName(fullPath);
             if (!string.IsNullOrWhiteSpace(directory)) Directory.CreateDirectory(directory);
-            File.WriteAllText(fullPath, ToJson(), new UTF8Encoding(false));
+            WriteAtomic(fullPath, ToJson());
+        }
+
+        private static void WriteAtomic(string fullPath, string content)
+        {
+            var temporary = fullPath + "." + Guid.NewGuid().ToString("N") + ".tmp";
+            try
+            {
+                File.WriteAllText(temporary, content, new UTF8Encoding(false));
+                if (File.Exists(fullPath))
+                {
+                    File.Replace(temporary, fullPath, null, true);
+                }
+                else
+                {
+                    File.Move(temporary, fullPath);
+                }
+            }
+            finally
+            {
+                if (File.Exists(temporary)) File.Delete(temporary);
+            }
         }
 
         /// <summary>从 UTF-8 CSV 文件加载点位表。</summary>
@@ -370,12 +392,6 @@ namespace InduLink.Runtime
                 case "bytes":
                 case "bytearray": return DataType.ByteArray;
                 default:
-                    DataType parsed;
-                    if (Enum.TryParse(type, true, out parsed))
-                    {
-                        return parsed;
-                    }
-
                     throw new ArgumentException(string.Format("Unsupported tag type: {0}", type), nameof(type));
             }
         }

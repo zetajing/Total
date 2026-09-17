@@ -68,7 +68,10 @@ namespace InduLink.Runtime
             try
             {
                 ThrowIfDisposed();
-                _status = ConnectionStatus.Connecting;
+                lock (_diagnosticSync)
+                {
+                    _status = ConnectionStatus.Connecting;
+                }
                 _logger.Info(string.Format("CONNECT begin | Device={0} | Protocol={1}", DeviceId, Kind));
                 await ConnectCoreAsync(cancellationToken).ConfigureAwait(false);
                 RecordSuccess(stopwatch.ElapsedMilliseconds);
@@ -92,7 +95,10 @@ namespace InduLink.Runtime
             {
                 ThrowIfDisposed();
                 await DisconnectCoreAsync(cancellationToken).ConfigureAwait(false);
-                _status = ConnectionStatus.Disconnected;
+                lock (_diagnosticSync)
+                {
+                    _status = ConnectionStatus.Disconnected;
+                }
             }
             finally
             {
@@ -150,11 +156,14 @@ namespace InduLink.Runtime
 
         public HealthSnapshot GetHealth()
         {
-            return new HealthSnapshot(
-                _status,
-                _lastSuccessUtc,
-                Volatile.Read(ref _consecutiveFailures),
-                _lastError);
+            lock (_diagnosticSync)
+            {
+                return new HealthSnapshot(
+                    _status,
+                    _lastSuccessUtc,
+                    Volatile.Read(ref _consecutiveFailures),
+                    _lastError);
+            }
         }
 
         protected abstract Task ConnectCoreAsync(CancellationToken cancellationToken);

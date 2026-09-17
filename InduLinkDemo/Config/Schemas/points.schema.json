@@ -16,8 +16,9 @@
           "address": { "type": "string", "minLength": 1 },
           "type": {
             "oneOf": [
-              { "type": "string", "enum": [ "Bool", "Int16", "UInt16", "Int32", "UInt32", "Float", "Double", "String", "S7String", "ByteArray", "Byte", "Char" ] },
-              { "type": "string", "pattern": "^STRING\\[[1-9][0-9]{0,2}\\]$" }
+              { "type": "string", "enum": [ "Bool", "SByte", "Byte", "Char", "Int16", "UInt16", "Int32", "UInt32", "Int64", "UInt64", "Float", "Double", "String", "WString", "S7String", "ByteArray", "Time", "LTime", "TimeOfDay", "Date", "DateTime" ] },
+              { "type": "string", "pattern": "^STRING\\[[1-9][0-9]{0,2}\\]$" },
+              { "type": "string", "pattern": "^WSTRING\\[[1-9][0-9]*\\]$" }
             ]
           },
           "length": { "type": "integer", "minimum": 1 },

@@ -127,7 +127,10 @@ namespace InduLink.Protocols.Common
             switch (request.DataType)
             {
                 case DataType.Bool:
-                    value = bytes.Length > 0 && bytes[bytes.Length - 1] != 0;
+                    // A BOOL is encoded into the high byte of a Modbus register by
+                    // EncodeBytes/GetRegistersFromBytes.  Looking only at the last
+                    // byte makes 0x0100 decode as false and breaks write/read symmetry.
+                    value = bytes.Any(b => b != 0);
                     break;
                 case DataType.Int16:
                     value = BitConverter.ToInt16(ToLittleEndian(bytes, 2), 0);

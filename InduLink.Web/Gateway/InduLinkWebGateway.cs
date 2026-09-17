@@ -176,7 +176,7 @@ namespace InduLink.Web.Gateway
                 catch (Exception ex)
                 {
                     _logger.Error("Industrial Web gateway request failed unexpectedly.", ex);
-                    try { await WriteErrorAsync(context.Response, 500, "internal_error", "An internal error occurred.", null).ConfigureAwait(false); } catch { }
+                    try { await WriteErrorAsync(context.Response, 500, "internal_error", "An internal error occurred.", null, cancellationToken).ConfigureAwait(false); } catch { }
                 }
                 finally { _requestSlots.Release(); }
             }
@@ -266,32 +266,32 @@ namespace InduLink.Web.Gateway
                 }
 
                 statusCode = 200;
-                await WriteJsonAsync(context.Response, statusCode, response).ConfigureAwait(false);
+                await WriteJsonAsync(context.Response, statusCode, response, cancellationToken).ConfigureAwait(false);
             }
             catch (GatewayHttpException ex)
             {
                 statusCode = ex.StatusCode;
-                await WriteErrorAsync(context.Response, ex.StatusCode, ex.Code, ex.Message, correlationId).ConfigureAwait(false);
+                await WriteErrorAsync(context.Response, ex.StatusCode, ex.Code, ex.Message, correlationId, cancellationToken).ConfigureAwait(false);
             }
             catch (JsonException ex)
             {
                 statusCode = 400;
-                await WriteErrorAsync(context.Response, 400, "invalid_json", ex.Message, correlationId).ConfigureAwait(false);
+                await WriteErrorAsync(context.Response, 400, "invalid_json", ex.Message, correlationId, cancellationToken).ConfigureAwait(false);
             }
             catch (KeyNotFoundException ex)
             {
                 statusCode = 404;
-                await WriteErrorAsync(context.Response, 404, "not_found", ex.Message, correlationId).ConfigureAwait(false);
+                await WriteErrorAsync(context.Response, 404, "not_found", ex.Message, correlationId, cancellationToken).ConfigureAwait(false);
             }
             catch (UnauthorizedAccessException ex)
             {
                 statusCode = 403;
-                await WriteErrorAsync(context.Response, 403, "forbidden", ex.Message, correlationId).ConfigureAwait(false);
+                await WriteErrorAsync(context.Response, 403, "forbidden", ex.Message, correlationId, cancellationToken).ConfigureAwait(false);
             }
             catch (ArgumentException ex)
             {
                 statusCode = 400;
-                await WriteErrorAsync(context.Response, 400, "invalid_request", ex.Message, correlationId).ConfigureAwait(false);
+                await WriteErrorAsync(context.Response, 400, "invalid_request", ex.Message, correlationId, cancellationToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -303,7 +303,8 @@ namespace InduLink.Web.Gateway
                         statusCode,
                         IsRunning ? "request_timeout" : "gateway_stopping",
                         IsRunning ? "The request timed out." : "The gateway is stopping.",
-                        correlationId).ConfigureAwait(false);
+                        correlationId,
+                        cancellationToken).ConfigureAwait(false);
                 }
                 catch { try { context.Response.Abort(); } catch { } }
             }
@@ -315,6 +316,7 @@ namespace InduLink.Web.Gateway
 
         private async Task UpgradeWebSocketAsync(HttpListenerContext context, CancellationToken cancellationToken)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             if (Interlocked.Increment(ref _admittedSessions) > Options.MaxWebSocketSessions)
             {
                 Interlocked.Decrement(ref _admittedSessions);
@@ -322,26 +324,42 @@ namespace InduLink.Web.Gateway
             }
 
             var admissionTransferred = false;
+            GatewaySession session = null;
+            var sessionId = string.Empty;
             try
             {
                 var accepted = await context.AcceptWebSocketAsync(null).ConfigureAwait(false);
+                cancellationToken.ThrowIfCancellationRequested();
                 var id = Guid.NewGuid().ToString("N");
+                sessionId = id;
                 var remote = context.Request.RemoteEndPoint == null ? null : context.Request.RemoteEndPoint.ToString();
-                var session = new GatewaySession(
+                session = new GatewaySession(
                     new WebSocketSessionInfo(id, remote, DateTimeOffset.UtcNow),
-                    new ManagedWebSocket(accepted.WebSocket, Options.MaxWebSocketMessageBytes, Options.ReceiveBufferBytes));
+                    new ManagedWebSocket(accepted.WebSocket, Options.MaxWebSocketMessageBytes, Options.ReceiveBufferBytes),
+                    cancellationToken);
                 if (!_sessions.TryAdd(id, session))
                 {
                     session.Connection.Dispose();
                     throw new GatewayHttpException(500, "session_failed", "Could not create the WebSocket session.");
                 }
+                cancellationToken.ThrowIfCancellationRequested();
                 admissionTransferred = true;
                 session.PushTask = PushLoopAsync(session, session.StopSource.Token);
                 _ = ReceiveWebSocketAsync(session, session.StopSource.Token);
             }
             finally
             {
-                if (!admissionTransferred) Interlocked.Decrement(ref _admittedSessions);
+                if (!admissionTransferred)
+                {
+                    if (session != null)
+                    {
+                        GatewaySession removed;
+                        _sessions.TryRemove(sessionId, out removed);
+                        session.StopSource.Cancel();
+                        session.Connection.Dispose();
+                    }
+                    Interlocked.Decrement(ref _admittedSessions);
+                }
             }
         }
 
@@ -657,23 +675,33 @@ namespace InduLink.Web.Gateway
             }
         }
 
-        private Task WriteJsonAsync(HttpListenerResponse response, int statusCode, object value)
+        private Task WriteJsonAsync(
+            HttpListenerResponse response,
+            int statusCode,
+            object value,
+            CancellationToken cancellationToken = default(CancellationToken))
         {
             var bytes = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(value, _jsonSettings));
             response.StatusCode = statusCode;
             response.ContentType = "application/json; charset=utf-8";
             response.ContentLength64 = bytes.Length;
-            return WriteAndCloseAsync(response, bytes);
+            return WriteAndCloseAsync(response, bytes, cancellationToken);
         }
 
-        private Task WriteErrorAsync(HttpListenerResponse response, int statusCode, string code, string message, string correlationId)
+        private Task WriteErrorAsync(
+            HttpListenerResponse response,
+            int statusCode,
+            string code,
+            string message,
+            string correlationId,
+            CancellationToken cancellationToken = default(CancellationToken))
         {
-            return WriteJsonAsync(response, statusCode, new { correlationId, error = new { code, message }, timestampUtc = DateTimeOffset.UtcNow });
+            return WriteJsonAsync(response, statusCode, new { correlationId, error = new { code, message }, timestampUtc = DateTimeOffset.UtcNow }, cancellationToken);
         }
 
-        private static async Task WriteAndCloseAsync(HttpListenerResponse response, byte[] bytes)
+        private static async Task WriteAndCloseAsync(HttpListenerResponse response, byte[] bytes, CancellationToken cancellationToken)
         {
-            try { await response.OutputStream.WriteAsync(bytes, 0, bytes.Length).ConfigureAwait(false); }
+            try { await response.OutputStream.WriteAsync(bytes, 0, bytes.Length, cancellationToken).ConfigureAwait(false); }
             finally { try { response.Close(); } catch { } }
         }
 
@@ -791,7 +819,7 @@ namespace InduLink.Web.Gateway
 
         private sealed class GatewaySession
         {
-            internal GatewaySession(WebSocketSessionInfo info, ManagedWebSocket connection)
+            internal GatewaySession(WebSocketSessionInfo info, ManagedWebSocket connection, CancellationToken gatewayCancellationToken)
             {
                 Info = info;
                 Connection = connection;
@@ -800,7 +828,7 @@ namespace InduLink.Web.Gateway
                 PendingValues = new ConcurrentDictionary<string, TagGatewayValue>(StringComparer.OrdinalIgnoreCase);
                 PendingDeviceStates = new ConcurrentDictionary<string, TagGatewayDevice>(StringComparer.OrdinalIgnoreCase);
                 PushSignal = new SemaphoreSlim(0, 1);
-                StopSource = new CancellationTokenSource();
+                StopSource = CancellationTokenSource.CreateLinkedTokenSource(gatewayCancellationToken);
             }
 
             internal WebSocketSessionInfo Info { get; private set; }

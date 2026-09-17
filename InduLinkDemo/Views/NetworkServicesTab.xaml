@@ -177,7 +177,7 @@
                             <TextBox x:Name="HttpUrlTextBox" Grid.Row="1" Grid.Column="1" Style="{StaticResource FieldControlStyle}" Text="http://127.0.0.1:8088/api/v1/health" />
                             <TextBlock Grid.Row="2" Style="{StaticResource FieldLabelStyle}" Text="JSON 正文" />
                             <TextBox x:Name="HttpBodyTextBox" Grid.Row="2" Grid.Column="1" Margin="0,4" MinHeight="80" AcceptsReturn="True" TextWrapping="Wrap" Text="{}{&quot;correlationId&quot;:&quot;demo-1&quot;,&quot;items&quot;:[]}" />
-                            <CheckBox x:Name="HttpUseSavedApiKeyCheckBox" Grid.Row="3" Grid.ColumnSpan="2" Margin="0,8,0,4" IsChecked="True" Content="使用 DPAPI 中保存的 X-Industrial-Api-Key" />
+                            <CheckBox x:Name="HttpUseSavedApiKeyCheckBox" Grid.Row="3" Grid.ColumnSpan="2" Margin="0,8,0,4" IsChecked="False" Content="使用 DPAPI 中保存的 X-Industrial-Api-Key" />
                             <Button Grid.Row="4" Grid.ColumnSpan="2" Margin="0,8,0,8" Style="{StaticResource ActionButtonStyle}" Click="SendHttpButton_Click" Content="发送请求" />
                             <StackPanel Grid.Row="5" Grid.ColumnSpan="2">
                                 <TextBlock x:Name="WebGatewayStatusTextBlock" Margin="0,0,0,6" Foreground="IndianRed" Text="网关已停止" />
