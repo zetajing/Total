@@ -299,12 +299,18 @@ namespace InduLink.Protocols.S7
             }
             catch (InduLinkAddressParseException) { throw; }
             catch (InduLinkDataConversionException) { throw; }
-            catch (PlcException ex)
+            catch (PlcException ex) when (!writeOperation || IsExplicitPlcWriteRejection(ex))
             {
-                // S7.Net reports PLC-level request errors separately from transport
-                // failures.  Do not close/reconnect/replay a request that was
-                // deterministically rejected by the PLC.
+                // S7.Net 0.20 wraps both explicit write response errors and IO
+                // failures in PlcException(ErrorCode.WriteData). Only a response
+                // that contains a documented PLC rejection is deterministic.
                 throw new InduLinkProtocolException("S7 PLC rejected the request.", ex);
+            }
+            catch (Exception ex) when (writeOperation && IsExplicitPlcWriteRejection(ex))
+            {
+                // The typed WriteAsync API reports item-level PLC rejections as an
+                // AggregateException instead of wrapping them in PlcException.
+                throw new InduLinkProtocolException("S7 PLC rejected the write.", ex);
             }
             catch (Exception first)
             {
@@ -328,9 +334,41 @@ namespace InduLink.Protocols.S7
                 catch (Exception retry)
                 {
                     ClosePlc();
+                    if (writeOperation)
+                    {
+                        throw new InduLinkWriteUncertainException(
+                            "S7 write outcome is unknown after reconnect; the write may have been applied and was not replayed again.", retry);
+                    }
                     throw new InduLinkConnectionException("S7 communication failed after reconnect.", retry);
                 }
             }
+        }
+
+        internal static bool IsExplicitPlcWriteRejection(PlcException exception)
+        {
+            if (exception == null || exception.ErrorCode != ErrorCode.WriteData)
+                return false;
+
+            return HasExplicitPlcStatus(exception.InnerException);
+        }
+
+        private static bool IsExplicitPlcWriteRejection(Exception exception)
+        {
+            return HasExplicitPlcStatus(exception);
+        }
+
+        private static bool HasExplicitPlcStatus(Exception exception)
+        {
+            if (exception is AggregateException aggregate)
+                return aggregate.InnerExceptions.Count > 0 && aggregate.InnerExceptions.All(HasExplicitPlcStatus);
+
+            // WriteBytesWithASingleRequestAsync wraps ValidateResponseCode failures
+            // in a generic Exception whose message identifies the PLC's status.
+            // In 0.20.0, scalar WriteAsync exposes the same ValidateResponseCode
+            // text inside an AggregateException. Socket/stream/framing failures
+            // have different types or messages and remain outcome-unknown.
+            return exception != null && exception.GetType() == typeof(Exception) &&
+                exception.Message.StartsWith("Received error from PLC:", StringComparison.Ordinal);
         }
 
         public Task<T> ReadDbClassAsync<T>(int dbNumber, int startByteAddress = 0,

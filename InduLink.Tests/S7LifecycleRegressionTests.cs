@@ -64,6 +64,42 @@ namespace InduLink.Tests
             Assert.AreEqual(0, fixture.Peer.Available);
         }
 
+        [Test]
+        public async Task TransportFailureWrappedByPlcException_MakesWriteOutcomeUncertainAndClosesConnection()
+        {
+            using var fixture = await ConnectedFixture.CreateAsync();
+            var request = new WriteRequest(fixture.Client.DeviceId, "DB1.DBW0", DataType.Int16, 42);
+            var write = fixture.Client.WriteAsync(request, CancellationToken.None);
+            using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(3));
+            var buffer = new byte[1024];
+            Assert.Greater(await fixture.Peer.GetStream().ReadAsync(buffer, deadline.Token), 0,
+                "The write request must reach the peer before it disconnects.");
+            fixture.Peer.Dispose();
+
+            Assert.ThrowsAsync<InduLink.Exceptions.InduLinkWriteUncertainException>(async () =>
+                await write.WaitAsync(deadline.Token));
+            Assert.IsFalse(fixture.Client.IsConnected,
+                "A failed write transport must be discarded so a stale session cannot be reused.");
+        }
+
+        [Test]
+        public void PlcWriteErrorClassifier_OnlyTreatsExplicitPlcStatusAsRejection()
+        {
+            var rejected = new S7.Net.PlcException(S7.Net.ErrorCode.WriteData,
+                new Exception("Received error from PLC: Address out of range."));
+            var transport = new S7.Net.PlcException(S7.Net.ErrorCode.WriteData,
+                new System.IO.IOException("Connection reset by peer."));
+            var mixedAggregate = new S7.Net.PlcException(S7.Net.ErrorCode.WriteData,
+                new AggregateException(
+                    new Exception("Received error from PLC: Address out of range."),
+                    new System.IO.IOException("Connection reset by peer.")));
+
+            Assert.IsTrue(SiemensS7Client.IsExplicitPlcWriteRejection(rejected));
+            Assert.IsFalse(SiemensS7Client.IsExplicitPlcWriteRejection(transport));
+            Assert.IsFalse(SiemensS7Client.IsExplicitPlcWriteRejection(mixedAggregate),
+                "A transport failure in any aggregate item makes the write outcome uncertain.");
+        }
+
         // Inject an established S7.Net transport to exercise real request/receive cancellation
         // without a PLC or port 102. This fixture deliberately does not test S7 negotiation.
         private sealed class ConnectedFixture : IDisposable
