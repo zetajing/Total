@@ -2,7 +2,7 @@
 
 本文把原先分散在“可靠性更新、协议审查、核心扩展设计、后续修改意见”中的内容收敛为一份维护记录。这里区分当前设计、验证边界和后续建议；历史提交号不固化在文档中，当前分支和代码状态以 Git 为准。
 
-## 状态快照（0.x 内部迭代，2026-09-05）
+## 状态快照（0.x 内部迭代，2026-09-23）
 
 ### 已完成
 
@@ -10,6 +10,9 @@
 - `[0.x]` 协议能力模型、轮询拆批、配置模板与 JSON Schema 校验。
 - `[0.x]` S7/MC 连续区协议级批量读取：同一存储区一次读取连续字节/字或位设备，再按请求分别解码；批量写入仍保持逐项执行。
 - `[0.x]` 基础连接生命周期、超时、重连、健康状态、诊断快照和 Demo 验证页面。
+- `[0.x]` 客户端、TCP 服务和缓冲记录器的停止流程增加等待上限；超时后的回调或协议操作仍受跟踪，相关资源延后回收。
+- `[0.x]` MES HTTP Receiver 对非本机监听强制 HTTPS 和 Authorization；支持可选浏览器 Origin 白名单。
+- `[0.x]` 配置与点位文件采用原子写入；配置引用的点位文件限制在配置目录内，TagTable 拒绝重复地址。
 
 - `[0.x]` GitHub Actions 已配置全解决方案 restore、Release build/test 和测试结果上传；当前触发条件为 `master` 推送、目标为 `master` 的 PR 或手动运行，未配置独立 SDK-only 作业。
 - `[0.x]` 已提供 x86 Snap7 仿真 Server，以及需显式启用的 ADS 虚拟 PLC 集成测试。
@@ -34,6 +37,7 @@
 - 公开命名空间已收敛到程序集边界，不提供旧命名空间包装或类型转发。
 - `InduLinkSdk` 提供默认注册表、配置解析、离线校验和 `InduLinkDeviceHost` 创建；单协议仍可直接使用具体 Options + Client。
 - `devices.json` 将公共字段、`runtime` 和强类型 `settings` 分开，canonical 协议键拒绝旧别名和重复注册。
+- `TransportDataReceivedAsyncEventHandler` 增加 `CancellationToken` 参数，接收回调应把令牌传递给内部异步操作；0.x 阶段公开 API 仍可能调整，1.0 前再冻结兼容承诺。
 
 ### 协议和 Demo
 
@@ -44,6 +48,9 @@
 - 原始 TCP 支持固定长度、分隔符、2/4 字节大端长度头，以及半包/粘包缓存。
 - WinForms 最小程序隔离验证 Modbus TCP、Modbus RTU、S7、MC、原始 TCP 和开放式 MES HTTP JSON；WPF Demo 负责配置驱动运行和综合展示。
 - MES 保持开放 JSON，不内置 FACHECK、FATRACK、FANUM 等业务流程；5xx 重试有界，响应及时释放，并支持注入 `HttpMessageHandler` / 外部 `HttpClient`。
+- MES HTTP Receiver 的非回环监听必须使用 HTTPS 并配置 Authorization；配置 `AllowedOrigins` 后，只接受白名单中的浏览器 Origin。未带 Origin 的非浏览器客户端仍可请求，Origin 白名单不替代身份认证。
+- MQTT 客户端与 Broker 的 TLS 配置拒绝 SSL 2.0/3.0，并要求显式协议集合包含 TLS 1.2；使用系统默认协议时可保留 `SslProtocols.None`。
+- `TagTable` 的地址索引不区分大小写，重复地址会在构造时失败；配置、点位和存储路径配置文件写入采用临时文件替换，降低进程中断留下半文件的风险。
 
 ### 能力模型和批量计划
 
@@ -68,6 +75,13 @@
 
 参考入口：[S7NetPlus 测试说明](https://github.com/S7NetPlus/s7netplus)、[Beckhoff 官方 ADS .NET 示例](https://github.com/Beckhoff/TF6000_ADS_DOTNET_V5_Samples)、[NModbus 传输接口](https://nmodbus.github.io/api/NModbus.IModbusTransport.html)。官方示例与本地依赖可能不同版本，实际代码以当前依赖 API 为准。
 
+### 有界停止和资源回收（2026-09-17）
+
+- `InduLinkClientBase.DisposeAsync` 默认最多等待 10 秒清理轮询器，并最多等待 10 秒取得当前操作锁。若协议操作未在等待期限内退出，释放核心资源会延后到该操作结束后执行；取消令牌不响应的驱动不会被强行终止。
+- `TcpTransportServer` 默认最多等待 10 秒排空已关闭会话的接收回调。异步数据回调现在收到会话取消令牌，可用它尽快停止处理；忽略取消的回调可能在 `StopAsync` 返回后继续运行。
+- MQTT Broker 的 Started/Stopped 事件在生命周期锁释放后触发，避免事件处理器重入启动/停止时卡住生命周期操作。事件处理器异常会被单独隔离记录。
+- FTP、MQTT 客户端和 MQTT Broker 通过运行时检查保留对旧 TLS 枚举数值的拒绝能力，不再直接引用现代 .NET 中已过时的 SSL 2.0/3.0 枚举成员。
+
 ### 客户端和连接
 
 - 单点和批量操作使用一致的请求级/默认超时策略；批量请求校验 DeviceId，空批量直接完成。
@@ -75,6 +89,7 @@
 - 读失败倾向于返回 `DataValue.Bad`，写失败抛异常；业务层必须检查 `DataValue.Quality`，不能只判断是否抛异常。
 - 每个客户端串行化核心操作，避免同一 TCP/串口连接上的请求响应错位。
 - TCP 使用连接代际隔离旧连接错误；断线、重连、分帧失败会清理对应残帧，排队接收取消不会破坏活动接收的半帧。
+- 客户端释放有界等待；若轮询或协议操作超时仍未结束，实际协议资源释放延后到操作退出后，避免与仍在使用连接的操作并发释放。
 
 ### 平台和密钥存储
 
@@ -85,6 +100,7 @@
 ### 轮询和 Host
 
 - 同一设备/客户端使用一个 Worker 合并重复点位，轮询按固定计划推进，减少“读取耗时 + 间隔”造成的漂移。
+- 轮询落后多个周期时直接推进到下一个未来周期，不逐个补跑过期周期，避免长操作结束后形成密集追赶读取。
 - 回调异常被隔离，不会杀死轮询循环；Worker 替换、停止和新订阅并发时会重新绑定，避免订阅挂在正在退出的 Worker 上。
 - `InduLinkDeviceHost` 启动失败会回滚已启动设备；停止失败保留可重试状态；构造中途失败会释放已经创建的客户端。
 - SDK 主动周期读取不是 PLC 主动推送；需要推送时使用网络服务或设备原生能力。
@@ -92,8 +108,10 @@
 ### 存储和 MES Receiver
 
 - `BufferedInduLinkDataRecorder` 串行化 Start/Stop/Dispose，停止后不可重启；生产者与停止并发时只返回拒绝，不抛出队列竞态异常。
-- 缓冲队列有界，数据库故障不会阻塞 PLC 实时通信；接受的数据先排空，未接受的数据记录丢弃计数。
+- 缓冲队列有界，数据库故障不会阻塞 PLC 实时通信。正常 `StopAsync` 会尝试排空已接受的数据；同步 `Dispose` 默认最多等待 5 秒（可由 `DisposeTimeout` 调整），超时后取消消费者并丢弃仍排队、尚未开始写入的批次，同时增加丢弃计数。已进入存储调用的批次不能保证撤回；若自定义存储不响应取消，存储和队列资源会等后台任务真正退出后再释放。
 - MES Receiver 在锁外有界等待在途请求；处理器内 Stop 不自等待；同步阻塞处理器可以返回 504；超时处理器继续受跟踪并占用容量；过载快速返回 429。
+- MES Receiver 对非回环监听强制 HTTPS 和非空 `RequiredAuthorizationHeaderValue`。`AllowedOrigins` 为空时不限制 Origin；设置白名单后，带 Origin 的请求须匹配，未带 Origin 的请求仍按非浏览器客户端处理。Origin 校验不代替 Authorization。
+- TCP 传输服务停止时先停止接收新会话，再关闭已有会话并限时等待回调；停止等待超时不代表业务回调已完成，回调应响应传入的取消令牌并避免在服务停止后访问已释放的业务资源。
 
 ## 审查结论和现场风险
 
@@ -118,6 +136,12 @@
 3. **现场/外部集成**：真实 PLC、串口总线、OPC UA Server、MQTT Broker、数据库和 FTP 服务是否验证。
 
 编译成功不代表现场通信成功；不连接外部数据库的测试也不代表 MySQL/SQL Server 已完成验收。密码、连接字符串和现场地址不得写入测试输出或诊断包。
+
+### 本次拉取后的本地检查（2026-09-23）
+
+- `dotnet build Total.sln --no-restore`（Debug）：成功，0 个警告、0 个错误。
+- `git diff --check HEAD~3..HEAD`：通过。
+- 本次未运行测试；未连接真实 PLC、Broker、数据库、MES 或 FTP 服务，因此不代表离线测试或现场集成验收通过。
 
 ## 后续路线
 
