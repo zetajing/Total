@@ -295,16 +295,18 @@ namespace InduLink.Web.Gateway
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
-                statusCode = IsRunning ? 408 : 503;
+                var stopping = !IsRunning;
+                statusCode = stopping ? 503 : 408;
                 try
                 {
+                    using var responseTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(1));
                     await WriteErrorAsync(
                         context.Response,
                         statusCode,
-                        IsRunning ? "request_timeout" : "gateway_stopping",
-                        IsRunning ? "The request timed out." : "The gateway is stopping.",
+                        stopping ? "gateway_stopping" : "request_timeout",
+                        stopping ? "The gateway is stopping." : "The request timed out.",
                         correlationId,
-                        cancellationToken).ConfigureAwait(false);
+                        responseTimeout.Token).ConfigureAwait(false);
                 }
                 catch { try { context.Response.Abort(); } catch { } }
             }

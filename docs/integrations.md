@@ -25,7 +25,11 @@ using (var mes = new MesHttpClient(new MesHttpClientOptions
 
 `SendJsonAsync` 只接受 BaseUrl 下的安全相对端点，根节点必须是 JSON 对象；验证后正文仍按调用方原始空格和字段顺序进行 UTF-8 POST，不重新序列化。`Content-Type` 和 `Accept` 为 `application/json`。2xx/3xx/4xx 原样返回；默认不重试，只有显式配置时才对 5xx、网络错误和超时进行有界重试，避免非幂等报工重复。
 
-`MesJsonReceiver` 通过本地 `HttpListener` 接收任意相对路径的 POST JSON 对象，支持正文上限、处理超时、Authorization 完整值检查和自定义 JSON 响应。`MaxConcurrentRequests` 默认 32；超过上限快速返回 JSON `429`。已超时但未真正退出的处理器继续受跟踪并占用容量，避免慢处理器造成无界任务累积。
+`MesJsonReceiver` 通过 `HttpListener` 接收任意相对路径的 POST JSON 对象，默认只监听本机。非本机监听必须使用 HTTPS 并配置 Authorization 请求头完整值。
+
+可选的 `AllowedOrigins` 列表为空时不限制 Origin；配置后，带 Origin 的请求必须命中白名单。不带 Origin 的请求仍需通过 Authorization 检查。
+
+接收器支持正文上限、处理超时和自定义 JSON 响应。`MaxConcurrentRequests` 默认 32；超过上限快速返回 JSON `429`。已超时但未真正退出的处理器继续受跟踪并占用容量，避免慢处理器造成无界任务累积。
 
 ## 安全默认值
 

@@ -117,6 +117,47 @@ namespace InduLink.Tests
         }
 
         [Test]
+        public async Task ReceiverKeepsValidatedOptionsAfterCallerChangesThem()
+        {
+            var options = CreateOptions();
+            var prefix = options.ListenPrefix;
+            options.RequiredAuthorizationHeaderValue = "Bearer original";
+            options.AllowedOrigins.Add("https://allowed.example");
+
+            using (var receiver = new MesJsonReceiver(options, (request, token) =>
+                Task.FromResult(new MesJsonReceiveResponse())))
+            {
+                options.ListenPrefix = "invalid";
+                options.RequiredAuthorizationHeaderValue = null;
+                options.AllowedOrigins.Clear();
+
+                await receiver.StartAsync(CancellationToken.None);
+                using (var client = new HttpClient())
+                {
+                    async Task<HttpStatusCode> SendAsync(string origin, string authorization)
+                    {
+                        using (var request = new HttpRequestMessage(HttpMethod.Post, prefix + "secure"))
+                        {
+                            request.Content = new StringContent("{}", Encoding.UTF8, "application/json");
+                            request.Headers.TryAddWithoutValidation("Origin", origin);
+                            if (authorization != null)
+                                request.Headers.TryAddWithoutValidation("Authorization", authorization);
+                            using (var response = await client.SendAsync(request))
+                                return response.StatusCode;
+                        }
+                    }
+
+                    Assert.That(await SendAsync("https://blocked.example", "Bearer original"),
+                        Is.EqualTo(HttpStatusCode.Unauthorized));
+                    Assert.That(await SendAsync("https://allowed.example", null),
+                        Is.EqualTo(HttpStatusCode.Unauthorized));
+                    Assert.That(await SendAsync("https://allowed.example", "Bearer original"),
+                        Is.EqualTo(HttpStatusCode.OK));
+                }
+            }
+        }
+
+        [Test]
         public async Task HandlerDeadlineReturnsGatewayTimeoutEvenWhenHandlerIgnoresCancellation()
         {
             var neverCompletes = new TaskCompletionSource<MesJsonReceiveResponse>();

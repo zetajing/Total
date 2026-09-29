@@ -33,13 +33,13 @@ namespace InduLink.Mes
         public int HandlerTimeoutMilliseconds { get; set; } = 5000;
 
         /// <summary>
-        /// 可选的 Authorization 请求头完整值。为空时不校验；生产环境对外监听时建议配置。
+        /// Authorization 请求头完整值。本机监听时可为空；非本机监听时必须配置。
         /// </summary>
         public string RequiredAuthorizationHeaderValue { get; set; }
 
         /// <summary>
-        /// 可选的浏览器 Origin 白名单。请求不带 Origin 时视为非浏览器客户端；
-        /// 请求带 Origin 时必须命中此列表。
+        /// 可选的浏览器 Origin 白名单。列表为空时不限制 Origin；
+        /// 配置后，带 Origin 的请求必须命中列表，不带 Origin 的请求仍可通过 Origin 检查。
         /// </summary>
         public IList<string> AllowedOrigins { get; private set; } = new List<string>();
     }

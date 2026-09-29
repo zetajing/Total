@@ -75,6 +75,46 @@ namespace InduLink.Tests
         }
 
         [Test]
+        public async Task WebApi_RequestTimeoutReturnsJsonError()
+        {
+            var port = ReserveTcpPort();
+            var fake = new FakeTagGateway
+            {
+                ReadHandler = async token =>
+                {
+                    await Task.Delay(Timeout.Infinite, token);
+                    return Array.Empty<TagGatewayValue>();
+                }
+            };
+            var options = CreateOptions(port);
+            options.RequestTimeout = TimeSpan.FromMilliseconds(100);
+
+            using (var gateway = new InduLinkWebGateway(fake, options))
+            using (var http = new HttpClient(new HttpClientHandler { UseProxy = false }))
+            {
+                await gateway.StartAsync(CancellationToken.None);
+                try
+                {
+                    using (var request = new HttpRequestMessage(HttpMethod.Post, options.ListenPrefix + "api/v1/read"))
+                    {
+                        request.Headers.TryAddWithoutValidation("X-Industrial-Api-Key", options.ApiKey);
+                        request.Content = new StringContent(
+                            "{\"items\":[{\"device\":\"plc-1\",\"tag\":\"temperature\"}]}",
+                            Encoding.UTF8,
+                            "application/json");
+                        using (var response = await WithTimeout(http.SendAsync(request), TimeSpan.FromSeconds(5)))
+                        {
+                            Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.RequestTimeout));
+                            var body = JObject.Parse(await response.Content.ReadAsStringAsync());
+                            Assert.That((string)body["error"]["code"], Is.EqualTo("request_timeout"));
+                        }
+                    }
+                }
+                finally { await gateway.StopAsync(CancellationToken.None); }
+            }
+        }
+
+        [Test]
         public async Task WebSocket_SubscribeSendsSnapshot_ThenOnlyChangedValues()
         {
             var port = ReserveTcpPort();
@@ -294,6 +334,8 @@ namespace InduLink.Tests
         {
             private double _value = 42.5d;
 
+            internal Func<CancellationToken, Task<IReadOnlyList<TagGatewayValue>>> ReadHandler { get; set; }
+
             internal FakeTagGateway()
             {
                 Options = new InduLinkTagGatewayOptions();
@@ -321,6 +363,7 @@ namespace InduLink.Tests
 
             public Task<IReadOnlyList<TagGatewayValue>> ReadAsync(IReadOnlyCollection<TagGatewayReadItem> items, CancellationToken cancellationToken = default(CancellationToken))
             {
+                if (ReadHandler != null) return ReadHandler(cancellationToken);
                 IReadOnlyList<TagGatewayValue> values = items.Select(item => CreateValue(_value)).ToList();
                 return Task.FromResult(values);
             }

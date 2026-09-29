@@ -39,11 +39,11 @@ namespace InduLink.Mes
             MesJsonReceiveHandler handler,
             IInduLinkLogger logger = null)
         {
-            _options = options ?? throw new ArgumentNullException(nameof(options));
+            if (options == null) throw new ArgumentNullException(nameof(options));
             _handler = handler ?? throw new ArgumentNullException(nameof(handler));
             _logger = logger ?? NullInduLinkLogger.Instance;
-            ValidateOptions(options);
-            _requestSlots = new SemaphoreSlim(options.MaxConcurrentRequests, options.MaxConcurrentRequests);
+            _options = CopyAndValidateOptions(options);
+            _requestSlots = new SemaphoreSlim(_options.MaxConcurrentRequests, _options.MaxConcurrentRequests);
         }
 
         public bool IsRunning => Volatile.Read(ref _state) == Running;
@@ -439,6 +439,27 @@ namespace InduLink.Mes
             await task.ConfigureAwait(false);
         }
 
+        private static MesJsonReceiverOptions CopyAndValidateOptions(MesJsonReceiverOptions options)
+        {
+            var copy = new MesJsonReceiverOptions
+            {
+                ListenPrefix = options.ListenPrefix,
+                MaxConcurrentRequests = options.MaxConcurrentRequests,
+                MaxRequestContentBytes = options.MaxRequestContentBytes,
+                RequestBodyTimeoutMilliseconds = options.RequestBodyTimeoutMilliseconds,
+                HandlerTimeoutMilliseconds = options.HandlerTimeoutMilliseconds,
+                RequiredAuthorizationHeaderValue = options.RequiredAuthorizationHeaderValue
+            };
+
+            if (options.AllowedOrigins == null)
+                throw new ArgumentException("MES receiver AllowedOrigins cannot be null.", nameof(options));
+            foreach (var origin in options.AllowedOrigins)
+                copy.AllowedOrigins.Add(origin);
+
+            ValidateOptions(copy);
+            return copy;
+        }
+
         private static void ValidateOptions(MesJsonReceiverOptions options)
         {
             Uri prefix;
@@ -465,8 +486,6 @@ namespace InduLink.Mes
                     throw new ArgumentException("MES receiver must require Authorization when listening on a non-loopback host.", nameof(options));
             }
 
-            if (options.AllowedOrigins == null)
-                throw new ArgumentException("MES receiver AllowedOrigins cannot be null.", nameof(options));
             foreach (var origin in options.AllowedOrigins)
             {
                 Uri parsedOrigin;
