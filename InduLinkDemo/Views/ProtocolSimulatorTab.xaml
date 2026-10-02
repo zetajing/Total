@@ -1,0 +1,84 @@
+<UserControl x:Class="InduLinkDemo.Views.ProtocolSimulatorTab"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Background="{StaticResource AppBackgroundBrush}">
+    <ScrollViewer Padding="8" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+    <Grid MinHeight="500" Height="{Binding ViewportHeight, RelativeSource={RelativeSource AncestorType={x:Type ScrollViewer}}}">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+        <Border Style="{StaticResource InfoBannerStyle}" Margin="0,0,0,8">
+            <StackPanel>
+                <TextBlock x:Name="TitleText" FontSize="17" FontWeight="SemiBold" Text="Modbus TCP 虚拟服务" />
+                <TextBlock x:Name="ConnectionHintText" Margin="0,5,0,0" TextWrapping="Wrap" />
+            </StackPanel>
+        </Border>
+        <GroupBox Grid.Row="1" Header="服务设置" Margin="0,0,0,8">
+            <Grid Margin="8">
+                <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+                <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                <WrapPanel x:Name="SettingsPanel" Margin="0,0,8,0">
+                    <StackPanel x:Name="ModbusSettingsPanel" Orientation="Horizontal">
+                        <TextBlock Margin="0,0,6,0" VerticalAlignment="Center" Text="监听地址" />
+                        <TextBox x:Name="AddressTextBox" Width="130" Text="127.0.0.1" />
+                        <TextBlock Margin="12,0,6,0" VerticalAlignment="Center" Text="端口" />
+                        <TextBox x:Name="PortTextBox" Width="90" Text="1502" />
+                        <TextBlock Margin="12,0,6,0" VerticalAlignment="Center" Text="站号" />
+                        <TextBox x:Name="SlaveIdTextBox" Width="65" Text="1" />
+                    </StackPanel>
+                    <StackPanel x:Name="OpcUaSettingsPanel" Orientation="Horizontal" Visibility="Collapsed">
+                        <TextBlock Margin="0,0,6,0" VerticalAlignment="Center" Text="Endpoint" />
+                        <TextBox x:Name="EndpointTextBox" Width="350" Text="opc.tcp://localhost:4840/InduLinkSimulator" />
+                        <CheckBox x:Name="SecurityCheckBox" Margin="12,0,0,0" VerticalAlignment="Center" Content="加密连接" />
+                    </StackPanel>
+                    <TextBlock Margin="12,0,6,0" VerticalAlignment="Center" Text="变化周期 (ms)" />
+                    <TextBox x:Name="IntervalTextBox" Width="90" Text="1000" />
+                </WrapPanel>
+                <StackPanel Grid.Column="1" Orientation="Horizontal">
+                    <Button x:Name="StartButton" Margin="0,0,8,0" Style="{StaticResource PrimaryButtonStyle}" Click="StartButton_Click" Content="启动服务" />
+                    <Button x:Name="StopButton" Click="StopButton_Click" Content="停止" IsEnabled="False" />
+                </StackPanel>
+                <Grid x:Name="CertificatePanel" Grid.Row="1" Grid.ColumnSpan="2" Margin="0,7,0,0" Visibility="Collapsed">
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                    <TextBlock Margin="0,0,8,0" VerticalAlignment="Center" Text="证书目录" />
+                    <TextBox x:Name="CertificateDirectoryTextBox" Grid.Column="1" ToolTip="服务端 PKI 根目录；不同模拟实例可以使用独立目录。" />
+                </Grid>
+                <TextBlock x:Name="StatusText" Grid.Row="2" Grid.ColumnSpan="2" Margin="0,7,0,0" Text="未启动" TextWrapping="Wrap" Foreground="#64748B" />
+            </Grid>
+        </GroupBox>
+        <GroupBox Grid.Row="2" Header="模拟点位" MinHeight="180">
+            <Grid Margin="8">
+                <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /></Grid.RowDefinitions>
+                <WrapPanel Margin="0,0,0,7">
+                    <Button x:Name="AddPointButton" Margin="0,0,8,0" Click="AddPointButton_Click" Content="添加点位" />
+                    <Button x:Name="RemovePointButton" Margin="0,0,8,0" Click="RemovePointButton_Click" Content="删除选中" />
+                    <Button x:Name="SamplesButton" Margin="0,0,8,0" Click="SamplesButton_Click" Content="恢复示例" />
+                    <Button x:Name="ImportButton" Margin="0,0,8,0" Click="ImportButton_Click" Content="导入配置" />
+                    <Button x:Name="ExportButton" Click="ExportButton_Click" Content="导出配置" />
+                    <TextBlock Margin="12,0,0,0" VerticalAlignment="Center" Foreground="#64748B" Text="启动前编辑配置；运行时查看实时值。" />
+                </WrapPanel>
+                <DataGrid x:Name="PointsGrid" Grid.Row="1" AutoGenerateColumns="False" CanUserAddRows="False" CanUserDeleteRows="False"
+                          SelectionMode="Single" SelectionChanged="PointsGrid_SelectionChanged" EnableRowVirtualization="True">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="地址 / NodeId" Binding="{Binding Address, UpdateSourceTrigger=PropertyChanged}" Width="2*" MinWidth="150" />
+                        <DataGridComboBoxColumn x:Name="TypeColumn" Header="类型" SelectedItemBinding="{Binding DataType, UpdateSourceTrigger=PropertyChanged}" Width="90" />
+                        <DataGridTextColumn Header="初值" Binding="{Binding InitialValue, UpdateSourceTrigger=PropertyChanged}" Width="*" MinWidth="80" />
+                        <DataGridComboBoxColumn x:Name="BehaviorColumn" Header="变化方式" DisplayMemberPath="Label" SelectedValuePath="Value"
+                                                SelectedValueBinding="{Binding Behavior, UpdateSourceTrigger=PropertyChanged}" Width="105" />
+                        <DataGridTextColumn Header="递增步长" Binding="{Binding Step, UpdateSourceTrigger=PropertyChanged}" Width="85" />
+                        <DataGridTextColumn Header="当前值" Binding="{Binding CurrentValue}" IsReadOnly="True" Width="*" MinWidth="90" />
+                    </DataGrid.Columns>
+                </DataGrid>
+            </Grid>
+        </GroupBox>
+        <Grid Grid.Row="3" Margin="0,8,0,0">
+            <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+            <TextBlock Margin="0,0,8,0" VerticalAlignment="Center" Text="选中点位的新值" />
+            <TextBox x:Name="WriteValueTextBox" Grid.Column="1" IsEnabled="False" />
+            <Button x:Name="ApplyValueButton" Grid.Column="2" Margin="8,0,0,0" Click="ApplyValueButton_Click" Content="应用到模拟点位" IsEnabled="False" />
+        </Grid>
+    </Grid>
+    </ScrollViewer>
+</UserControl>

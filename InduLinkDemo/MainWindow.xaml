@@ -80,7 +80,7 @@
                                 <views:SiemensS7Tab x:Name="S7ControlTag" />
                             </TabItem>
                             <TabItem Header="虚拟 PLC">
-                                <views:Snap7ServerTab x:Name="Snap7ServerControlTag" />
+                                <views:VirtualPlcTab x:Name="VirtualPlcControlTag" />
                             </TabItem>
                             <TabItem Header="Mitsubishi MC">
                                 <views:MitsubishiMcTab x:Name="McControlTag" />

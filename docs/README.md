@@ -13,6 +13,7 @@
 | 接入 SQL Server 或 MySQL 历史库 | [历史存储](storage.md) |
 | 接入 MES、HTTP、MQTT Broker、WebSocket、FTP | [集成能力](integrations.md) |
 | 在没有实体 PLC 时验证 S7 Demo | [Snap7Server 本地虚拟 PLC](snap7-server.md) |
+| 启动 Modbus TCP / OPC UA 虚拟服务并编辑点位 | [本地虚拟协议服务](protocol-simulators.md) |
 
 ## 维护项目
 

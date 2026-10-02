@@ -26,6 +26,7 @@ SDK 类库当前目标框架为 `net8.0`，WPF/WinForms 应用目标框架为 `n
 | `InduLink.FileTransfer.Ftp` | FTP/FTPS 文件客户端 |
 | `InduLink.Storage` | 历史存储契约、SQL Server、缓冲记录器和 CSV |
 | `InduLink.Storage.MySql` | MySQL 8.0+ 历史存储提供程序 |
+| `InduLink.Simulation` | 可选 Modbus TCP / OPC UA 虚拟服务、模拟点位和周期变化，供 Demo 与回归共用 |
 | `InduLink` | 引用全部内置模块并提供默认注册表 |
 
 这是一次有意的破坏性模块化升级。旧 `SimpleClient`、`InduLinkClientFactory`、`InduLinkDeployment` 和旧配置兼容层已删除，不提供类型转发或旧 JSON 自动迁移。

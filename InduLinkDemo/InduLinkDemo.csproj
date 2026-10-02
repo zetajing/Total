@@ -22,6 +22,7 @@
     <ProjectReference Include="..\InduLink\InduLink.csproj" />
     <ProjectReference Include="..\InduLink.Protocols.Ads\InduLink.Protocols.Ads.csproj" />
     <ProjectReference Include="..\InduLink.Storage.MySql\InduLink.Storage.MySql.csproj" />
+    <ProjectReference Include="..\InduLink.Simulation\InduLink.Simulation.csproj" />
   </ItemGroup>
 
   <ItemGroup>

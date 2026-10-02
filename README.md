@@ -87,11 +87,13 @@ var value = await host.Get("plc1").ReadAsync("Speed");
 - [MES、Web、MQTT Broker、WebSocket、FTP/FTPS](docs/integrations.md)
 - [可靠性、审查结论、验证边界和路线图](docs/engineering-notes.md)
 - [地址大小写、网关写入状态、停止预算与服务端回归](docs/reliability-regressions.md)
+- [S7、Modbus TCP、OPC UA 本地虚拟服务](docs/protocol-simulators.md)
 
 ## 示例程序
 
 - `InduLinkDemo`：WPF 完整 Demo，包含协议页、配置页、运行中心、MES、数据库和网络服务页面。
 - `InduLinkDemo.Snap7Server`：x86 本地 Snap7 通信模拟器，用于在没有实体 PLC 时验证 S7 Demo 的 DB1 多个 Bool/INT/DINT/REAL 点位读写。
+- `InduLink.Simulation`：可独立使用的 Modbus TCP / OPC UA 模拟服务，支持内存点位、真实客户端读写和周期变化；Demo 的“虚拟 PLC”页面提供启动与编辑入口。
 - `InduLinkMinimal.WinForms`：直接引用所需模块的最小验证程序，不依赖聚合程序集。
 
 ## 重要边界
