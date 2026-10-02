@@ -65,7 +65,7 @@ namespace InduLink.Tests
             var duplicateAddress = Assert.Throws<ArgumentException>(() => TagTable.FromJson(
                 "{\"tags\":[" +
                 "{\"name\":\"A\",\"address\":\"D1\",\"type\":\"Int16\"}," +
-                "{\"name\":\"B\",\"address\":\"d1\",\"type\":\"Int16\"}]}"));
+                "{\"name\":\"B\",\"address\":\"d1\",\"type\":\"Int16\"}]}", ProtocolAddressComparer.ForProtocol(ProtocolKind.ModbusTcp)));
             StringAssert.Contains("address", duplicateAddress.Message.ToLowerInvariant());
 
             Assert.Throws<ArgumentException>(() => TagTable.FromJson(
@@ -170,8 +170,10 @@ namespace InduLink.Tests
         }
 
         [Test]
+        [System.Runtime.Versioning.SupportedOSPlatform("windows")]
         public void DpapiSecretStore_RoundTripsRemovesAndRejectsCorruptFiles()
         {
+            if (!OperatingSystem.IsWindows()) { Assert.Ignore("DPAPI requires Windows."); return; }
             var directory = CreateDirectory();
             try
             {
@@ -213,8 +215,10 @@ namespace InduLink.Tests
         }
 
         [Test]
+        [System.Runtime.Versioning.SupportedOSPlatform("windows")]
         public void DpapiSecretStore_DisposeRejectsLaterOperationsCleanly()
         {
+            if (!OperatingSystem.IsWindows()) { Assert.Ignore("DPAPI requires Windows."); return; }
             var directory = CreateDirectory();
             try
             {

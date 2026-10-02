@@ -117,7 +117,7 @@ namespace InduLink.Runtime.Configuration
                 {
                     var pointsPath = device.ResolvePointsFile(configDirectory);
                     if (!File.Exists(pointsPath)) errors.Add("设备 '" + device.Name + "' 的点位文件不存在：" + pointsPath);
-                    else TagTable.Load(pointsPath);
+                    else TagTable.Load(pointsPath, ProtocolAddressComparer.ForProtocol(device.Protocol));
                 }
                 catch (Exception ex) { errors.Add("设备 '" + device.Name + "' 点位表错误：" + ex.Message); }
             }

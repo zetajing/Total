@@ -14,13 +14,13 @@
 - `[0.x]` MES HTTP Receiver 对非本机监听强制 HTTPS 和 Authorization；支持可选浏览器 Origin 白名单。
 - `[0.x]` 配置与点位文件采用原子写入；配置引用的点位文件限制在配置目录内，TagTable 拒绝重复地址。
 
-- `[0.x]` GitHub Actions 已配置全解决方案 restore、Release build/test 和测试结果上传；当前触发条件为 `master` 推送、目标为 `master` 的 PR 或手动运行，未配置独立 SDK-only 作业。
+- `[0.x]` GitHub Actions 已配置独立 SDK、Windows Demo/Snap7 和数据库容器回归；触发条件为 `master`、`codex/**` 推送、目标为 `master` 的 PR 或手动运行。详见 [服务端回归](reliability-regressions.md)。
 - `[0.x]` 已提供 x86 Snap7 仿真 Server，以及需显式启用的 ADS 虚拟 PLC 集成测试。
 
 ### 尚待完善
 
-- `[下一次 0.x]` 独立 SDK-only 构建作业和 NuGet 版本元数据；PR 必需检查仍需在仓库分支保护中配置。
-- `[下一次 0.x]` S7 仿真自动化回归、MC 黄金报文、OPC UA 证书和数据库容器集成测试。
+- `[下一次 0.x]` NuGet 版本元数据；PR 必需检查仍需在仓库分支保护中配置。
+- `[下一次 0.x]` 继续扩大现有 S7、OPC UA 和数据库服务端回归的覆盖范围；MC 黄金报文另行安排。
 - `[下一次 0.x]` 统一设备协议密钥引用，逐步从明文 `Password` 迁移到 DPAPI `ISecretStore`。
 
 ### 待办
@@ -50,7 +50,7 @@
 - MES 保持开放 JSON，不内置 FACHECK、FATRACK、FANUM 等业务流程；5xx 重试有界，响应及时释放，并支持注入 `HttpMessageHandler` / 外部 `HttpClient`。
 - MES HTTP Receiver 的非回环监听必须使用 HTTPS 并配置 Authorization；配置 `AllowedOrigins` 后，只接受白名单中的浏览器 Origin。未带 Origin 的非浏览器客户端仍可请求，Origin 白名单不替代身份认证。
 - MQTT 客户端与 Broker 的 TLS 配置拒绝 SSL 2.0/3.0，并要求显式协议集合包含 TLS 1.2；使用系统默认协议时可保留 `SslProtocols.None`。
-- `TagTable` 的地址索引不区分大小写，重复地址会在构造时失败；配置、点位和存储路径配置文件写入采用临时文件替换，降低进程中断留下半文件的风险。
+- `TagTable` 地址索引按协议选择大小写规则，同一规则下的重复地址会在构造时失败；配置、点位和存储路径配置文件写入采用临时文件替换，降低进程中断留下半文件的风险。
 
 ### 能力模型和批量计划
 
@@ -147,7 +147,7 @@
 
 ### P0：质量门禁
 
-- 在现有 GitHub Actions 全解决方案构建、测试及测试结果上传基础上，补充独立 SDK-only 作业，并按团队分支策略配置触发范围与 PR 必需检查。
+- 保持现有独立 SDK、Windows Demo/Snap7、数据库容器作业，并在仓库分支保护中配置 PR 必需检查。
 - 明确 SemVer、CHANGELOG、NuGet 元数据、包级兼容性和协议兼容矩阵。
 - 让文档、示例和配置 schema 在 API 变更时成为同一检查项。
 

@@ -2,7 +2,7 @@ name: Build and test
 
 on:
   push:
-    branches: [ master ]
+    branches: [ master, 'codex/**' ]
   pull_request:
     branches: [ master ]
   workflow_dispatch:
@@ -10,8 +10,30 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
+  sdk:
+    name: SDK build and regression tests
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - run: dotnet build InduLink.Tests/InduLink.Tests.csproj -c Release
+      - name: Test SDK including local OPC UA server
+        run: dotnet test InduLink.Tests/InduLink.Tests.csproj -c Release --no-build --no-restore --filter "Name!~Mc&Name!~MC&Name!~Mitsubishi&Name!~mitsubishi&TestCategory!=DatabaseIntegration&TestCategory!=Snap7Integration" --logger "trx;LogFileName=sdk.trx"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: sdk-test-results
+          path: '**/TestResults/*.trx'
+
   build:
+    name: Windows applications and Snap7 integration
     runs-on: windows-latest
 
     steps:
@@ -29,12 +51,62 @@ jobs:
       - name: Build Release
         run: dotnet build Total.sln --configuration Release --no-restore
 
-      - name: Test Release
-        run: dotnet test Total.sln --configuration Release --no-build --no-restore --logger "trx;LogFileName=test-results.trx"
+      - name: Test Windows Demo
+        run: dotnet test InduLink.Demo.Tests/InduLink.Demo.Tests.csproj -c Release --no-build --no-restore --logger "trx;LogFileName=demo.trx"
+
+      - name: Publish self-contained x86 Snap7 sidecar
+        run: dotnet publish InduLinkDemo.Snap7Server/InduLinkDemo.Snap7Server.csproj -c Release -r win-x86 --self-contained true -o artifacts/snap7
+
+      - name: Test real S7 handshake and restart against Snap7
+        shell: pwsh
+        run: |
+          $env:INDULINK_TEST_SNAP7_SERVER = Join-Path $PWD 'artifacts/snap7/InduLinkDemo.Snap7Server.exe'
+          dotnet test InduLink.Tests/InduLink.Tests.csproj -c Release --no-build --no-restore --filter "TestCategory=Snap7Integration" --logger "trx;LogFileName=snap7.trx"
 
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: test-results
+          path: '**/TestResults/*.trx'
+
+  databases:
+    name: MySQL and SQL Server integration
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: IntegrationOnly4711
+          MYSQL_DATABASE: indulink_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h localhost -pIntegrationOnly4711"
+          --health-interval=10s --health-timeout=5s --health-retries=12
+      sqlserver:
+        image: mcr.microsoft.com/mssql/server:2022-latest
+        env:
+          ACCEPT_EULA: 'Y'
+          MSSQL_PID: Developer
+          MSSQL_SA_PASSWORD: IntegrationOnly4711!
+        ports:
+          - 1433:1433
+        options: >-
+          --health-cmd="/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'IntegrationOnly4711!' -C -Q 'SELECT 1'"
+          --health-interval=10s --health-timeout=5s --health-retries=12
+    env:
+      INDULINK_TEST_MYSQL: 'Server=127.0.0.1;Port=3306;Database=indulink_test;User ID=root;Password=IntegrationOnly4711;DateTimeKind=Utc;'
+      INDULINK_TEST_SQLSERVER: 'Server=127.0.0.1,1433;Database=master;User ID=sa;Password=IntegrationOnly4711!;Encrypt=False;'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - name: Test transactions, cancellation and timestamp round trips
+        run: dotnet test InduLink.Tests/InduLink.Tests.csproj -c Release --filter "TestCategory=DatabaseIntegration" --logger "trx;LogFileName=databases.trx"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: database-test-results
           path: '**/TestResults/*.trx'

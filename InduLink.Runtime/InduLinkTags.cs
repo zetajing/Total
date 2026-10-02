@@ -123,7 +123,7 @@ namespace InduLink.Runtime
         private readonly Dictionary<string, int> _addressIndexes;
 
         /// <summary>创建批量读取结果；点位与值必须按索引一一对应。</summary>
-        public InduLinkTagReadResult(IReadOnlyList<InduLinkTag> tags, IReadOnlyList<DataValue> values)
+        public InduLinkTagReadResult(IReadOnlyList<InduLinkTag> tags, IReadOnlyList<DataValue> values, StringComparer addressComparer = null)
         {
             Tags = tags ?? throw new ArgumentNullException(nameof(tags));
             Values = values ?? throw new ArgumentNullException(nameof(values));
@@ -134,7 +134,7 @@ namespace InduLink.Runtime
             }
 
             _tagIndexes = new Dictionary<InduLinkTag, int>();
-            _addressIndexes = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            _addressIndexes = new Dictionary<string, int>(addressComparer ?? StringComparer.Ordinal);
 
             for (var i = 0; i < tags.Count; i++)
             {

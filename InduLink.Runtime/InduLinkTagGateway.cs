@@ -5,6 +5,9 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using InduLink.Abstractions;
+using InduLink.Exceptions;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Converters;
 using Newtonsoft.Json.Linq;
 
 namespace InduLink.Runtime
@@ -206,31 +209,43 @@ namespace InduLink.Runtime
 
             foreach (var group in groups.Values)
             {
-                cancellationToken.ThrowIfCancellationRequested();
-                try
+                var stopped = false;
+                foreach (var work in group)
                 {
-                    var requests = group.Select(work => new WriteRequest(
-                        work.Device.Device.Client.DeviceId,
-                        work.Tag.Address,
-                        work.Tag.DataType,
-                        work.Value,
-                        work.Tag.Length)).ToList();
-                    await group[0].Device.Device.Client.WriteManyAsync(requests, cancellationToken).ConfigureAwait(false);
-                    foreach (var work in group)
+                    if (stopped || cancellationToken.IsCancellationRequested)
                     {
+                        results[work.Index] = TagGatewayWriteResult.NotAttempted(work.Device.Device.DeviceName, work.Tag.Name);
+                        continue;
+                    }
+                    try
+                    {
+                        var request = new WriteRequest(
+                            work.Device.Device.Client.DeviceId,
+                            work.Tag.Address,
+                            work.Tag.DataType,
+                            work.Value,
+                            work.Tag.Length);
+                        // Separate writes retain the confirmed outcomes of earlier items.
+                        await work.Device.Device.Client.WriteAsync(request, cancellationToken).ConfigureAwait(false);
                         results[work.Index] = TagGatewayWriteResult.Success(work.Device.Device.DeviceName, work.Tag.Name);
                     }
-                }
-                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-                {
-                    throw;
-                }
-                catch (Exception ex)
-                {
-                    var error = Options.ExposeRawAddresses ? ex.Message : "Device write failed.";
-                    foreach (var work in group)
+                    catch (InduLinkWriteUncertainException)
                     {
+                        results[work.Index] = TagGatewayWriteResult.Uncertain(work.Device.Device.DeviceName, work.Tag.Name);
+                        stopped = true;
+                    }
+                    catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                    {
+                        // A custom client may not classify cancellation after dispatch.
+                        // Preserve earlier results and conservatively report this item's outcome.
+                        results[work.Index] = TagGatewayWriteResult.Uncertain(work.Device.Device.DeviceName, work.Tag.Name);
+                        stopped = true;
+                    }
+                    catch (Exception ex)
+                    {
+                        var error = Options.ExposeRawAddresses ? ex.Message : "Device write failed.";
                         results[work.Index] = TagGatewayWriteResult.Failure(work.Device.Device.DeviceName, work.Tag.Name, error);
+                        stopped = true;
                     }
                 }
             }
@@ -530,31 +545,53 @@ namespace InduLink.Runtime
         }
     }
 
+    [JsonConverter(typeof(StringEnumConverter))]
+    public enum TagGatewayWriteStatus
+    {
+        Succeeded,
+        Failed,
+        Uncertain,
+        NotAttempted,
+    }
+
     public sealed class TagGatewayWriteResult
     {
-        private TagGatewayWriteResult(string deviceName, string tagName, bool succeeded, DateTimeOffset timestamp, string errorMessage)
+        private TagGatewayWriteResult(string deviceName, string tagName, TagGatewayWriteStatus status, DateTimeOffset timestamp, string errorMessage)
         {
             DeviceName = deviceName;
             TagName = tagName;
-            Succeeded = succeeded;
+            Status = status;
             Timestamp = timestamp;
             ErrorMessage = errorMessage;
         }
 
         public string DeviceName { get; }
         public string TagName { get; }
-        public bool Succeeded { get; }
+        public TagGatewayWriteStatus Status { get; }
+        public bool Succeeded => Status == TagGatewayWriteStatus.Succeeded;
         public DateTimeOffset Timestamp { get; }
         public string ErrorMessage { get; }
 
         public static TagGatewayWriteResult Success(string deviceName, string tagName)
         {
-            return new TagGatewayWriteResult(deviceName, tagName, true, DateTimeOffset.UtcNow, null);
+            return new TagGatewayWriteResult(deviceName, tagName, TagGatewayWriteStatus.Succeeded, DateTimeOffset.UtcNow, null);
         }
 
         public static TagGatewayWriteResult Failure(string deviceName, string tagName, string errorMessage)
         {
-            return new TagGatewayWriteResult(deviceName, tagName, false, DateTimeOffset.UtcNow, errorMessage);
+            return new TagGatewayWriteResult(deviceName, tagName, TagGatewayWriteStatus.Failed, DateTimeOffset.UtcNow, errorMessage);
+        }
+
+        public static TagGatewayWriteResult Uncertain(string deviceName, string tagName)
+        {
+            return new TagGatewayWriteResult(deviceName, tagName, TagGatewayWriteStatus.Uncertain, DateTimeOffset.UtcNow,
+                "Device write outcome is uncertain; do not replay automatically.");
+        }
+
+        public static TagGatewayWriteResult NotAttempted(string deviceName, string tagName)
+        {
+            return new TagGatewayWriteResult(deviceName, tagName, TagGatewayWriteStatus.NotAttempted, DateTimeOffset.UtcNow,
+                "Write was not attempted because an earlier item for this device failed.");
         }
     }
 

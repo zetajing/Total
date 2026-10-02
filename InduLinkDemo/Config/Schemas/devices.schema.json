@@ -111,6 +111,7 @@
         "password": { "type": "string" },
         "useSecurity": { "type": "boolean" },
         "autoAcceptUntrustedCertificates": { "type": "boolean" },
+        "certificateStoreDirectory": { "type": [ "string", "null" ] },
         "connectTimeoutMilliseconds": { "type": "integer", "minimum": 1 },
         "sessionTimeoutMilliseconds": { "type": "integer", "minimum": 1 }
       }

@@ -32,6 +32,7 @@
 dotnet restore Total.sln
 dotnet build Total.sln -c Release
 dotnet test InduLink.Tests/InduLink.Tests.csproj -c Release
+dotnet test InduLink.Demo.Tests/InduLink.Demo.Tests.csproj -c Release
 ```
 
 只连接一种协议时，直接引用对应模块并使用客户端的快速创建入口：
@@ -85,6 +86,7 @@ var value = await host.Get("plc1").ReadAsync("Speed");
 - [SQL Server/MySQL 历史存储](docs/storage.md)
 - [MES、Web、MQTT Broker、WebSocket、FTP/FTPS](docs/integrations.md)
 - [可靠性、审查结论、验证边界和路线图](docs/engineering-notes.md)
+- [地址大小写、网关写入状态、停止预算与服务端回归](docs/reliability-regressions.md)
 
 ## 示例程序
 

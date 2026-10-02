@@ -3,6 +3,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using System.IO;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -32,6 +33,8 @@ namespace InduLink.Protocols.OpcUa
         public string Password { get; set; }
         public bool UseSecurity { get; set; }
         public bool AutoAcceptUntrustedCertificates { get; set; }
+        /// <summary>可选独立 PKI 根目录，包含 own/trusted/issuers/rejected；默认使用应用的本地 PKI。</summary>
+        public string CertificateStoreDirectory { get; set; }
         public int ConnectTimeoutMilliseconds { get; set; } = 10000;
         public int OperationTimeoutMilliseconds { get; set; } = 5000;
         public int SessionTimeoutMilliseconds { get; set; } = 60000;
@@ -359,6 +362,7 @@ namespace InduLink.Protocols.OpcUa
 
         private async Task<ApplicationConfiguration> CreateConfigurationAsync(CancellationToken cancellationToken)
         {
+            var pki = _options.CertificateStoreDirectory ?? "%LocalApplicationData%/InduLink/pki";
             var config = new ApplicationConfiguration
             {
                 ApplicationName = "InduLink",
@@ -366,16 +370,22 @@ namespace InduLink.Protocols.OpcUa
                 ApplicationType = ApplicationType.Client,
                 SecurityConfiguration = new SecurityConfiguration
                 {
-                    ApplicationCertificate = new CertificateIdentifier { StoreType = "Directory", StorePath = "%LocalApplicationData%/InduLink/pki/own", SubjectName = "CN=InduLink" },
-                    TrustedPeerCertificates = new CertificateTrustList { StoreType = "Directory", StorePath = "%LocalApplicationData%/InduLink/pki/trusted" },
-                    TrustedIssuerCertificates = new CertificateTrustList { StoreType = "Directory", StorePath = "%LocalApplicationData%/InduLink/pki/issuers" },
-                    RejectedCertificateStore = new CertificateTrustList { StoreType = "Directory", StorePath = "%LocalApplicationData%/InduLink/pki/rejected" },
+                    ApplicationCertificate = new CertificateIdentifier { StoreType = "Directory", StorePath = Path.Combine(pki, "own"), SubjectName = "CN=InduLink" },
+                    TrustedPeerCertificates = new CertificateTrustList { StoreType = "Directory", StorePath = Path.Combine(pki, "trusted") },
+                    TrustedIssuerCertificates = new CertificateTrustList { StoreType = "Directory", StorePath = Path.Combine(pki, "issuers") },
+                    RejectedCertificateStore = new CertificateTrustList { StoreType = "Directory", StorePath = Path.Combine(pki, "rejected") },
                     AutoAcceptUntrustedCertificates = _options.AutoAcceptUntrustedCertificates
                 },
                 TransportQuotas = new TransportQuotas { OperationTimeout = _options.OperationTimeoutMilliseconds },
                 ClientConfiguration = new ClientConfiguration { DefaultSessionTimeout = _options.SessionTimeoutMilliseconds }
             };
             await config.ValidateAsync(ApplicationType.Client, cancellationToken).ConfigureAwait(false);
+            if (_options.UseSecurity)
+            {
+                var application = new ApplicationInstance((ITelemetryContext)null) { ApplicationConfiguration = config };
+                if (!await application.CheckApplicationInstanceCertificatesAsync(true, null, cancellationToken).ConfigureAwait(false))
+                    throw new InduLinkConnectionException("OPC UA application certificate is unavailable.");
+            }
             return config;
         }
 
@@ -422,6 +432,7 @@ namespace InduLink.Protocols.OpcUa
             subscription.LifetimeCount = 30;
             subscription.TimestampsToReturn = TimestampsToReturn.Both;
             subscription.SequentialPublishing = true;
+            subscription.PublishingEnabled = true;
 
             var items = new List<NativeSubscriptionItem>();
             try
@@ -436,6 +447,7 @@ namespace InduLink.Protocols.OpcUa
                         Math.Max(0d, registration.Request.Interval.TotalMilliseconds));
                     monitoredItem.QueueSize = 1;
                     monitoredItem.DiscardOldest = true;
+                    monitoredItem.MonitoringMode = MonitoringMode.Reporting;
                     monitoredItem.Notification += (item, args) => OnMonitoredItemNotification(registration, item, args);
                     subscription.AddItem(monitoredItem);
                     items.Add(new NativeSubscriptionItem(monitoredItem, request));

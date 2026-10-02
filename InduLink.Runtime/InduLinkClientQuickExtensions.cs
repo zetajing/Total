@@ -405,7 +405,7 @@ namespace InduLink.Runtime
             }
 
             var result = await client.ReadManyAsync(requests, cancellationToken).ConfigureAwait(false);
-            var values = new Dictionary<string, T>(StringComparer.OrdinalIgnoreCase);
+            var values = new Dictionary<string, T>(ProtocolAddressComparer.ForProtocol(client.Kind));
             for (var i = 0; i < result.Values.Count; i++)
             {
                 var value = result.Values[i];
@@ -434,7 +434,7 @@ namespace InduLink.Runtime
             }
 
             var result = await client.ReadManyAsync(requests, cancellationToken).ConfigureAwait(false);
-            return new InduLinkTagReadResult(tagList, result.Values);
+            return new InduLinkTagReadResult(tagList, result.Values, ProtocolAddressComparer.ForProtocol(client.Kind));
         }
 
         /// <summary>

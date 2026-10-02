@@ -10,6 +10,7 @@ namespace InduLink.Protocols.OpcUa
         public string EndpointUrl { get; set; }
         public string Username { get; set; }
         public string Password { get; set; }
+        public string CertificateStoreDirectory { get; set; }
         public bool UseSecurity { get; set; }
         public bool AutoAcceptUntrustedCertificates { get; set; }
         public int ConnectTimeoutMilliseconds { get; set; } = 10000;
@@ -36,6 +37,7 @@ namespace InduLink.Protocols.OpcUa
                 EndpointUrl = settings.EndpointUrl,
                 Username = settings.Username,
                 Password = settings.Password,
+                CertificateStoreDirectory = settings.CertificateStoreDirectory,
                 UseSecurity = settings.UseSecurity,
                 AutoAcceptUntrustedCertificates = settings.AutoAcceptUntrustedCertificates,
                 ConnectTimeoutMilliseconds = settings.ConnectTimeoutMilliseconds,

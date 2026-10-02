@@ -92,7 +92,7 @@ namespace InduLink
             var config = LoadConfiguration(fullPath);
             var device = config.FindDevice(deviceName);
             var configDirectory = Path.GetDirectoryName(fullPath);
-            var tags = TagTable.Load(device.ResolvePointsFile(configDirectory));
+            var tags = TagTable.Load(device.ResolvePointsFile(configDirectory), ProtocolAddressComparer.ForProtocol(device.Protocol));
             return new InduLinkConfiguredClient(device.Name, CreateClient(device), tags);
         }
 
@@ -102,9 +102,9 @@ namespace InduLink
             return CreateDeviceHost(LoadConfiguration(fullPath), Path.GetDirectoryName(fullPath));
         }
 
-        public InduLinkDeviceHost CreateDeviceHost(InduLinkSdkConfig config, string configDirectory)
+        public InduLinkDeviceHost CreateDeviceHost(InduLinkSdkConfig config, string configDirectory, InduLinkDeviceHostOptions options = null)
         {
-            return new InduLinkDeviceHost(config, configDirectory, CreateClient, _logger);
+            return new InduLinkDeviceHost(config, configDirectory, CreateClient, _logger, options);
         }
 
         private static string GetFullConfigPath(string configFilePath)

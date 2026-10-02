@@ -22,19 +22,25 @@ namespace InduLink.Runtime
         private string _lastError;
         private int _started;
         private int _disposed;
+        private readonly object _stopSync = new object();
+        private readonly TimeSpan _shutdownTimeout;
+        private Task _stopTask;
+        private Task _disposeTask;
 
         internal InduLinkHostedDevice(
             InduLinkDeviceConfig config,
             InduLinkConfiguredClient device,
             Action<InduLinkDeviceStateChangedEventArgs> stateChanged,
             Action<InduLinkDeviceValuesEventArgs> valuesReceived,
-            IInduLinkLogger logger)
+            IInduLinkLogger logger,
+            TimeSpan shutdownTimeout)
         {
             _config = config ?? throw new ArgumentNullException(nameof(config));
             Device = device ?? throw new ArgumentNullException(nameof(device));
             _stateChanged = stateChanged ?? throw new ArgumentNullException(nameof(stateChanged));
             _valuesReceived = valuesReceived ?? throw new ArgumentNullException(nameof(valuesReceived));
             _logger = logger ?? NullInduLinkLogger.Instance;
+            _shutdownTimeout = shutdownTimeout;
         }
 
         /// <summary>获取 devices.json 中的设备配置。</summary>
@@ -114,6 +120,23 @@ namespace InduLink.Runtime
 
         internal async Task StopAsync(CancellationToken cancellationToken)
         {
+            await GetStopTask().WaitAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        private Task GetStopTask()
+        {
+            lock (_stopSync)
+            {
+                if (_stopTask != null && !_stopTask.IsCompleted) return _stopTask;
+                if (Volatile.Read(ref _started) == 0) return Task.CompletedTask;
+                if (_stopTask == null || _stopTask.IsCompleted)
+                    _stopTask = Task.Run(StopCoreAsync);
+                return _stopTask;
+            }
+        }
+
+        private async Task StopCoreAsync()
+        {
             if (Volatile.Read(ref _started) == 0)
             {
                 return;
@@ -137,13 +160,13 @@ namespace InduLink.Runtime
                 }
             }
 
-            await _lifecycleGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+            await _lifecycleGate.WaitAsync().ConfigureAwait(false);
             try
             {
-                await StopSubscriptionAsync(cancellationToken).ConfigureAwait(false);
+                await StopSubscriptionAsync(CancellationToken.None).ConfigureAwait(false);
                 if (Device.Client.IsConnected)
                 {
-                    await Device.DisconnectAsync(cancellationToken).ConfigureAwait(false);
+                    await Device.DisconnectAsync(CancellationToken.None).ConfigureAwait(false);
                 }
 
                 _lastError = null;
@@ -169,19 +192,34 @@ namespace InduLink.Runtime
         /// <summary>异步停止后台任务并释放底层协议客户端。</summary>
         public async ValueTask DisposeAsync()
         {
-            if (Interlocked.Exchange(ref _disposed, 1) != 0)
-            {
-                return;
-            }
+            try { await DisposeFullyAsync().WaitAsync(_shutdownTimeout).ConfigureAwait(false); }
+            catch (TimeoutException ex) { _logger.Error("Hosted device disposal deferred until active tasks finish.", ex); }
+        }
 
+        internal Task DisposeFullyAsync()
+        {
+            lock (_stopSync)
+            {
+                if (_disposeTask != null) return _disposeTask;
+                Interlocked.Exchange(ref _disposed, 1);
+                return _disposeTask = Task.Run(DisposeCoreAsync);
+            }
+        }
+
+        private async Task DisposeCoreAsync()
+        {
             try
             {
-                StopAsync(CancellationToken.None).GetAwaiter().GetResult();
+                await GetStopTask().ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                _logger.Error("Hosted device stop during disposal failed.", ex);
             }
             finally
             {
-                await Device.DisposeAsync().ConfigureAwait(false);
-                _lifecycleGate.Dispose();
+                try { await Device.DisposeAsync().ConfigureAwait(false); }
+                finally { _lifecycleGate.Dispose(); }
             }
         }
 

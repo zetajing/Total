@@ -20,11 +20,11 @@ namespace InduLink.Runtime
         private readonly Dictionary<string, InduLinkTag> _addressIndexes;
 
         /// <summary>使用给定点位集合创建点位表。</summary>
-        public TagTable(IReadOnlyList<InduLinkTag> tags)
+        public TagTable(IReadOnlyList<InduLinkTag> tags, StringComparer addressComparer = null)
         {
             Tags = tags ?? throw new ArgumentNullException(nameof(tags));
             _nameIndexes = new Dictionary<string, InduLinkTag>(StringComparer.OrdinalIgnoreCase);
-            _addressIndexes = new Dictionary<string, InduLinkTag>(StringComparer.OrdinalIgnoreCase);
+            _addressIndexes = new Dictionary<string, InduLinkTag>(addressComparer ?? StringComparer.Ordinal);
 
             foreach (var tag in tags)
             {
@@ -41,7 +41,7 @@ namespace InduLink.Runtime
 
                 if (_addressIndexes.ContainsKey(tag.Address))
                     throw new ArgumentException(
-                        string.Format("Tag address '{0}' is duplicated. Addresses must be unique (case-insensitive).", tag.Address),
+                        string.Format("Tag address '{0}' is duplicated under the selected protocol comparison rules.", tag.Address),
                         nameof(tags));
                 _addressIndexes.Add(tag.Address, tag);
             }
@@ -51,21 +51,21 @@ namespace InduLink.Runtime
         public IReadOnlyList<InduLinkTag> Tags { get; private set; }
 
         /// <summary>根据文件扩展名自动加载 JSON 或 CSV 点位表。</summary>
-        public static TagTable Load(string filePath)
+        public static TagTable Load(string filePath, StringComparer addressComparer = null)
         {
             if (string.IsNullOrWhiteSpace(filePath)) throw new ArgumentException("Tag table file path cannot be null or empty.", nameof(filePath));
 
             var extension = Path.GetExtension(filePath);
             if (string.Equals(extension, ".json", StringComparison.OrdinalIgnoreCase))
             {
-                return LoadJson(filePath);
+                return LoadJson(filePath, addressComparer);
             }
 
-            return LoadCsv(filePath);
+            return LoadCsv(filePath, addressComparer);
         }
 
         /// <summary>从 JSON 文件加载点位表。</summary>
-        public static TagTable LoadJson(string filePath)
+        public static TagTable LoadJson(string filePath, StringComparer addressComparer = null)
         {
             if (string.IsNullOrWhiteSpace(filePath)) throw new ArgumentException("Tag table file path cannot be null or empty.", nameof(filePath));
 
@@ -74,7 +74,7 @@ namespace InduLink.Runtime
                 using (var stream = File.OpenRead(filePath))
                 {
                     var dto = (TagTableDto)new DataContractJsonSerializer(typeof(TagTableDto)).ReadObject(stream);
-                    return FromDto(dto);
+                    return FromDto(dto, addressComparer);
                 }
             }
             catch (SerializationException ex)
@@ -84,7 +84,7 @@ namespace InduLink.Runtime
         }
 
         /// <summary>从 JSON 文本解析点位表。</summary>
-        public static TagTable FromJson(string json)
+        public static TagTable FromJson(string json, StringComparer addressComparer = null)
         {
             if (string.IsNullOrWhiteSpace(json)) throw new ArgumentException("Tag table JSON cannot be null or empty.", nameof(json));
 
@@ -93,7 +93,7 @@ namespace InduLink.Runtime
                 using (var stream = new MemoryStream(Encoding.UTF8.GetBytes(json)))
                 {
                     var dto = (TagTableDto)new DataContractJsonSerializer(typeof(TagTableDto)).ReadObject(stream);
-                    return FromDto(dto);
+                    return FromDto(dto, addressComparer);
                 }
             }
             catch (SerializationException ex)
@@ -161,15 +161,15 @@ namespace InduLink.Runtime
         }
 
         /// <summary>从 UTF-8 CSV 文件加载点位表。</summary>
-        public static TagTable LoadCsv(string filePath)
+        public static TagTable LoadCsv(string filePath, StringComparer addressComparer = null)
         {
             if (string.IsNullOrWhiteSpace(filePath)) throw new ArgumentException("Tag table file path cannot be null or empty.", nameof(filePath));
 
-            return ParseCsv(File.ReadAllText(filePath, Encoding.UTF8));
+            return ParseCsv(File.ReadAllText(filePath, Encoding.UTF8), addressComparer);
         }
 
         /// <summary>从 CSV 文本解析点位表，支持带引号和逗号的字段。</summary>
-        public static TagTable ParseCsv(string csv)
+        public static TagTable ParseCsv(string csv, StringComparer addressComparer = null)
         {
             if (string.IsNullOrWhiteSpace(csv)) throw new ArgumentException("Tag table CSV cannot be null or empty.", nameof(csv));
 
@@ -197,7 +197,7 @@ namespace InduLink.Runtime
                     GetCell(row, headers, "Writable", false)));
             }
 
-            return new TagTable(tags);
+            return new TagTable(tags, addressComparer);
         }
 
         /// <summary>按点位名称查找，名称匹配不区分大小写。</summary>
@@ -214,7 +214,7 @@ namespace InduLink.Runtime
             throw new KeyNotFoundException(string.Format("Tag '{0}' was not found.", name));
         }
 
-        /// <summary>按设备地址查找，地址匹配不区分大小写。</summary>
+        /// <summary>按设备地址查找，地址匹配使用构造时选择的协议比较规则。</summary>
         public InduLinkTag GetByAddress(string address)
         {
             if (string.IsNullOrWhiteSpace(address)) throw new ArgumentException("Tag address cannot be null or empty.", nameof(address));
@@ -228,7 +228,7 @@ namespace InduLink.Runtime
             throw new KeyNotFoundException(string.Format("Tag address '{0}' was not found.", address));
         }
 
-        private static TagTable FromDto(TagTableDto dto)
+        private static TagTable FromDto(TagTableDto dto, StringComparer addressComparer)
         {
             if (dto == null || dto.Tags == null)
             {
@@ -246,7 +246,7 @@ namespace InduLink.Runtime
                 tags.Add(CreateTag(tag.Address, tag.Type, tag.Length, tag.Name, tag.Writable.GetValueOrDefault()));
             }
 
-            return new TagTable(tags);
+            return new TagTable(tags, addressComparer);
         }
 
         private static InduLinkTag CreateTag(string address, string type, string length, string name, string writable)
