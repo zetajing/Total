@@ -49,6 +49,8 @@ dotnet test InduLink.Demo.Tests/InduLink.Demo.Tests.csproj -c Release
 
 OPC UA 回归自动启动进程内的 OPC Foundation 参考服务器，使用临时 PKI 验证默认拒绝未受信服务器、显式信任、实际读取，以及服务器重启后重装原生订阅。客户端安全连接会检查或创建应用证书；可用 `CertificateStoreDirectory` 隔离部署的 `own/trusted/issuers/rejected` 目录，默认 PKI 路径保持原有位置。正式环境仍需管理证书分发、私钥权限和信任审批。
 
+MQTT 重连回归覆盖代理重启及首次订阅恢复被拒绝的情况。只有连接和订阅恢复均完成才结束重试；底层仍连接但订阅恢复失败时，会重建会话继续恢复。失败断言保留客户端诊断日志。
+
 Snap7 回归使用现有 x86 sidecar，覆盖完整 S7 握手、Bool/INT/REAL 读写和服务重启后的重新连接。监听固定为本机 TCP 102，端口已占用时测试失败，避免误连已有服务。
 
 ```powershell

@@ -9,6 +9,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using InduLink.Abstractions;
+using InduLink.Diagnostics;
 using InduLink.Exceptions;
 using InduLink.Protocols.Mqtt;
 using NUnit.Framework;
@@ -108,14 +109,19 @@ namespace InduLink.Tests
             }
         }
 
-        [Test]
+        [TestCase(false)]
+        [TestCase(true)]
         [Timeout(20000)]
-        public async Task Client_AutoReconnectsAndRestoresSubscriptionsAfterBrokerRestart()
+        public async Task Client_AutoReconnectsAndRestoresSubscriptionsAfterBrokerRestart(bool rejectFirstRestore)
         {
             var port = GetFreeTcpPort();
+            var subscriptionAttempts = 0;
+            var logger = new RecordingLogger();
             using (var broker = new MqttBrokerService(new MqttBrokerOptions
             {
                 Port = port,
+                SubscribeAuthorizer = (username, clientId, topic) =>
+                    Interlocked.Increment(ref subscriptionAttempts) != 2 || !rejectFirstRestore,
                 Credentials = new Dictionary<string, string>(StringComparer.Ordinal)
                 {
                     ["sdk-user"] = "sdk-password",
@@ -133,7 +139,7 @@ namespace InduLink.Tests
                 ReconnectMaxDelayMilliseconds = 500,
                 ConnectTimeoutMilliseconds = 500,
                 QualityOfService = 1,
-            }))
+            }, logger))
             {
                 await broker.StartAsync(CancellationToken.None);
                 await client.ConnectAsync(CancellationToken.None);
@@ -155,7 +161,9 @@ namespace InduLink.Tests
                 await broker.StartAsync(CancellationToken.None);
 
                 var reconnectCompleted = await Task.WhenAny(reconnected.Task, Task.Delay(7000));
-                Assert.AreSame(reconnected.Task, reconnectCompleted, "The MQTT client did not reconnect after the broker restarted.");
+                Assert.AreSame(reconnected.Task, reconnectCompleted,
+                    "The MQTT client did not reconnect after the broker restarted.\n" + logger);
+                Assert.GreaterOrEqual(subscriptionAttempts, rejectFirstRestore ? 3 : 2);
                 await broker.PublishAsync("industrial/reconnect/value", Encoding.UTF8.GetBytes("restored"), 1, false, CancellationToken.None);
                 var receiveCompleted = await Task.WhenAny(received.Task, Task.Delay(5000));
                 Assert.AreSame(received.Task, receiveCompleted, "The MQTT subscription was not restored after reconnecting.");
@@ -568,6 +576,16 @@ namespace InduLink.Tests
             {
                 Assert.ThrowsAsync<ArgumentException>(async () => await broker.StartAsync(CancellationToken.None));
             }
+        }
+
+        private sealed class RecordingLogger : IInduLinkLogger
+        {
+            private readonly ConcurrentQueue<string> _messages = new ConcurrentQueue<string>();
+            public void Trace(string message) { _messages.Enqueue(message); }
+            public void Info(string message) { _messages.Enqueue(message); }
+            public void Warn(string message) { _messages.Enqueue(message); }
+            public void Error(string message, Exception exception) { _messages.Enqueue(message + " " + exception); }
+            public override string ToString() { return string.Join(Environment.NewLine, _messages); }
         }
 
         private static int GetFreeTcpPort()

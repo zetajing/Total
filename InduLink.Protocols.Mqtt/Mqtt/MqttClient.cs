@@ -99,6 +99,7 @@ namespace InduLink.Protocols.Mqtt
         private readonly object _reconnectSync = new object();
         private CancellationTokenSource _reconnectCancellation = new CancellationTokenSource();
         private Task _reconnectTask = Task.CompletedTask;
+        private int _connectionReady;
         private int _manualDisconnect = 1;
         private int _disposeRequested;
 
@@ -250,6 +251,7 @@ namespace InduLink.Protocols.Mqtt
 
         protected override async Task ConnectCoreAsync(CancellationToken cancellationToken)
         {
+            Volatile.Write(ref _connectionReady, 0);
             Interlocked.Exchange(ref _manualDisconnect, 0);
             EnsureReconnectCancellationAvailable();
 
@@ -268,6 +270,7 @@ namespace InduLink.Protocols.Mqtt
                 {
                     await _client.ConnectAsync(clientOptions, timeoutCancellation.Token).ConfigureAwait(false);
                     await RestoreSubscriptionsAsync(timeoutCancellation.Token).ConfigureAwait(false);
+                    Volatile.Write(ref _connectionReady, 1);
                     RaiseConnectionChanged(new MqttConnectionChangedEventArgs(true, "Success", null));
                 }
                 catch (OperationCanceledException ex) when (!cancellationToken.IsCancellationRequested)
@@ -410,6 +413,7 @@ namespace InduLink.Protocols.Mqtt
 
         private Task OnDisconnectedAsync(MqttClientDisconnectedEventArgs args)
         {
+            Volatile.Write(ref _connectionReady, 0);
             RaiseConnectionChanged(new MqttConnectionChangedEventArgs(false,
                 string.IsNullOrWhiteSpace(args.ReasonString) ? args.Reason.ToString() : args.ReasonString,
                 args.Exception));
@@ -514,9 +518,11 @@ namespace InduLink.Protocols.Mqtt
                 try
                 {
                     await Task.Delay(delay, cancellationToken).ConfigureAwait(false);
-                    if (_client.IsConnected) return;
+                    // A transport connection can survive a failed subscription restore.
+                    // Keep retrying until the complete MQTT session is ready.
+                    if (_client.IsConnected && Volatile.Read(ref _connectionReady) != 0) return;
                     await ConnectAsync(cancellationToken).ConfigureAwait(false);
-                    if (_client.IsConnected) return;
+                    if (_client.IsConnected && Volatile.Read(ref _connectionReady) != 0) return;
                 }
                 catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
                 {
