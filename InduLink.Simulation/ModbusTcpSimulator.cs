@@ -69,19 +69,23 @@ namespace InduLink.Simulation
         protected override async Task StopTransportAsync()
         {
             _listenCancellation?.Cancel();
-            _network?.Dispose();
             _listener?.Stop();
+            // 接收循环退出后再清理连接，防止刚接入的客户端漏过 Dispose。
             try { await _listenTask.ConfigureAwait(false); }
             catch (OperationCanceledException) when (_listenCancellation?.IsCancellationRequested == true) { }
             catch (ObjectDisposedException) when (_listenCancellation?.IsCancellationRequested == true) { }
             catch (SocketException) when (_listenCancellation?.IsCancellationRequested == true) { }
             finally
             {
-                _network = null;
-                _listener = null;
-                _listenCancellation?.Dispose();
-                _listenCancellation = null;
-                _listenTask = Task.CompletedTask;
+                try { _network?.Dispose(); }
+                finally
+                {
+                    _network = null;
+                    _listener = null;
+                    _listenCancellation?.Dispose();
+                    _listenCancellation = null;
+                    _listenTask = Task.CompletedTask;
+                }
             }
         }
 
@@ -139,7 +143,9 @@ namespace InduLink.Simulation
             public MemoryPoints(object sync) { _sync = sync; }
             public T[] ReadPoints(ushort startAddress, ushort numberOfPoints)
             {
-                if ((int)startAddress + numberOfPoints > _values.Length) throw new ArgumentOutOfRangeException(nameof(numberOfPoints));
+                // 越界是地址错误，协议侧应返回 0x02，而不是设备故障 0x04。
+                if ((int)startAddress + numberOfPoints > _values.Length)
+                    throw new InvalidModbusRequestException(SlaveExceptionCodes.IllegalDataAddress);
                 lock (_sync)
                 {
                     var result = new T[numberOfPoints];
@@ -150,7 +156,8 @@ namespace InduLink.Simulation
             public void WritePoints(ushort startAddress, T[] points)
             {
                 if (points == null) throw new ArgumentNullException(nameof(points));
-                if ((int)startAddress + points.Length > _values.Length) throw new ArgumentOutOfRangeException(nameof(points));
+                if ((int)startAddress + points.Length > _values.Length)
+                    throw new InvalidModbusRequestException(SlaveExceptionCodes.IllegalDataAddress);
                 lock (_sync) Array.Copy(points, 0, _values, startAddress, points.Length);
             }
         }

@@ -242,7 +242,11 @@ namespace InduLink.Web.Gateway
                     ValidateItems(request.Items);
                     var results = await _tagGateway.WriteAsync(request.Items.Select(item =>
                         new TagGatewayWriteItem(item.Device, item.Tag, item.Value)).ToList(), cancellationToken).ConfigureAwait(false);
-                    response = new { correlationId, items = results };
+                    // 写入可能已生效；即使操作超时，也要给逐项结果一次独立的发送机会。
+                    using var responseTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(1));
+                    statusCode = 200;
+                    await WriteJsonAsync(context.Response, statusCode, new { correlationId, items = results }, responseTimeout.Token).ConfigureAwait(false);
+                    return;
                 }
                 else if (string.Equals(context.Request.HttpMethod, "POST", StringComparison.OrdinalIgnoreCase) && path == "/api/v1/read-address")
                 {

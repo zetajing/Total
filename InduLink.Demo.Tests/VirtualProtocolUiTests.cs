@@ -24,11 +24,7 @@ namespace InduLink.Tests
         [Test, Apartment(ApartmentState.STA)]
         public void VirtualPagesStartEditValuesStopAndCloseWithRealClients()
         {
-            var application = Application.Current ?? new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
-            application.Resources.MergedDictionaries.Add(new ResourceDictionary
-            {
-                Source = new Uri("pack://application:,,,/InduLinkDemo;component/Styles/ModernTheme.xaml"),
-            });
+            EnsureTheme();
             RunDispatcher(async () =>
             {
                 foreach (var opcUa in new[] { false, true })
@@ -84,6 +80,65 @@ namespace InduLink.Tests
                 // Instantiate the unified navigation, including the retained S7 page.
                 var navigation = new VirtualPlcTab();
                 await navigation.ResetAsync();
+            });
+        }
+
+        [Test, Apartment(ApartmentState.STA)]
+        public void InvalidPointEditBlocksStartupAndCanBeCorrected()
+        {
+            EnsureTheme();
+            RunDispatcher(async () =>
+            {
+                var control = new ProtocolSimulatorTab();
+                ((TextBox)control.FindName("PortTextBox")).Text = FreePort().ToString();
+                // 实际生成表格编辑控件；窗口放在屏幕外，避免干扰使用者。
+                var window = new Window
+                {
+                    Content = control, Width = 1100, Height = 650, Left = -10000, Top = -10000,
+                    ShowInTaskbar = false, ShowActivated = false,
+                };
+                try
+                {
+                    window.Show();
+                    await control.Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ContextIdle);
+                    var grid = (DataGrid)control.FindName("PointsGrid");
+                    var row = grid.Items[2];
+                    var stepColumn = (DataGridTextColumn)grid.Columns[4];
+                    grid.ScrollIntoView(row, stepColumn);
+                    grid.CurrentCell = new DataGridCellInfo(row, stepColumn);
+                    Assert.That(grid.BeginEdit(), Is.True);
+                    var editor = (TextBox)stepColumn.GetCellContent(row);
+                    editor.Text = "abc";
+                    editor.GetBindingExpression(TextBox.TextProperty).UpdateSource();
+                    Assert.That(Validation.GetHasError(editor), Is.True);
+
+                    Assert.ThrowsAsync<FormatException>(() => control.StartAsync());
+                    Assert.That(grid.IsReadOnly, Is.False);
+                    Assert.That(editor.Text, Is.EqualTo("abc"));
+                    Assert.That(Validation.GetHasError(editor), Is.True);
+                    Assert.That(((Button)control.FindName("StopButton")).IsEnabled, Is.False);
+
+                    // 修正同一个编辑框后应能正常启动，确认校验失败没有破坏生命周期。
+                    editor.Text = "2";
+                    editor.GetBindingExpression(TextBox.TextProperty).UpdateSource();
+                    await control.StartAsync();
+                    Assert.That(((SimulatorPointRow)row).Step, Is.EqualTo(2));
+                    Assert.That(((Button)control.FindName("StopButton")).IsEnabled, Is.True);
+                }
+                finally
+                {
+                    try { await control.ResetAsync(); }
+                    finally { window.Close(); }
+                }
+            });
+        }
+
+        private static void EnsureTheme()
+        {
+            var application = Application.Current ?? new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
+            application.Resources.MergedDictionaries.Add(new ResourceDictionary
+            {
+                Source = new Uri("pack://application:,,,/InduLinkDemo;component/Styles/ModernTheme.xaml"),
             });
         }
 

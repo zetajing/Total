@@ -171,21 +171,18 @@ namespace InduLink.Runtime
                     ThrowIfDisposed();
                     if (Volatile.Read(ref _started) == 0) return;
 
-                    var failures = new List<Exception>();
+                    // 先通知全部设备停止，避免一台设备卡住时，其他设备还在轮询或重连。
+                    var tasks = new List<Task>();
                     foreach (var device in _devices.Values)
+                        tasks.Add(device.StopAsync(CancellationToken.None));
+                    var stopping = Task.WhenAll(tasks);
+                    try { await stopping.WaitAsync(token).ConfigureAwait(false); }
+                    catch when (stopping.IsFaulted)
                     {
-                        token.ThrowIfCancellationRequested();
-                        try { await device.StopAsync(token).ConfigureAwait(false); }
-                        catch (OperationCanceledException) when (token.IsCancellationRequested) { throw; }
-                        catch (Exception ex)
-                        {
-                            failures.Add(ex);
-                            _logger.Error("Device stop failed: " + device.Device.DeviceName, ex);
-                        }
+                        var error = new AggregateException("One or more devices failed to stop.", stopping.Exception.InnerExceptions);
+                        _logger.Error("Device host stop failed.", error);
+                        throw error;
                     }
-
-                    if (failures.Count > 0)
-                        throw new AggregateException("One or more devices failed to stop.", failures);
 
                     Volatile.Write(ref _started, 0);
                 }
@@ -238,11 +235,13 @@ namespace InduLink.Runtime
             await _lifecycleGate.WaitAsync().ConfigureAwait(false);
             try
             {
+                // 每台设备独立清理；总等待预算结束后，这些任务仍会继续完成释放。
+                var tasks = new List<Task>();
                 foreach (var device in _devices.Values)
-                {
-                    try { await device.DisposeFullyAsync().ConfigureAwait(false); }
-                    catch (Exception ex) { _logger.Error("Hosted device disposal failed.", ex); }
-                }
+                    tasks.Add(device.DisposeFullyAsync());
+                var disposing = Task.WhenAll(tasks);
+                try { await disposing.ConfigureAwait(false); }
+                catch (Exception ex) { _logger.Error("Hosted device disposal failed.", disposing.Exception ?? ex); }
             }
             finally
             {

@@ -115,22 +115,59 @@ namespace InduLink.Tests
             Assert.That(fixture.Client.Disposed, Is.True);
         }
 
+        [TestCase(false)]
+        [TestCase(true)]
+        public async Task ShutdownReachesOtherDevicesWhileFirstReconnectIsBlocked(bool dispose)
+        {
+            var healthy = new BoundaryClient { DeviceId = "other" };
+            using var fixture = new HostFixture(new BoundaryClient(), TimeSpan.FromMilliseconds(100), healthy);
+            await fixture.Host.StartAsync();
+            fixture.Client.IsConnected = false;
+            await fixture.Client.ReconnectEntered.Task.WaitAsync(TimeSpan.FromSeconds(2));
+            try
+            {
+                // 第一台始终占着重连调用，第二台仍必须及时停止或释放。
+                if (dispose)
+                {
+                    await fixture.Host.DisposeAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(2));
+                    await healthy.DisposeCompleted.Task.WaitAsync(TimeSpan.FromSeconds(2));
+                }
+                else
+                {
+                    Assert.ThrowsAsync<TimeoutException>(() => fixture.Host.StopAsync());
+                    await healthy.DisconnectCompleted.Task.WaitAsync(TimeSpan.FromSeconds(2));
+                }
+                Assert.That(healthy.IsConnected, Is.False);
+                Assert.That(fixture.Client.Disposed, Is.False);
+            }
+            finally { fixture.Client.ReleaseReconnect.TrySetResult(true); }
+
+            if (dispose) await fixture.Client.DisposeCompleted.Task.WaitAsync(TimeSpan.FromSeconds(2));
+            else await fixture.Host.StopAsync();
+        }
+
         private sealed class HostFixture : IDisposable
         {
             private readonly string _directory = Path.Combine(Path.GetTempPath(), "indulink-boundary-" + Guid.NewGuid().ToString("N"));
             public BoundaryClient Client { get; }
+            private readonly BoundaryClient _secondClient;
             public InduLinkDeviceHost Host { get; }
-            public HostFixture(BoundaryClient client, TimeSpan? timeout = null)
+            public HostFixture(BoundaryClient client, TimeSpan? timeout = null, BoundaryClient secondClient = null)
             {
                 Client = client;
+                _secondClient = secondClient;
                 Directory.CreateDirectory(_directory);
                 File.WriteAllText(Path.Combine(_directory, "points.json"), "{\"tags\":[{\"name\":\"A\",\"address\":\"D0\",\"type\":\"Int32\",\"writable\":true},{\"name\":\"B\",\"address\":\"D1\",\"type\":\"Int32\",\"writable\":true},{\"name\":\"C\",\"address\":\"D2\",\"type\":\"Int32\",\"writable\":true}]}");
                 var config = new InduLinkSdkConfig { Devices = new List<InduLinkDeviceConfig> { new InduLinkDeviceConfig { Name = "plc", DeviceId = "plc", Protocol = "modbus-tcp", PointsFile = "points.json", Runtime = new InduLinkDeviceRuntimeOptions { ReconnectDelayMilliseconds = 20 } } } };
-                Host = new InduLinkDeviceHost(config, _directory, _ => client, options: new InduLinkDeviceHostOptions { ShutdownTimeout = timeout ?? TimeSpan.FromSeconds(2) });
+                if (secondClient != null)
+                    config.Devices.Add(new InduLinkDeviceConfig { Name = "other", DeviceId = "other", Protocol = "modbus-tcp", PointsFile = "points.json" });
+                Host = new InduLinkDeviceHost(config, _directory, device => device.Name == "other" ? secondClient : client,
+                    options: new InduLinkDeviceHostOptions { ShutdownTimeout = timeout ?? TimeSpan.FromSeconds(2) });
             }
             public void Dispose()
             {
                 Client.ReleaseReconnect.TrySetResult(true);
+                _secondClient?.ReleaseReconnect.TrySetResult(true);
                 Host.Dispose();
                 Directory.Delete(_directory, true);
             }
@@ -138,7 +175,7 @@ namespace InduLink.Tests
 
         private sealed class BoundaryClient : IInduLinkClient
         {
-            public string DeviceId => "plc";
+            public string DeviceId { get; set; } = "plc";
             public ProtocolKind Kind { get; set; } = ProtocolKind.ModbusTcp;
             public bool IsConnected { get; set; }
             public bool Disposed { get; private set; }
@@ -149,13 +186,14 @@ namespace InduLink.Tests
             public TaskCompletionSource<bool> ReconnectEntered { get; } = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
             public TaskCompletionSource<bool> ReleaseReconnect { get; } = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
             public TaskCompletionSource<bool> DisposeCompleted { get; } = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            public TaskCompletionSource<bool> DisconnectCompleted { get; } = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
             public async Task ConnectAsync(CancellationToken token)
             {
                 if (++_connectCalls > 1) { ReconnectEntered.TrySetResult(true); await ReleaseReconnect.Task; }
                 token.ThrowIfCancellationRequested();
                 IsConnected = true;
             }
-            public Task DisconnectAsync(CancellationToken token) { IsConnected = false; return Task.CompletedTask; }
+            public Task DisconnectAsync(CancellationToken token) { IsConnected = false; DisconnectCompleted.TrySetResult(true); return Task.CompletedTask; }
             public Task<DataValue> ReadAsync(ReadRequest r, CancellationToken token) => Task.FromResult(Good(r.Address));
             public Task<BatchReadResult> ReadManyAsync(IReadOnlyCollection<ReadRequest> requests, CancellationToken token) => Task.FromResult(new BatchReadResult(requests.Select(r => Good(r.Address)).ToList()));
             private static DataValue Good(string address) => new DataValue(address, DataType.Int32, address == "Line/Speed" ? 11 : 22, null, QualityStatus.Good, DateTimeOffset.UtcNow, null);

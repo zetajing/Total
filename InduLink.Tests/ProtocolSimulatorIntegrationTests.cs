@@ -91,6 +91,62 @@ namespace InduLink.Tests
         }
 
         [Test]
+        public async Task ModbusStopClosesConnectionsArrivingDuringShutdown()
+        {
+            await using var simulator = new ModbusTcpSimulator(new[] { new SimulationPoint("HR0", DataType.Int16, "7") }, port: 0);
+            // 重复在接入期间停止，检查已建立及刚接入的连接都被关闭。
+            for (var attempt = 0; attempt < 10; attempt++)
+            {
+                await simulator.StartAsync();
+                var port = simulator.Port;
+                var clients = Enumerable.Range(0, 12).Select(_ => new TcpClient()).ToArray();
+                using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(3));
+                try
+                {
+                    await clients[0].ConnectAsync(IPAddress.Loopback, port, timeout.Token);
+                    var connecting = clients.Skip(1).Select(async client =>
+                    {
+                        try { await client.ConnectAsync(IPAddress.Loopback, port, timeout.Token); return true; }
+                        catch (SocketException) { return false; }
+                    }).ToArray();
+                    var stopping = simulator.StopAsync();
+                    var connected = await Task.WhenAll(connecting);
+                    await stopping.WaitAsync(TimeSpan.FromSeconds(3));
+                    await AssertConnectionClosedAsync(clients[0]);
+                    for (var index = 0; index < connected.Length; index++)
+                        if (connected[index]) await AssertConnectionClosedAsync(clients[index + 1]);
+                    AssertPortReleased(port);
+                }
+                finally { foreach (var client in clients) client.Dispose(); }
+            }
+        }
+
+        [TestCase(false)]
+        [TestCase(true)]
+        public async Task ModbusOutOfRangeRequestsReturnIllegalDataAddress(bool write)
+        {
+            await using var simulator = new ModbusTcpSimulator(new[] { new SimulationPoint("HR65535", DataType.Int16, "7") }, port: 0);
+            await simulator.StartAsync();
+            using var client = new TcpClient();
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(3));
+            await client.ConnectAsync(IPAddress.Loopback, simulator.Port, timeout.Token);
+            var stream = client.GetStream();
+            // 从最后一个寄存器读写两个元素，直接检查真实协议响应中的异常码。
+            var request = write
+                ? new byte[] { 0, 1, 0, 0, 0, 11, 1, 16, 255, 255, 0, 2, 4, 0, 1, 0, 2 }
+                : new byte[] { 0, 1, 0, 0, 0, 6, 1, 3, 255, 255, 0, 2 };
+            await stream.WriteAsync(request, timeout.Token);
+            var response = new byte[9];
+            await stream.ReadExactlyAsync(response, timeout.Token);
+            Assert.That(response, Is.EqualTo(new byte[] { 0, 1, 0, 0, 0, 3, 1, (byte)(write ? 0x90 : 0x83), 2 }));
+
+            using var sdk = ModbusClient(simulator.Port);
+            await sdk.ConnectAsync(timeout.Token);
+            Assert.That(await sdk.ReadInt16Async("HR65535", timeout.Token), Is.EqualTo(7));
+            await sdk.DisconnectAsync(timeout.Token);
+        }
+
+        [Test]
         public async Task OpcUaTypedNodesWritesAndGeneratedSubscriptionChangesWorkAfterRestart()
         {
             var directory = TemporaryPki();
@@ -271,6 +327,16 @@ namespace InduLink.Tests
         {
             DeviceId = "modbus", Host = "127.0.0.1", Port = port, DeviceProfile = ModbusDeviceProfiles.Generic,
         });
+        private static async Task AssertConnectionClosedAsync(TcpClient client)
+        {
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(1));
+            try
+            {
+                var count = await client.GetStream().ReadAsync(new byte[1], timeout.Token);
+                Assert.That(count, Is.Zero, "Stopped simulator must close every client connection.");
+            }
+            catch (IOException) { /* 连接被服务端重置也表示已经关闭。 */ }
+        }
         private static int FreePort()
         {
             using var listener = new TcpListener(IPAddress.Loopback, 0);

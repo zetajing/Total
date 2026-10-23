@@ -115,6 +115,51 @@ namespace InduLink.Tests
         }
 
         [Test]
+        public async Task WebApi_WriteTimeoutStillReturnsEachOutcome()
+        {
+            var options = CreateOptions(ReserveTcpPort());
+            options.RequestTimeout = TimeSpan.FromMilliseconds(100);
+            var fake = new FakeTagGateway
+            {
+                WriteHandler = async token =>
+                {
+                    // 模拟第一项已写入、第二项等待设备响应时超时。
+                    try { await Task.Delay(Timeout.Infinite, token); }
+                    catch (OperationCanceledException) when (token.IsCancellationRequested) { }
+                    return new[]
+                    {
+                        TagGatewayWriteResult.Success("plc-1", "A"),
+                        TagGatewayWriteResult.Uncertain("plc-1", "B"),
+                        TagGatewayWriteResult.NotAttempted("plc-1", "C"),
+                    };
+                },
+            };
+            fake.Options.EnableRemoteWrites = true;
+            using var gateway = new InduLinkWebGateway(fake, options);
+            using var http = new HttpClient(new HttpClientHandler { UseProxy = false });
+            await gateway.StartAsync(CancellationToken.None);
+            try
+            {
+                using var request = new HttpRequestMessage(HttpMethod.Post, options.ListenPrefix + "api/v1/write");
+                request.Headers.TryAddWithoutValidation("X-Industrial-Api-Key", options.ApiKey);
+                request.Content = new StringContent(
+                    "{\"correlationId\":\"partial-write\",\"items\":[{\"device\":\"plc-1\",\"tag\":\"A\",\"value\":1},{\"device\":\"plc-1\",\"tag\":\"B\",\"value\":2},{\"device\":\"plc-1\",\"tag\":\"C\",\"value\":3}]}",
+                    Encoding.UTF8, "application/json");
+                using var response = await WithTimeout(http.SendAsync(request), TimeSpan.FromSeconds(5));
+                var body = JObject.Parse(await response.Content.ReadAsStringAsync());
+                Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+                Assert.That((string)body["correlationId"], Is.EqualTo("partial-write"));
+                Assert.That(body["items"].Select(item => item["status"].ToObject<TagGatewayWriteStatus>()), Is.EqualTo(new[]
+                {
+                    TagGatewayWriteStatus.Succeeded, TagGatewayWriteStatus.Uncertain, TagGatewayWriteStatus.NotAttempted,
+                }));
+                Assert.That((bool)body["items"][0]["succeeded"], Is.True);
+                Assert.That((string)body["items"][1]["tagName"], Is.EqualTo("B"));
+            }
+            finally { await gateway.StopAsync(CancellationToken.None); }
+        }
+
+        [Test]
         public async Task WebSocket_SubscribeSendsSnapshot_ThenOnlyChangedValues()
         {
             var port = ReserveTcpPort();
@@ -335,6 +380,7 @@ namespace InduLink.Tests
             private double _value = 42.5d;
 
             internal Func<CancellationToken, Task<IReadOnlyList<TagGatewayValue>>> ReadHandler { get; set; }
+            internal Func<CancellationToken, Task<IReadOnlyList<TagGatewayWriteResult>>> WriteHandler { get; set; }
 
             internal FakeTagGateway()
             {
@@ -370,6 +416,7 @@ namespace InduLink.Tests
 
             public Task<IReadOnlyList<TagGatewayWriteResult>> WriteAsync(IReadOnlyCollection<TagGatewayWriteItem> items, CancellationToken cancellationToken = default(CancellationToken))
             {
+                if (WriteHandler != null) return WriteHandler(cancellationToken);
                 IReadOnlyList<TagGatewayWriteResult> results = items.Select(item => TagGatewayWriteResult.Failure(item.DeviceName, item.TagName, "Read-only test tag.")).ToList();
                 return Task.FromResult(results);
             }

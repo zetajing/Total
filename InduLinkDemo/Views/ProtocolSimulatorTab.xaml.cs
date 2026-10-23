@@ -98,8 +98,9 @@ namespace InduLinkDemo.Views
             {
                 if (_closing) return;
                 if (_simulator?.IsRunning == true) return;
-                SetBusy(true);
+                // DataGrid 切为只读会取消编辑，必须先提交并校验用户输入。
                 CommitPointEdits();
+                SetBusy(true);
                 var points = _rows.Select(row => row.ToPoint()).ToArray();
                 var interval = TimeSpan.FromMilliseconds(int.Parse(IntervalTextBox.Text, CultureInfo.InvariantCulture));
                 var service = _opcUa
