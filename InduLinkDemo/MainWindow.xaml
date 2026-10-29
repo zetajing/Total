@@ -52,7 +52,7 @@
                     </TabItem.Header>
                     <views:NetworkServicesTab x:Name="NetworkServicesControlTag" />
                 </TabItem>
-                <TabItem Style="{StaticResource MainNavigationTabItemStyle}">
+                <TabItem x:Name="MaintenanceNavigationTab" Style="{StaticResource MainNavigationTabItemStyle}">
                     <TabItem.Header>
                         <StackPanel Orientation="Horizontal">
                             <TextBlock FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="14" Text="&#xE90F;" />

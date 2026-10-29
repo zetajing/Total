@@ -58,6 +58,24 @@ namespace InduLinkDemo
             VirtualPlcControlTag.Initialize(_ctx);
             McControlTag.Initialize(_ctx);
             OpcUaControlTag.Initialize(_ctx);
+            VirtualPlcControlTag.OpenClientRequested += (_, request) =>
+            {
+                if (_closeCleanupStarted) throw new InvalidOperationException("窗口正在关闭，请稍后重新打开 Demo。");
+                UserControl target;
+                if (request.Protocol == InduLink.Abstractions.ProtocolKind.ModbusTcp)
+                {
+                    ModbusControlTag.ApplySimulatorRequest(request);
+                    target = ModbusControlTag;
+                }
+                else
+                {
+                    OpcUaControlTag.ApplySimulatorRequest(request);
+                    target = OpcUaControlTag;
+                }
+                ProtocolTabControl.SelectedItem = MaintenanceNavigationTab;
+                foreach (TabItem tab in MaintenanceTabControl.Items)
+                    if (tab.Content == target) { MaintenanceTabControl.SelectedItem = tab; break; }
+            };
             JsonConfigControlTag.Initialize(_ctx);
             SocketControlTag.Initialize(_ctx);
             MesControlTag.Initialize(_ctx);

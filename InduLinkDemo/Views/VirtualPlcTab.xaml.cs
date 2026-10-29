@@ -7,7 +7,18 @@ namespace InduLinkDemo.Views
 {
     public partial class VirtualPlcTab : UserControl
     {
-        public VirtualPlcTab() { InitializeComponent(); }
+        public VirtualPlcTab()
+        {
+            InitializeComponent();
+            ModbusServerControl.OpenClientRequested += ForwardClientRequest;
+            OpcUaServerControl.OpenClientRequested += ForwardClientRequest;
+        }
+        internal event EventHandler<SimulatorClientRequest> OpenClientRequested;
+        private void ForwardClientRequest(object sender, SimulatorClientRequest request)
+        {
+            var handler = OpenClientRequested ?? throw new InvalidOperationException("当前页面尚未连接客户端导航。");
+            handler(this, request);
+        }
         public void Initialize(DemoAppContext context)
         {
             S7ServerControl.Initialize(context);

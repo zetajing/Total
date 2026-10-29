@@ -4,6 +4,7 @@ using System.ComponentModel;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Net;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
@@ -30,6 +31,8 @@ namespace InduLinkDemo.Views
         private bool _busy;
         private bool _closing;
         private string _lastUiError;
+
+        internal event EventHandler<SimulatorClientRequest> OpenClientRequested;
 
         public ProtocolSimulatorTab()
         {
@@ -158,6 +161,7 @@ namespace InduLinkDemo.Views
             var running = _simulator?.IsRunning == true;
             StartButton.IsEnabled = !busy && !running && !_closing;
             StopButton.IsEnabled = !busy && running;
+            OpenClientButton.IsEnabled = !busy && running && PointsGrid.SelectedItem != null;
             SettingsPanel.IsEnabled = !busy && !running;
             CertificatePanel.IsEnabled = !busy && !running;
             PointsGrid.IsReadOnly = busy || running;
@@ -196,6 +200,55 @@ namespace InduLinkDemo.Views
         {
             try { await StopAsync(); }
             catch (Exception ex) { ReportError(ex); }
+        }
+        private void OpenClientButton_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var request = CreateClientRequest();
+                if (OpenClientRequested == null) throw new InvalidOperationException("当前页面尚未连接客户端导航。");
+                OpenClientRequested(this, request);
+                _lastUiError = null;
+            }
+            catch (Exception ex) { ReportError(ex); }
+        }
+
+        internal SimulatorClientRequest CreateClientRequest()
+        {
+            if (_busy || _simulator?.IsRunning != true) throw new InvalidOperationException("请先启动虚拟服务。");
+            if (!(PointsGrid.SelectedItem is SimulatorPointRow row)) throw new InvalidOperationException("请选择要读取的点位。");
+            var value = row.CurrentValue ?? row.InitialValue ?? "";
+            if (_simulator is OpcUaSimulator opcUa)
+            {
+                var endpoint = new UriBuilder(opcUa.Endpoint);
+                endpoint.Host = ClientHost(endpoint.Host);
+                return new SimulatorClientRequest
+                {
+                    Protocol = ProtocolKind.OpcUa, Endpoint = endpoint.Uri.AbsoluteUri,
+                    UseSecurity = SecurityCheckBox.IsChecked == true, Address = opcUa.GetNodeId(row.Address.Trim()),
+                    DataType = row.DataType, Length = (ushort)(row.DataType == DataType.String ? Math.Max(1, Math.Min(value.Length, ushort.MaxValue)) : 1),
+                    ValueText = value,
+                };
+            }
+            var modbus = (ModbusTcpSimulator)_simulator;
+            return new SimulatorClientRequest
+            {
+                Protocol = ProtocolKind.ModbusTcp, Host = ClientHost(AddressTextBox.Text.Trim()), Port = modbus.Port,
+                SlaveId = byte.Parse(SlaveIdTextBox.Text, CultureInfo.InvariantCulture), Address = row.Address.Trim(),
+                DataType = row.DataType, Length = InduLink.Protocols.Common.RegisterValueCodec.GetRequiredRegisterLength(row.DataType),
+                ValueText = value,
+            };
+        }
+
+        internal static string ClientHost(string host)
+        {
+            // 全接口监听地址不能作为连接目标，本机联调使用相同地址族的回环地址。
+            if (IPAddress.TryParse(host.Trim('[', ']'), out var address))
+            {
+                if (address.Equals(IPAddress.Any)) return IPAddress.Loopback.ToString();
+                if (address.Equals(IPAddress.IPv6Any)) return IPAddress.IPv6Loopback.ToString();
+            }
+            return host;
         }
         private void ApplyValueButton_Click(object sender, RoutedEventArgs e)
         {

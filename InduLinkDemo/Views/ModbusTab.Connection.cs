@@ -17,6 +17,13 @@ namespace InduLinkDemo.Views
     {
         public async Task ResetClientAsync()
         {
+            _connectionOperations++;
+            try { await ResetClientCoreAsync(); }
+            finally { _connectionOperations--; }
+        }
+
+        private async Task ResetClientCoreAsync()
+        {
             var client = _client;
             _client = null;
 
@@ -75,6 +82,8 @@ namespace InduLinkDemo.Views
 
         private async void ConnectButton_Click(object sender, RoutedEventArgs e)
         {
+            if (_connectionOperations != 0) return;
+            _connectionOperations++;
             try
             {
                 await ResetClientAsync();
@@ -127,6 +136,7 @@ namespace InduLinkDemo.Views
                 RefreshCapabilityText();
                 _ctx.HandleError("Modbus 连接失败。", ex, true);
             }
+            finally { _connectionOperations--; }
         }
 
         private async void DisconnectButton_Click(object sender, RoutedEventArgs e)

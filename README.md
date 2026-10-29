@@ -72,6 +72,11 @@ if (!validation.IsValid)
 await using var host = sdk.CreateDeviceHost(config, "Config");
 await host.StartAsync();
 var value = await host.Get("plc1").ReadAsync("Speed");
+
+// 按业务名称选择多个点位，结果也可以直接按名称取得。
+var values = await host.Get("plc1").ReadManyAsync("Speed", "Running");
+short speed = values.GetByName<short>("Speed");
+bool running = values.GetByName<bool>("Running");
 ```
 
 协议键固定为 `modbus-tcp`、`modbus-rtu`、`siemens-s7`、`mitsubishi-mc`、`ads`、`opc-ua`、`mqtt` 和 `redis`。设备公共字段、运行参数和协议 `settings` 分离，完整配置约定见 [架构与配置](docs/architecture.md#配置驱动运行)。
@@ -93,7 +98,7 @@ var value = await host.Get("plc1").ReadAsync("Speed");
 
 - `InduLinkDemo`：WPF 完整 Demo，包含协议页、配置页、运行中心、MES、数据库和网络服务页面。
 - `InduLinkDemo.Snap7Server`：x86 本地 Snap7 通信模拟器，用于在没有实体 PLC 时验证 S7 Demo 的 DB1 多个 Bool/INT/DINT/REAL 点位读写。
-- `InduLink.Simulation`：可独立使用的 Modbus TCP / OPC UA 模拟服务，支持内存点位、真实客户端读写和周期变化；Demo 的“虚拟 PLC”页面提供启动与编辑入口。
+- `InduLink.Simulation`：可独立使用的 Modbus TCP / OPC UA 模拟服务，支持内存点位、真实客户端读写和周期变化；Demo 的“虚拟 PLC”页面提供启动与编辑入口，可通过“在客户端打开”将当前端点和点位预填到对应调试页面。
 - `InduLinkMinimal.WinForms`：直接引用所需模块的最小验证程序，不依赖聚合程序集。
 
 ## 重要边界

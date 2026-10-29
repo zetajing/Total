@@ -39,6 +39,7 @@
                 <StackPanel Grid.Column="1" Orientation="Horizontal">
                     <Button x:Name="StartButton" Margin="0,0,8,0" Style="{StaticResource PrimaryButtonStyle}" Click="StartButton_Click" Content="启动服务" />
                     <Button x:Name="StopButton" Click="StopButton_Click" Content="停止" IsEnabled="False" />
+                    <Button x:Name="OpenClientButton" Margin="8,0,0,0" Click="OpenClientButton_Click" Content="在客户端打开" IsEnabled="False" />
                 </StackPanel>
                 <Grid x:Name="CertificatePanel" Grid.Row="1" Grid.ColumnSpan="2" Margin="0,7,0,0" Visibility="Collapsed">
                     <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>

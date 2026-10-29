@@ -101,6 +101,23 @@ using (var host = sdk.CreateDeviceHost(config, "Config"))
 }
 ```
 
+配置客户端和托管设备都可按业务点位名称选择批量读取，无需在业务代码中重复设备地址：
+
+```csharp
+// host 已启动，Speed 和 Running 是点位表中的 name。
+var device = host.Get("plc1");
+var values = await device.ReadManyAsync("Speed", "Running");
+short speed = values.GetByName<short>("Speed");
+bool running = values.GetByName<bool>("Running");
+
+// 带取消令牌时传入名称集合；所有名称会在发请求前校验。
+var selected = await device.ReadManyAsync(new[] { "Speed", "Running" }, cancellationToken);
+if (!selected.TryGetByName<short>("Speed", out var latestSpeed))
+    Console.WriteLine("Speed 本次没有可用值，请查看 selected.Values 中的质量和错误。");
+```
+
+名称匹配不区分大小写，重复选择只读取一次，保留首次出现的顺序。便捷重载至少指定两个名称；只选一个名称并需要批量结果时，可使用集合与取消令牌重载。无参数的 `ReadManyAsync()` 仍读取整个点位表。`GetByName<T>` 在名称不存在、数据质量不为 Good 或类型转换失败时抛出异常；`TryGetByName<T>` 对这些情况返回 false，原始质量、时间和错误保留在 `Values` 中。已有 `Get<T>(string address)` 继续按设备地址取值。
+
 ## 轮询和生命周期
 
 `PollingScheduler` 将同一设备/同一客户端的订阅放入一个 Worker：

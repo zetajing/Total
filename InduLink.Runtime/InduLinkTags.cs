@@ -121,6 +121,7 @@ namespace InduLink.Runtime
     {
         private readonly Dictionary<InduLinkTag, int> _tagIndexes;
         private readonly Dictionary<string, int> _addressIndexes;
+        private readonly Dictionary<string, int> _nameIndexes;
 
         /// <summary>创建批量读取结果；点位与值必须按索引一一对应。</summary>
         public InduLinkTagReadResult(IReadOnlyList<InduLinkTag> tags, IReadOnlyList<DataValue> values, StringComparer addressComparer = null)
@@ -135,6 +136,7 @@ namespace InduLink.Runtime
 
             _tagIndexes = new Dictionary<InduLinkTag, int>();
             _addressIndexes = new Dictionary<string, int>(addressComparer ?? StringComparer.Ordinal);
+            _nameIndexes = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
 
             for (var i = 0; i < tags.Count; i++)
             {
@@ -143,6 +145,9 @@ namespace InduLink.Runtime
                 {
                     _addressIndexes.Add(tags[i].Address, i);
                 }
+                // 直接构造的结果可能有重名点位；标记歧义，不影响原有按地址取值。
+                if (!string.IsNullOrWhiteSpace(tags[i].Name))
+                    _nameIndexes[tags[i].Name] = _nameIndexes.ContainsKey(tags[i].Name) ? -1 : i;
             }
         }
 
@@ -180,6 +185,34 @@ namespace InduLink.Runtime
             }
 
             return ConvertValue<T>(Values[index], address, Values[index].DataType);
+        }
+
+        /// <summary>按业务名称取得值，名称不区分大小写；缺失、重名、坏质量或转换失败时抛出异常。</summary>
+        public T GetByName<T>(string tagName)
+        {
+            if (string.IsNullOrWhiteSpace(tagName)) throw new ArgumentException("Tag name cannot be null or empty.", nameof(tagName));
+            if (!_nameIndexes.TryGetValue(tagName, out var index))
+                throw new KeyNotFoundException(string.Format("Tag '{0}' was not found in the read result.", tagName));
+            if (index < 0)
+                throw new InvalidOperationException(string.Format("Tag name '{0}' is ambiguous in the read result.", tagName));
+            return ConvertValue<T>(Values[index], Tags[index].Address, Tags[index].DataType);
+        }
+
+        /// <summary>
+        /// 尝试按业务名称取得值；名称缺失、重名、坏质量或无法转换时返回 false。
+        /// 原始质量、时间戳和错误信息仍可从 Values 查看。
+        /// </summary>
+        public bool TryGetByName<T>(string tagName, out T value)
+        {
+            value = default(T);
+            if (string.IsNullOrWhiteSpace(tagName) || !_nameIndexes.TryGetValue(tagName, out var index) || index < 0)
+                return false;
+            try
+            {
+                value = ConvertValue<T>(Values[index], Tags[index].Address, Tags[index].DataType);
+                return true;
+            }
+            catch (InduLinkCommunicationException) { return false; }
         }
 
         private static T ConvertValue<T>(DataValue dataValue, string address, DataType dataType)

@@ -270,7 +270,24 @@ public static class AdsExample
 }
 ```
 
-ADS 地址直接使用 PLC 符号名，例如截图中的 `MAIN.xStart`、`MAIN.nTarget`、`MAIN.rSpeed`、`MAIN.lrTemperature`、`MAIN.sStatus` 和 `MAIN.tDelay`；字符串长度通过请求的 `length` 指定，`TIME` 映射为 `TimeSpan`。`AdsClient` 的订阅使用 ADS 原生 OnChange/Cyclic 通知，不需要 SDK 轮询；批量读写使用官方 SumCommand 并自动按项目数和报文大小分包。结构体需按 TwinCAT 内存布局声明 `[StructLayout(LayoutKind.Sequential, Pack = 1)]`，再使用 `ReadAnyAsync<T>`/`WriteAnyAsync`。核心项目直接依赖 `Beckhoff.TwinCAT.Ads 7.0.317`，不再携带旧版本地 DLL。
+ADS 地址直接使用 PLC 符号名，例如截图中的 `MAIN.xStart`、`MAIN.nTarget`、`MAIN.rSpeed`、`MAIN.lrTemperature`、`MAIN.sStatus` 和 `MAIN.tDelay`；字符串长度通过请求的 `length` 指定，`TIME` 映射为 `TimeSpan`。`AdsClient` 的订阅使用 ADS 原生 OnChange/Cyclic 通知，不需要 SDK 轮询；批量读写使用官方 SumCommand 并自动按项目数和报文大小分包。结构体需按 TwinCAT 实际内存布局声明 `StructLayout`，字段顺序、大小和 Pack 均须与 PLC 对应；例如 PLC 明确使用 `pack_mode := '1'` 时，C# 使用 `[StructLayout(LayoutKind.Sequential, Pack = 1)]`，再通过 `ReadAnyAsync<T>`/`WriteAnyAsync` 访问。核心项目直接依赖 `Beckhoff.TwinCAT.Ads 7.0.317`，不再携带旧版本地 DLL。
+
+读取一维数组可以自动查询 PLC 符号中的元素数量：
+
+```csharp
+// 自动读取完整的一维 DINT 数组，不需要手填元素数量。
+int[] targets = await client.ReadArrayAsync<int>("MAIN.Targets");
+
+// 已知长度时仍可使用原有重载，长度表示元素个数。
+int[] knownTargets = await client.ReadArrayAsync<int>("MAIN.Targets", 100);
+
+// 写入前核对 PLC 声明的数组数量和元素类型，错误时不发送写入。
+await client.WriteArrayAsync("MAIN.Targets", targets);
+```
+
+自动读取和 `WriteArrayAsync` 每次查询当前符号，不长期缓存数组长度。当前便捷入口支持完整一维数组；多维、交错数组及字符串数组需要通过 `ReadAnyAsync`/`WriteAnyAsync` 显式提供封送参数。结构体数组会检查封送总大小，字段顺序、Pack 和固定长度字段仍必须由调用方正确声明。特殊时间类型数组的真实 PLC 封送尚未验证。
+
+传取消令牌时可写 `ReadArrayAsync<int>("MAIN.Targets", cancellationToken: token)`。第二个参数不要使用裸 `default` 字面量，以免与原有整数长度重载产生歧义。
 
 不安装 TwinCAT 的电脑可选部署 `InduLink.AdsRouter.Host.exe` 和 `InduLink.Protocols.Ads.Router.dll`。编辑宿主输出目录中的 `appsettings.json`：设置本机 `AmsRouter:Name`、本机 `AmsRouter:NetId` 和虚拟 PLC 的 `RemoteConnections`；远程 PLC 还必须添加指向本机 AMS Net ID 的返回路由。默认端口是 TCP `48898`，PLC Runtime 1 的 ADS 端口通常是 `851`。独立 Router 不提供 ADS Secure 和系统服务端口 `10000`，只能部署在受防火墙保护的可信工业网络，并且不能与系统 TwinCAT Router 同时占用 `48898`。
 

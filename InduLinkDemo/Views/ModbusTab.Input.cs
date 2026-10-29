@@ -120,6 +120,7 @@ namespace InduLinkDemo.Views
                 if (ComboHelper.GetSelectedDataType(DataTypeComboBox) == DataType.Bool)
                     ComboHelper.SelectDataType(DataTypeComboBox, DataType.Int16);
             }
+            WriteButton.IsEnabled = addresses.Count > 0 && addresses.All(IsWritableAddress);
             RefreshLengthSuggestion();
         }
 
@@ -154,6 +155,12 @@ namespace InduLinkDemo.Views
             {
                 WriteHintTextBlock.Foreground = Brushes.DimGray;
                 WriteHintTextBlock.Text = "多地址写入时，可填写 1 个值广播，或填写与地址数相同的多个值。";
+                return;
+            }
+            if (analysis.Addresses.Any(address => !IsWritableAddress(address)))
+            {
+                WriteHintTextBlock.Foreground = Brushes.DarkGoldenrod;
+                WriteHintTextBlock.Text = "DI/IR 输入区域只读，可在虚拟服务页面修改模拟值。";
                 return;
             }
             if (analysis.AddressCount == 1)
@@ -209,6 +216,8 @@ namespace InduLinkDemo.Views
         private List<WriteRequest> BuildWriteRequests()
         {
             var addresses = ValidateAndGetAddresses();
+            if (addresses.Any(address => !IsWritableAddress(address)))
+                throw new InvalidOperationException("DI/IR 输入区域只读，不能通过 Modbus 客户端写入。");
             var dataType = ComboHelper.GetSelectedDataType(DataTypeComboBox);
             var length = ParseHelper.ParseUShortValue(LengthTextBox.Text, "Modbus 长度");
             var deviceId = GetDeviceId();
@@ -261,6 +270,17 @@ namespace InduLinkDemo.Views
                     return false;
                 }
             });
+        }
+
+        private bool IsWritableAddress(string address)
+        {
+            // 输入寄存器和离散输入在协议侧只读，模拟器与普通设备遵循同一规则。
+            try
+            {
+                var parsed = _addressParser.ParseTyped(address);
+                return parsed.Area == ModbusArea.Coil || parsed.Area == ModbusArea.HoldingRegister;
+            }
+            catch { return false; }
         }
 
         private List<string> ValidateAndGetAddresses()

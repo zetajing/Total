@@ -76,6 +76,20 @@ namespace InduLink.Runtime
             return Device.ReadManyAsync(cancellationToken);
         }
 
+        /// <summary>按业务名称读取至少两个点位；单个名称可用集合重载。</summary>
+        public Task<InduLinkTagReadResult> ReadManyAsync(string firstTagName, string secondTagName, params string[] additionalTagNames)
+        {
+            return Device.ReadManyAsync(firstTagName, secondTagName, additionalTagNames);
+        }
+
+        /// <summary>按业务名称读取指定点位，并允许取消本次读取。</summary>
+        public Task<InduLinkTagReadResult> ReadManyAsync(
+            IReadOnlyCollection<string> tagNames,
+            CancellationToken cancellationToken)
+        {
+            return Device.ReadManyAsync(tagNames, cancellationToken);
+        }
+
         /// <summary>按点位名称写入一个值。</summary>
         public Task WriteAsync(string tagName, object value, CancellationToken cancellationToken = default)
         {

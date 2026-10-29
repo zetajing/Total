@@ -409,6 +409,24 @@ namespace InduLink.Protocols.Ads
             return ReadAnyAsync<T[]>(variableName, new[] { length }, cancellationToken);
         }
 
+        /// <summary>查询 PLC 符号并读取完整的一维数组；无需手工填写元素数量。</summary>
+        public async Task<T[]> ReadArrayAsync<T>(
+            string variableName,
+            CancellationToken cancellationToken = default(CancellationToken))
+        {
+            var address = _parser.ParseTyped(variableName);
+            return await ExecuteExclusiveAsync(async token =>
+            {
+                var client = GetConnectedClient();
+                var length = await ResolveArrayLengthAsync(client, address.Normalized, typeof(T), null, token).ConfigureAwait(false);
+                var handle = await GetVariableHandleAsync(client, address.Normalized, token).ConfigureAwait(false);
+                var result = await client.ReadAnyAsync(handle, typeof(T[]), new[] { length }, token).ConfigureAwait(false);
+                EnsureSucceeded(result, "ADS read array '" + address.Normalized + "'");
+                if (result.Value == null) throw new InduLinkProtocolException("ADS array read returned no value.");
+                return (T[])result.Value;
+            }, cancellationToken).ConfigureAwait(false);
+        }
+
         /// <summary>使用 ADS 的 WriteAny 写入结构体、数组或其它任意 CLR 类型。</summary>
         public Task WriteAnyAsync(
             string variableName,
@@ -438,7 +456,7 @@ namespace InduLink.Protocols.Ads
             }, cancellationToken);
         }
 
-        /// <summary>写入一维 PLC 数组；数组长度必须与 PLC 符号的维度一致。</summary>
+        /// <summary>写入完整的一维 PLC 数组；发送前检查符号类型、元素数量及结构体总大小。</summary>
         public Task WriteArrayAsync<T>(
             string variableName,
             IReadOnlyList<T> values,
@@ -446,7 +464,16 @@ namespace InduLink.Protocols.Ads
         {
             if (values == null) throw new ArgumentNullException(nameof(values));
             if (values.Count <= 0) throw new ArgumentOutOfRangeException(nameof(values), "Array length must be greater than zero.");
-            return WriteAnyAsync(variableName, values.ToArray(), new[] { values.Count }, cancellationToken);
+            var address = _parser.ParseTyped(variableName);
+            var copiedValues = values.ToArray();
+            return ExecuteExclusiveAsync(async token =>
+            {
+                var client = GetConnectedClient();
+                var length = await ResolveArrayLengthAsync(client, address.Normalized, typeof(T), copiedValues.Length, token).ConfigureAwait(false);
+                var handle = await GetVariableHandleAsync(client, address.Normalized, token).ConfigureAwait(false);
+                var result = await client.WriteAnyAsync(handle, copiedValues, new[] { length }, token).ConfigureAwait(false);
+                EnsureSucceeded(result, "ADS write array '" + address.Normalized + "'");
+            }, cancellationToken);
         }
 
         public async Task<string> SubscribeNativeAsync(
@@ -1042,6 +1069,15 @@ namespace InduLink.Protocols.Ads
             }
 
             return new AnyAccessOptions(args ?? new[] { stringType.Length }, stringType.Encoding);
+        }
+
+        private static async Task<int> ResolveArrayLengthAsync(
+            BeckhoffAdsClient client, string address, Type elementType, int? count, CancellationToken cancellationToken)
+        {
+            // 每次使用当前符号信息，避免程序下载后继续使用旧数组长度或类型。
+            var result = await client.ReadSymbolAsync(address, cancellationToken).ConfigureAwait(false);
+            EnsureSucceeded(result, "ADS read array symbol '" + address + "'");
+            return AdsArrayTypeValidator.GetLength(address, result.Value?.DataType, elementType, count);
         }
 
         private sealed class AnyAccessOptions

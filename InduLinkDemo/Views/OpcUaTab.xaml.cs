@@ -32,6 +32,13 @@ namespace InduLinkDemo.Views
 
         public async Task ResetClientAsync()
         {
+            _connectionOperations++;
+            try { await ResetClientCoreAsync(); }
+            finally { _connectionOperations--; }
+        }
+
+        private async Task ResetClientCoreAsync()
+        {
             var client = _client;
             _client = null;
             if (client == null)
@@ -90,6 +97,8 @@ namespace InduLinkDemo.Views
 
         private async void ConnectButton_Click(object sender, RoutedEventArgs e)
         {
+            if (_connectionOperations != 0) return;
+            _connectionOperations++;
             try
             {
                 await ResetClientAsync();
@@ -120,6 +129,7 @@ namespace InduLinkDemo.Views
                 UpdateStatus(false, "连接失败");
                 _ctx.HandleError("OPC UA 连接失败。", ex, true);
             }
+            finally { _connectionOperations--; }
         }
 
         private async void DisconnectButton_Click(object sender, RoutedEventArgs e)
