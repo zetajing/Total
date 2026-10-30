@@ -51,22 +51,27 @@ public partial class MainForm : Form
         using var client = new SiemensS7Client(options);
         using var timer = new PeriodicTimer(TimeSpan.FromMilliseconds(100));
         var trigger = new TriggerState();
+        var cache = new TriggerValueCache();
         int count = 0;
         while (true)
         {
             token.ThrowIfCancellationRequested();
-            string value = null;
+            RecordedValue record = null;
             DateTime time = default;
             try
             {
                 if (!client.IsConnected) await client.ConnectAsync(token);
                 bool active = await client.ReadBoolAsync("DB2001.DBX1404.6", token);
+                // 每轮读取 STRING，保留 FALSE 阶段最近的非空值。
+                string current = await client.ReadDbStringAsync("DB2001.DBX314.0", 50, token);
+                DateTime sampleTime = DateTime.Now;
+                cache.Observe(active, current, sampleTime);
+                valueLabel.Text = "实时字符串：" + (current.Length == 0 ? "（PLC 当前长度为 0）" : current);
                 statusLabel.Text = $"运行中 | 触发位：{active} | 本次已记录：{count} 条";
                 if (trigger.ShouldRecord(active))
                 {
                     time = DateTime.Now;
-                    // STRING[50] 从字节 314 开始，库自动处理 2 字节头和实际长度。
-                    value = await client.ReadDbStringAsync("DB2001.DBX314.0", 50, token);
+                    record = cache.Select(current, sampleTime);
                 }
             }
             catch (OperationCanceledException) when (token.IsCancellationRequested) { throw; }
@@ -74,18 +79,23 @@ public partial class MainForm : Form
             {
                 // 通信失败不当成 FALSE，不解除本次触发；1 秒后重新连接。
                 statusLabel.Text = "通信异常，1 秒后重连：" + ex.GetBaseException().Message;
+                cache.Clear();
+                valueLabel.Text = "实时字符串：通信中断，缓存已清除";
                 await client.DisconnectAsync(CancellationToken.None);
                 await Task.Delay(1000, token);
                 continue;
             }
 
-            if (value != null)
+            if (record != null)
             {
                 // 落盘失败直接停止，避免界面显示“记录成功”却没有文件。
-                RecordStore.Append(recordFolder, time, value);
+                RecordStore.Append(recordFolder, time, record);
                 trigger.MarkRecorded();
+                cache.Clear();
                 count++;
-                recordsGrid.Rows.Insert(0, count, time.ToString("yyyy-MM-dd HH:mm:ss.fff"), value);
+                recordsGrid.Rows.Insert(0, count, time.ToString("yyyy-MM-dd HH:mm:ss.fff"),
+                    record.Value.Length == 0 ? "（空字符串）" : record.Value,
+                    record.Source, record.SampleTime?.ToString("yyyy-MM-dd HH:mm:ss.fff") ?? "—");
                 if (recordsGrid.Rows.Count > 1000) recordsGrid.Rows.RemoveAt(1000);
                 statusLabel.Text = $"运行中 | 触发位：True | 本次已记录：{count} 条";
             }
