@@ -12,6 +12,7 @@
     </PackageReference>
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="..\S7TriggerRecorder\RecordStore.cs" Link="S7Recorder\RecordStore.cs" />
     <ProjectReference Include="..\InduLink\InduLink.csproj" />
     <ProjectReference Include="..\InduLink.Protocols.Ads\InduLink.Protocols.Ads.csproj" />
     <ProjectReference Include="..\InduLink.Protocols.Ads.Router\InduLink.Protocols.Ads.Router.csproj" />
